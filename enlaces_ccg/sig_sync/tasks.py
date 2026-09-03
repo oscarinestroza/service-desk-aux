@@ -1,8 +1,9 @@
 """
-Tareas de sincronización en background para el SIG.
+Tareas de sincronización en background para el SIG (Celery).
 
-Usa threading.Thread + una cola simple para serializar
-operaciones Selenium (solo una a la vez).
+Las operaciones SIG (Playwright/Selenium) se encolan en Celery con Redis como
+broker. Se configuran para correr serializadas (una a la vez): se recomienda
+levantar el worker con --concurrency=1 y worker_prefetch_multiplier=1.
 
 Semántica de usuario_sig: es el NOMBRE DE USUARIO en el SIG (lo que el
 usuario escribe en el formulario). No es un ID numérico. El éxito de la
@@ -11,48 +12,10 @@ opcional (el SIG redirige al catálogo tras crear y la URL no conserva el ID).
 """
 
 import logging
-import queue
-import threading
+
+from celery import shared_task
 
 logger = logging.getLogger("sig_sync")
-
-# Cola y worker thread — serializa todas las operaciones SIG
-_sig_queue = queue.Queue()
-_sig_worker_started = False
-_sig_lock = threading.Lock()
-
-
-def _sig_worker():
-    """Worker thread que procesa la cola de sincronizaciones SIG."""
-    while True:
-        try:
-            task_type, enlace_id = _sig_queue.get()
-            try:
-                if task_type == "crear":
-                    _ejecutar_crear(enlace_id)
-                elif task_type == "deshabilitar":
-                    _ejecutar_deshabilitar(enlace_id)
-                elif task_type == "reactivar":
-                    _ejecutar_reactivar(enlace_id)
-                elif task_type == "actualizar_correo":
-                    _ejecutar_actualizar_correo(enlace_id)
-            except Exception as e:
-                logger.exception("Error ejecutando tarea %s para enlace %s", task_type, enlace_id)
-            finally:
-                _sig_queue.task_done()
-        except queue.Empty:
-            continue
-
-
-def _ensure_worker():
-    """Asegura que el worker thread esté corriendo."""
-    global _sig_worker_started
-    with _sig_lock:
-        if not _sig_worker_started:
-            t = threading.Thread(target=_sig_worker, daemon=True, name="sig-queue-worker")
-            t.start()
-            _sig_worker_started = True
-            logger.info("Worker SIG iniciado")
 
 
 def _enviar_correo_creacion(enlace):
@@ -182,8 +145,9 @@ def _ya_creado_en_sig(enlace_id):
 # ------------------------------------------------------------------
 # Ejecutores (corren dentro del worker thread)
 # ------------------------------------------------------------------
-def _ejecutar_crear(enlace_id):
-    """Crea un usuario en el SIG para el enlace dado."""
+@shared_task
+def crear_enlace_sig(enlace_id):
+    """Crea un usuario en el SIG para el enlace dado (tarea Celery)."""
     from django.conf import settings
     from enlaces_ccg.models import EnlaceAutorizado, SyncLog
     from .client import SIGClient, sig_usuario_configurado
@@ -236,8 +200,9 @@ def _ejecutar_crear(enlace_id):
         _enviar_correo_review(enlace, str(e))
 
 
-def _ejecutar_deshabilitar(enlace_id):
-    """Deshabilita un usuario en el SIG."""
+@shared_task
+def deshabilitar_enlace_sig(enlace_id):
+    """Deshabilita un usuario en el SIG (tarea Celery)."""
     from django.conf import settings
     from enlaces_ccg.models import EnlaceAutorizado, SyncLog
     from .client import SIGClient, sig_usuario_configurado
@@ -273,8 +238,9 @@ def _ejecutar_deshabilitar(enlace_id):
         logger.exception("Error deshabilitando enlace %s", enlace_id)
 
 
-def _ejecutar_reactivar(enlace_id):
-    """Reactiva un usuario en el SIG (cambia estatus a Activo)."""
+@shared_task
+def reactivar_enlace_sig(enlace_id):
+    """Reactiva un usuario en el SIG (cambia estatus a Activo) (tarea Celery)."""
     from django.conf import settings
     from enlaces_ccg.models import EnlaceAutorizado, SyncLog
     from .client import SIGClient, sig_usuario_configurado
@@ -310,8 +276,9 @@ def _ejecutar_reactivar(enlace_id):
         logger.exception("Error reactivando enlace %s", enlace_id)
 
 
-def _ejecutar_actualizar_correo(enlace_id):
-    """Actualiza el correo de un usuario en el SIG."""
+@shared_task
+def actualizar_correo_enlace_sig(enlace_id):
+    """Actualiza el correo de un usuario en el SIG (tarea Celery)."""
     from django.conf import settings
     from enlaces_ccg.models import EnlaceAutorizado, SyncLog
     from .client import SIGClient, sig_usuario_configurado
@@ -350,34 +317,29 @@ def _ejecutar_actualizar_correo(enlace_id):
 
 
 # ------------------------------------------------------------------
-# API pública — encola tareas
+# API pública — encola tareas en Celery (.delay)
+# Estas funciones mantienen los mismos nombres que usaban con la cola
+# en memoria, de modo que signals.py no necesita cambios.
 # ------------------------------------------------------------------
 def sincronizar_enlace(enlace_id):
     """Encola la creación de usuario SIG para un enlace."""
-    _ensure_worker()
-    _sig_queue.put(("crear", enlace_id))
-    logger.info("Enlace %s encolado para crear en SIG (cola: %d)", enlace_id, _sig_queue.qsize())
+    crear_enlace_sig.delay(enlace_id)
+    logger.info("Enlace %s encolado para crear en SIG (Celery)", enlace_id)
 
 
 def deshabilitar_enlace(enlace_id):
     """Encola la deshabilitación de usuario SIG para un enlace."""
-    _ensure_worker()
-    _sig_queue.put(("deshabilitar", enlace_id))
-    logger.info("Enlace %s encolado para deshabilitar en SIG (cola: %d)", enlace_id, _sig_queue.qsize())
+    deshabilitar_enlace_sig.delay(enlace_id)
+    logger.info("Enlace %s encolado para deshabilitar en SIG (Celery)", enlace_id)
 
 
 def reactivar_enlace(enlace_id):
     """Encola la reactivación de usuario SIG para un enlace."""
-    _ensure_worker()
-    _sig_queue.put(("reactivar", enlace_id))
-    logger.info("Enlace %s encolado para reactivar en SIG (cola: %d)", enlace_id, _sig_queue.qsize())
+    reactivar_enlace_sig.delay(enlace_id)
+    logger.info("Enlace %s encolado para reactivar en SIG (Celery)", enlace_id)
 
 
 def actualizar_correo_enlace(enlace_id):
     """Encola la actualización de correo de un usuario en el SIG."""
-    _ensure_worker()
-    _sig_queue.put(("actualizar_correo", enlace_id))
-    logger.info(
-        "Enlace %s encolado para actualizar correo en SIG (cola: %d)",
-        enlace_id, _sig_queue.qsize(),
-    )
+    actualizar_correo_enlace_sig.delay(enlace_id)
+    logger.info("Enlace %s encolado para actualizar correo en SIG (Celery)", enlace_id)

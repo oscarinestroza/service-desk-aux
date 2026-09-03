@@ -89,12 +89,54 @@ WSGI_APPLICATION = 'enlacesMAO.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+def _config_postgres_por_env():
+    """Configura Postgres desde variables de entorno (DB_* o DATABASE_URL).
+
+    Si no hay DB_NAME ni DATABASE_URL, devuelve None para usar SQLite (dev).
+    """
+    from urllib.parse import urlparse
+
+    name = os.environ.get("DB_NAME", "").strip()
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not name and not url:
+        return None
+
+    if url:
+        parsed = urlparse(url)
+        engine = "django.db.backends.postgresql"
+        return {
+            "ENGINE": engine,
+            "NAME": name or parsed.path.lstrip("/"),
+            "USER": os.environ.get("DB_USER", "") or parsed.username or "",
+            "PASSWORD": os.environ.get("DB_PASSWORD", "") or parsed.password or "",
+            "HOST": os.environ.get("DB_HOST", "") or parsed.hostname or "localhost",
+            "PORT": os.environ.get("DB_PORT", "") or (str(parsed.port) if parsed.port else "5432"),
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+            "OPTIONS": {},
+        }
+
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": name,
+        "USER": os.environ.get("DB_USER", ""),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+        "OPTIONS": {},
     }
-}
+
+
+_pg = _config_postgres_por_env()
+if _pg:
+    DATABASES = {"default": _pg}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
@@ -259,3 +301,30 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Celery / Redis — cola de tareas en segundo plano
+# ---------------------------------------------------------------------------
+# Broker y backend usan Redis. En producción se configura vía .env (Coolify).
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
+
+# Serialización JSON (evita dependencias de pickle y problemas de seguridad)
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_TRACK_STARTED = True
+
+# Las operaciones SIG (Playwright/Selenium) DEBEN correr serializadas:
+# un solo worker procesa una tarea a la vez (sin prefetch múltiple).
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 50
+
+# Timeout por tarea (creación SIG puede tardar). Configurable en segundos.
+CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "300"))
+
+# Base actions_path para el beat (no usamos programme por ahora, pero habilitado)
+# CELERY_BEAT_SCHEDULE puede definirse aquí si se necesitan tareas periódicas.

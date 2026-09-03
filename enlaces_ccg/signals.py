@@ -46,6 +46,10 @@ def sync_sig_on_enlace_save(sender, instance, created, **kwargs):
     if getattr(instance, "_sig_syncing", False):
         return
 
+    # La importación Excel no sincroniza con el SIG
+    if getattr(instance, "_sig_sync_desactivado", False):
+        return
+
     usuario_sig = getattr(instance, "usuario_sig", "")
 
     if created and usuario_sig:

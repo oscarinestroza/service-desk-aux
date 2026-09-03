@@ -95,7 +95,7 @@ class Institucion(models.Model):
         help_text="Nombre completo de la institución",
     )
     siglas = models.CharField(
-        max_length=30,
+        max_length=60,
         blank=True,
         default="",
         help_text="Siglas de la institución (ej. SESAL, SEPLAN)",

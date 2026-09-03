@@ -1322,7 +1322,17 @@ def _parsear_fecha(valor):
     if hasattr(valor, "date"):
         return valor.date()
     s = str(valor).strip()
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+    for fmt in (
+        "%d/%m/%Y",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%d-%m-%Y",
+        "%d/%m/%y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M:%S",
+        "%m/%d/%Y",
+        "%m/%d/%y",
+    ):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
@@ -1397,49 +1407,59 @@ def importar_enlaces(request):
                             continue
 
                         def _val(campo):
+                            # Nota: NO se aplica strip. En la importación los
+                            # datos se guardan tal cual vienen del Excel.
                             idx = mapa_col.get(campo)
                             if idx is None or idx >= len(row):
                                 return ""
                             v = row[idx]
-                            return str(v).strip() if v is not None else ""
+                            return str(v) if v is not None else ""
 
-                        nombres = _val("nombres")
-                        pr_apellido = _val("primer_apellido")
+                        def _val_crudo(campo):
+                            idx = mapa_col.get(campo)
+                            if idx is None or idx >= len(row):
+                                return None
+                            return row[idx]
+
+                        nombres = _val("nombres")[:150]
+                        pr_apellido = _val("primer_apellido")[:100]
                         if not nombres or not pr_apellido:
                             errores.append(f"Fila {row_idx}: nombres o primer apellido vacíos, omitida.")
                             continue
 
-                        seg_apellido = _val("segundo_apellido")
+                        seg_apellido = _val("segundo_apellido")[:100]
                         inst_nombre = _val("institucion_nombre")
                         inst_siglas = _val("institucion_siglas")
                         edificio_nombre = _val("edificio_nombre")
 
-                        # Buscar o crear institución + edificio
-                        inst_key = inst_siglas.upper() if inst_siglas else inst_nombre.upper()
+                        # Buscar o crear institución + edificio (el nombre es el
+                        # identificador; las siglas pueden repetirse, p.ej. SEFIN)
+                        inst_key = inst_nombre.upper() if inst_nombre else inst_siglas.upper()
                         if inst_key not in instituciones_cache:
                             institucion = None
-                            if inst_siglas:
+                            if inst_nombre:
+                                institucion = Institucion.objects.filter(
+                                    nombre__iexact=inst_nombre
+                                ).select_related("edificio").first()
+                            if not institucion and inst_siglas:
                                 institucion = Institucion.objects.filter(
                                     siglas__iexact=inst_siglas
-                                ).select_related("edificio").first()
-                            if not institucion and inst_nombre:
-                                institucion = Institucion.objects.filter(
-                                    nombre__icontains=inst_nombre
                                 ).select_related("edificio").first()
 
                             if not institucion:
                                 # Crear edificio e institución nuevos
                                 edificio_obj = None
                                 if edificio_nombre:
+                                    nombre_edificio_trunc = edificio_nombre[:100]
                                     edificio_obj, _ = Edificio.objects.get_or_create(
-                                        nombre__iexact=edificio_nombre,
-                                        defaults={"nombre": edificio_nombre},
+                                        nombre__iexact=nombre_edificio_trunc,
+                                        defaults={"nombre": nombre_edificio_trunc},
                                     )
 
                                 institucion = Institucion.objects.create(
                                     edificio=edificio_obj,
-                                    nombre=inst_nombre,
-                                    siglas=inst_siglas,
+                                    nombre=inst_nombre[:200],
+                                    siglas=inst_siglas[:60],
                                 )
                             instituciones_cache[inst_key] = institucion
 
@@ -1452,6 +1472,22 @@ def importar_enlaces(request):
                             institucion=institucion,
                         ).first()
 
+                        usuario_sig = _val("usuario_sig")[:50]
+
+                        # No permitir usuarios SIG que ya existan en otro enlace
+                        if usuario_sig:
+                            existente_us_sig = EnlaceAutorizado.objects.filter(
+                                usuario_sig__iexact=usuario_sig
+                            ).first()
+                            if existente_us_sig and (
+                                not enlace or existente_us_sig.id != enlace.id
+                            ):
+                                errores.append(
+                                    f"Fila {row_idx}: el usuario SIG '{usuario_sig}' ya está "
+                                    f"asignado a {existente_us_sig.nombre_completo}. Fila omitida."
+                                )
+                                continue
+
                         datos = {
                             "nombres": nombres,
                             "primer_apellido": pr_apellido,
@@ -1460,34 +1496,40 @@ def importar_enlaces(request):
                             "genero": _normalizar_genero(_val("genero")),
                             "correo_principal": _val("correo_principal") or None,
                             "correo_secundario": _val("correo_secundario"),
-                            "telefono_principal": _val("telefono_principal"),
-                            "telefono_secundario": _val("telefono_secundario"),
-                            "extension_telefonica": _val("extension_telefonica"),
+                            "telefono_principal": _val("telefono_principal")[:20],
+                            "telefono_secundario": _val("telefono_secundario")[:20],
+                            "extension_telefonica": _val("extension_telefonica")[:10],
                             "estado": _normalizar_estado(_val("estado")),
-                            "nivel_referencia": _val("nivel_referencia"),
-                            "usuario_sig": _val("usuario_sig"),
-                            "password_sig": _val("password_sig"),
-                            "nombre_sig": _val("nombre_sig"),
-                            "pin_sig": _val("pin_sig"),
-                            "fecha_alta": _parsear_fecha(_val("fecha_alta")),
-                            "oficio_alta": _val("oficio_alta"),
+                            "nivel_referencia": _val("nivel_referencia")[:150],
+                            "usuario_sig": usuario_sig,
+                            "password_sig": _val("password_sig")[:128],
+                            "nombre_sig": _val("nombre_sig")[:100],
+                            "pin_sig": _val("pin_sig")[:10],
+                            "fecha_alta": _parsear_fecha(_val_crudo("fecha_alta")),
+                            "oficio_alta": _val("oficio_alta")[:100],
                             "observaciones_alta": _val("observaciones_alta"),
-                            "fecha_seguimiento": _parsear_fecha(_val("fecha_seguimiento")),
-                            "oficio_seguimiento": _val("oficio_seguimiento"),
+                            "fecha_seguimiento": _parsear_fecha(_val_crudo("fecha_seguimiento")),
+                            "oficio_seguimiento": _val("oficio_seguimiento")[:100],
                             "observaciones_seguimiento": _val("observaciones_seguimiento"),
-                            "fecha_baja": _parsear_fecha(_val("fecha_baja")),
-                            "oficio_baja": _val("oficio_baja"),
+                            "fecha_baja": _parsear_fecha(_val_crudo("fecha_baja")),
+                            "oficio_baja": _val("oficio_baja")[:100],
                             "observaciones_baja": _val("observaciones_baja"),
                             "comentarios": _val("comentarios"),
                         }
 
+                        # La importación NO sincroniza con el SIG: se marca el
+                        # flag para que el signal post_save lo ignore.
                         if enlace:
+                            # Marcar COPY y no activar flag: usamos atributo temporal
+                            enlace._sig_sync_desactivado = True
                             for k, v in datos.items():
                                 setattr(enlace, k, v)
                             enlace.save()
                             actualizados += 1
                         else:
-                            EnlaceAutorizado.objects.create(**datos)
+                            enlace = EnlaceAutorizado(**datos)
+                            enlace._sig_sync_desactivado = True
+                            enlace.save()
                             creados += 1
 
                     resultado = {
@@ -1692,9 +1734,21 @@ def importar_instituciones(request):
                             errores.append(f"Fila {row_idx}: nombre vacío, omitida.")
                             continue
 
-                        siglas = _val("siglas")
+                        siglas = _val("siglas")[:60]
                         edificio_nombre = _val("edificio_nombre")
                         estado_raw = _val("estado").strip().lower()
+
+                        # Normalizar estado: ACTIVO/INACTIVO (acepta variantes)
+                        _s = estado_raw.replace(" ", "")
+                        if _s.startswith("inact") or _s in ("baja", "0", "nocontrata"):
+                            estado = "INACTIVO"
+                        elif _s and _s not in (
+                            "activo", "act", "si", "1", "true", "act",
+                        ):
+                            # Valor no vacío que no parece "activo" -> inactivo
+                            estado = "INACTIVO"
+                        else:
+                            estado = "ACTIVO"
 
                         # Buscar edificio
                         edificio_obj = None
@@ -1718,31 +1772,30 @@ def importar_instituciones(request):
                                 # Crear si no existe
                                 if not edificio_obj:
                                     edificio_obj = Edificio.objects.create(
-                                        nombre=edificio_nombre.strip()
+                                        nombre=edificio_nombre.strip()[:100]
                                     )
                                 edificios_cache[cache_key] = edificio_obj
                             edificio_obj = edificios_cache[cache_key]
 
-                        # Buscar institución existente
-                        institucion = None
-                        if siglas:
-                            institucion = Institucion.objects.filter(siglas__iexact=siglas).first()
-                        if not institucion:
-                            institucion = Institucion.objects.filter(nombre__iexact=nombre).first()
+                        # Buscar institución existente por NOMBRE exacto (el nombre es
+                        # el identificador único; las siglas pueden repetirse, p.ej. SEFIN)
+                        institucion = Institucion.objects.filter(nombre__iexact=nombre).first()
 
                         if institucion:
-                            institucion.nombre = nombre
+                            institucion.nombre = nombre[:200]
                             if siglas:
                                 institucion.siglas = siglas
                             if edificio_obj:
                                 institucion.edificio = edificio_obj
+                            institucion.estado = estado
                             institucion.save()
                             actualizadas += 1
                         else:
                             Institucion.objects.create(
-                                nombre=nombre,
+                                nombre=nombre[:200],
                                 siglas=siglas,
                                 edificio=edificio_obj,
+                                estado=estado,
                             )
                             creadas += 1
 
