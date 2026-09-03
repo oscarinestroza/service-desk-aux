@@ -1,0 +1,23 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Acceso denegado — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">Acceso denegado</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 50vh;">
+    <div class="text-center">
+        <i class="fas fa-shield-halved fa-4x text-danger opacity-50 mb-3"></i>
+        <h1 class="h3 mb-2 text-danger">Acceso restringido</h1>
+        <p class="text-muted mb-4">No tienes permisos para ver esta sección.</p>
+        {% if rol %}
+        <p class="small text-muted">Tu rol actual: <span class="badge bg-secondary">{{ rol }}</span></p>
+        {% endif %}
+        <a href="{% url 'enlaces_ccg:lista_enlaces' %}" class="btn btn-primary">
+            <i class="fas fa-home me-1"></i> Volver al inicio
+        </a>
+    </div>
+</div>
+{% endblock %}

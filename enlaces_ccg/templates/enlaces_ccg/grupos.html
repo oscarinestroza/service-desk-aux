@@ -1,0 +1,77 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Grupos y permisos — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Grupos y permisos</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-user-shield me-2 text-primary"></i>Grupos y permisos
+    </h1>
+</div>
+
+<!-- Crear grupo -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <i class="fas fa-plus-circle me-1 text-primary"></i> Crear grupo
+    </div>
+    <div class="card-body">
+        <form method="post" class="row g-3 align-items-center">
+            {% csrf_token %}
+            <div class="col-md-5">
+                <label for="nombreGrupo" class="form-label">Nombre del grupo</label>
+                <input type="text" class="form-control" id="nombreGrupo" name="nombre"
+                       placeholder="Ej. Supervisor" required>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i>Crear grupo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Lista de grupos -->
+{% if filas %}
+<div class="table-responsive">
+    <table class="table table-bordered table-hover table-sm align-middle bg-white">
+        <thead class="table-light">
+            <tr>
+                <th style="width: 25%;">Grupo</th>
+                <th>Permisos actuales</th>
+                <th class="text-center" style="width: 15%;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in filas %}
+            <tr>
+                <td><strong>{{ f.grupo.name }}</strong></td>
+                <td>
+                    {% for etiq in f.etiquetas %}
+                    <span class="badge bg-secondary me-1">{{ etiq }}</span>
+                    {% empty %}
+                    <span class="text-muted small">Sin permisos</span>
+                    {% endfor %}
+                </td>
+                <td class="text-center">
+                    <a href="{% url 'enlaces_ccg:permisos_grupo' f.grupo.pk %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-check-double me-1"></i>Asignar permisos
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+    <i class="fas fa-users fa-3x mb-3 d-block opacity-50"></i>
+    No hay grupos creados.
+</div>
+{% endif %}
+{% endblock %}

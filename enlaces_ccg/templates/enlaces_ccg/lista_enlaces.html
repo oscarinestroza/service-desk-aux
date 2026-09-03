@@ -1,0 +1,290 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Enlaces — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">Enlaces</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if puede_editar %}
+<button type="button" data-crear-enlace class="btn btn-success btn-sm">
+    <i class="fas fa-plus me-1"></i> Nuevo Enlace
+</button>
+{% endif %}
+
+<!-- Dropdown Descargar Excel -->
+<div class="dropdown dropdown-export">
+    <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button"
+            data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="fas fa-file-excel me-1"></i> Descargar Excel
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end shadow">
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces_global' %}?plantilla=activos">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Enlaces Activos</strong>
+                        <small>Nombre, Edificio, Institución, Correo, Teléfono, Estado</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces_global' %}?plantilla=completa">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Reporte Completo</strong>
+                        <small>Todas las columnas · Solo enlaces activos</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces_global' %}?plantilla=completa&amp;todos=1">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Reporte Completo (Todos)</strong>
+                        <small>Todas las columnas · Activos e inactivos</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-id-card me-2 text-primary"></i>Todos los Enlaces Autorizados
+    </h1>
+    <span class="badge bg-primary">{{ enlaces|length }}</span>
+</div>
+
+<!-- Fila: Edificio (píldoras) + Buscador -->
+<div class="row g-2 mb-2 align-items-end">
+    <div class="col-md-6 col-lg-4">
+        <!-- Slicer por edificio (píldoras) -->
+        <div class="ccg-pill-group mb-0">
+            <span class="ccg-pill-label">Edificio:</span>
+<a class="ccg-pill {% if not edificio_id %}ccg-pill-active{% endif %}"
+                   href="?{% if vista != 'activos' %}vista={{ vista }}&{% endif %}{% if busqueda %}q={{ busqueda }}&{% endif %}{% if col != 'todas' %}col={{ col }}{% endif %}">Todos</a>
+            {% for ed in edificios %}
+            <a class="ccg-pill {% if edificio_id == ed.pk|stringformat:'s' %}ccg-pill-active{% endif %}"
+               href="?edificio={{ ed.pk }}&{% if vista != 'activos' %}vista={{ vista }}&{% endif %}{% if busqueda %}q={{ busqueda }}&{% endif %}{% if col != 'todas' %}col={{ col }}{% endif %}">{{ ed.siglas|default:ed.nombre }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-8">
+        <!-- Buscador compacto -->
+        <form method="get" class="d-flex gap-2 flex-wrap">
+            <select name="col" class="form-select form-select-sm" style="width: auto; min-width: 160px;" aria-label="Columna de búsqueda">
+                {% for clave, etiqueta in columnas_busqueda %}
+                <option value="{{ clave }}" {% if col == clave %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+            <div class="input-group flex-grow-1" style="max-width: 400px;">
+                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" name="q" class="form-control form-control-sm"
+                       placeholder="Buscar..."
+                       value="{{ busqueda|default:'' }}">
+{% if vista == 'todos' %}<input type="hidden" name="vista" value="todos">{% endif %}
+                {% if edificio_id %}<input type="hidden" name="edificio" value="{{ edificio_id }}">{% endif %}
+                {% for n in niveles %}<input type="hidden" name="niveles" value="{{ n }}">{% endfor %}
+                {% if busqueda %}
+                <a href="?{% if vista == 'todos' %}vista=todos&{% endif %}{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}{{ qs_niveles }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-times"></i>
+                </a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search me-1"></i> Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if edificio_id %}
+<!-- Filtro por nivel (colapsible) -->
+<div class="mb-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#filtroNivelesCollapse" aria-expanded="{% if niveles %}true{% else %}false{% endif %}" aria-controls="filtroNivelesCollapse">
+        <i class="fas fa-filter me-1"></i> Filtro por nivel
+        <i class="fas fa-chevron-down ms-1" id="nivelToggleIcon"></i>
+    </button>
+    {% if niveles %}
+    <a class="btn btn-outline-danger btn-sm ms-2" title="Quitar filtro de nivel"
+       href="?edificio={{ edificio_id }}&{% if vista != 'activos' %}vista={{ vista }}&{% endif %}{% if busqueda %}q={{ busqueda }}&{% endif %}{% if col != 'todas' %}col={{ col }}{% endif %}">
+        <i class="fas fa-times me-1"></i> Quitar filtro
+    </a>
+    {% endif %}
+    <form method="get" id="filtroNivelesCollapse" class="collapse mt-2{% if niveles %} show{% endif %}">
+        <input type="hidden" name="vista" value="{{ vista|default:'' }}">
+        <input type="hidden" name="edificio" value="{{ edificio_id }}">
+        <input type="hidden" name="q" value="{{ busqueda|default:'' }}">
+        <input type="hidden" name="col" value="{{ col }}">
+        {% if vista == 'todos' %}<input type="hidden" name="vista" value="todos">{% endif %}
+        <div class="ccg-nivel-group">
+            <span class="ccg-pill-label">Nivel:</span>
+            {% for val, label in NIVEL_CHOICES %}
+            {% if val %}
+            <label class="ccg-check-chip {% if val in niveles %}ccg-check-chip-on{% endif %}">
+                <input type="checkbox" name="niveles" value="{{ val }}"
+                       {% if val in niveles %}checked{% endif %}
+                       onchange="this.form.submit()">
+                {{ label }}
+            </label>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<!-- Pestañas por estado (Activos/Inactivos/Todos) -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activos' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}{% if busqueda %}q={{ busqueda }}&{% endif %}{% if col != 'todas' %}col={{ col }}{% endif %}{{ qs_niveles }}">Activos</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivos' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=inactivos{% if busqueda %}&q={{ busqueda }}{% endif %}{% if col != 'todas' %}&col={{ col }}{% endif %}{{ qs_niveles }}">Inactivos</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todos' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=todos{% if busqueda %}&q={{ busqueda }}{% endif %}{% if col != 'todas' %}&col={{ col }}{% endif %}{{ qs_niveles }}">Mostrar todos</a>
+    </li>
+</ul>
+
+{% if enlaces %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Nombre</th>
+                <th>Edificio</th>
+                <th>Institución</th>
+                <th>Nivel Ref.</th>
+                <th>Correo</th>
+                <th>Teléfono</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for enlace in enlaces %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button class="btn btn-outline-info btn-sm btn-ver-enlace"
+                            data-pk="{{ enlace.pk }}" title="Ver detalles">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    {% if puede_editar %}
+                    <button class="btn btn-outline-primary btn-sm btn-editar-enlace"
+                            data-pk="{{ enlace.pk }}" title="Editar">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="cell-name">{{ enlace.nombre_completo }}</div>
+                    {% if enlace.usuario_sig %}
+                        <div class="cell-sub">{{ enlace.usuario_sig }}{% if enlace.pin_sig %} · PIN: {{ enlace.pin_sig }}{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if enlace.institucion and enlace.institucion.edificio %}
+                    <a href="{% url 'enlaces_ccg:detalle_edificio' enlace.institucion.edificio.pk %}" class="cell-link">
+                        {{ enlace.institucion.edificio.siglas|default:enlace.institucion.edificio.nombre }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.institucion %}
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' enlace.institucion.pk %}" class="cell-link">
+                        {{ enlace.institucion.siglas|default:enlace.institucion.nombre }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.nivel_referencia %}
+                        <span class="badge bg-warning text-dark">{{ enlace.nivel_referencia }}</span>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.correo_principal %}
+                    <a href="mailto:{{ enlace.correo_principal }}" class="cell-link">
+                        {{ enlace.correo_principal }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.telefono_principal %}
+                    <a href="tel:{{ enlace.telefono_principal }}" class="cell-link">
+                        {{ enlace.telefono_principal }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.esta_activo %}
+                        <span class="badge bg-success badge-estado">
+                            <i class="fas fa-check-circle me-1"></i>ACTIVO
+                        </span>
+                    {% else %}
+                        <span class="badge bg-danger badge-estado">
+                            <i class="fas fa-times-circle me-1"></i>INACTIVO
+                        </span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-id-card fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">
+        {% if busqueda %}
+            No se encontraron resultados para "{{ busqueda }}".
+        {% elif vista == 'todos' %}
+            No hay enlaces registrados.
+        {% elif vista == 'inactivos' %}
+            No hay enlaces inactivos.
+        {% else %}
+            No hay enlaces activos.
+        {% endif %}
+    </h4>
+    <div class="mt-2">
+        {% if busqueda %}
+            <a href="?{% if vista == 'todos' %}vista=todos&{% endif %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-times me-1"></i> Limpiar búsqueda
+            </a>
+        {% else %}
+            {% if puede_editar %}
+            <button type="button" data-crear-enlace class="btn btn-success btn-sm">
+                <i class="fas fa-plus me-1"></i> Agregar Enlace
+            </button>
+            {% endif %}
+            {% if vista == 'activos' %}
+                <a href="?vista=todos" class="btn btn-outline-secondary btn-sm ms-1">
+                    Mostrar también inactivos
+                </a>
+            {% elif vista == 'inactivos' %}
+                <a href="?vista=activos" class="btn btn-outline-secondary btn-sm ms-1">
+                    Ver activos
+                </a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

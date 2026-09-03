@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block submit_buttons_bottom %}
+{{ block.super }}
+
+<div class="submit-row" style="background:#f8f9fa;border-top:1px solid #dee2e6;margin-top:0;padding:10px 15px;">
+    <input type="submit" name="_exportar_excel" value="Exportar este enlace a Excel" class="btn btn-info" style="display:inline-flex;align-items:center;gap:6px;">
+</div>
+{% endblock %}

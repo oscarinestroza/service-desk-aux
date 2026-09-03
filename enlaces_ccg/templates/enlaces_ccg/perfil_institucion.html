@@ -1,0 +1,280 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}{{ institucion.nombre_completo }} — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item">
+    <a href="{% url 'enlaces_ccg:lista_edificios' %}">Edificios</a>
+</li>
+<li class="breadcrumb-item">
+    {% if institucion.edificio %}
+    <a href="{% url 'enlaces_ccg:detalle_edificio' institucion.edificio.pk %}">
+        {{ institucion.edificio.nombre }}
+    </a>
+    {% else %}
+        Sin edificio
+    {% endif %}
+</li>
+<li class="breadcrumb-item active" aria-current="page">
+    {{ institucion.siglas|default:institucion.nombre }}
+</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if user.is_staff %}
+<button type="button" data-crear-enlace class="btn btn-success btn-sm"
+        data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
+    <i class="fas fa-plus me-1"></i> Nuevo Enlace
+</button>
+{% endif %}
+
+<!-- Dropdown Descargar Excel -->
+<div class="dropdown dropdown-export">
+    <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button"
+            data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="fas fa-file-excel me-1"></i> Descargar Excel
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end shadow">
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces' institucion.pk %}?plantilla=activos">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Enlaces Activos</strong>
+                        <small>Columnas esenciales · Solo enlaces activos</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces' institucion.pk %}?plantilla=completa">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Reporte Completo</strong>
+                        <small>Todas las columnas · Solo enlaces activos</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+        <li>
+            <a class="dropdown-item"
+               href="{% url 'enlaces_ccg:exportar_enlaces' institucion.pk %}?plantilla=completa&amp;todos=1">
+                <div>
+                    <i class="fas fa-file-excel"></i>
+                    <div>
+                        <strong>Reporte Completo (Todos)</strong>
+                        <small>Todas las columnas · Activos e inactivos</small>
+                    </div>
+                </div>
+            </a>
+        </li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<!-- Cabecera de la institución -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                    <i class="fas fa-landmark fa-2x text-success"></i>
+                </div>
+                <div>
+                    <h1 class="h3 mb-1">{{ institucion.nombre }}</h1>
+                    <div>
+                        {% if institucion.siglas %}
+                            <span class="badge bg-secondary me-1">{{ institucion.siglas }}</span>
+                        {% endif %}
+                        <span class="badge bg-info">{{ institucion.nivel|join:", "|default:"—" }}</span>
+                        {% if institucion.edificio %}
+                            <span class="badge bg-dark">{{ institucion.edificio.nombre }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Sin edificio</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% if user.is_staff %}
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    data-editar-institucion data-pk="{{ institucion.pk }}">
+                <i class="fas fa-pen me-1"></i> Editar
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Datos de contacto -->
+{% if institucion.contacto_nombre or institucion.contacto_correo or institucion.contacto_telefono %}
+<div class="card mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fas fa-address-card me-2"></i>Contacto Institucional</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% if institucion.contacto_nombre %}
+            <div class="col-md-4">
+                <small class="text-muted d-block">Nombre</small>
+                <strong>{{ institucion.contacto_nombre }}</strong>
+            </div>
+            {% endif %}
+            {% if institucion.contacto_correo %}
+            <div class="col-md-4">
+                <small class="text-muted d-block">Correo</small>
+                <a href="mailto:{{ institucion.contacto_correo }}">
+                    <i class="fas fa-envelope me-1"></i>{{ institucion.contacto_correo }}
+                </a>
+            </div>
+            {% endif %}
+            {% if institucion.contacto_telefono %}
+            <div class="col-md-4">
+                <small class="text-muted d-block">Teléfono</small>
+                <a href="tel:{{ institucion.contacto_telefono }}">
+                    <i class="fas fa-phone me-1"></i>{{ institucion.contacto_telefono }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Enlaces Autorizados -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">
+        <i class="fas fa-id-card me-2"></i>Enlaces Autorizados
+    </h2>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">{{ enlaces|length }} registro{{ enlaces|length|pluralize }}</span>
+        <button type="button" data-crear-enlace class="btn btn-success btn-sm"
+                data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
+            <i class="fas fa-plus me-1"></i> Nuevo Enlace
+        </button>
+    </div>
+</div>
+
+<!-- Pestañas de enlaces -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista_enlaces == 'activos' %}active{% endif %}" href="?">Activos</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista_enlaces == 'inactivos' %}active{% endif %}" href="?venlaces=inactivos">Inactivos</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista_enlaces == 'todos' %}active{% endif %}" href="?venlaces=todos">Mostrar todos</a>
+    </li>
+</ul>
+
+{% if enlaces %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Teléfono</th>
+                <th>Ext.</th>
+                <th>Estado</th>
+                <th>Nivel Ref.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for enlace in enlaces %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
+                            data-pk="{{ enlace.pk }}" title="Ver detalles">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    {% if user.is_authenticated %}
+                    <button class="btn btn-outline-primary btn-sm btn-editar-enlace"
+                            data-pk="{{ enlace.pk }}" title="Editar">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="cell-name">{{ enlace.nombre_completo }}</div>
+                    {% if enlace.usuario_sig %}
+                    <div class="cell-sub">{{ enlace.usuario_sig }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if enlace.correo_principal %}
+                    <a href="mailto:{{ enlace.correo_principal }}" class="cell-link">
+                        {{ enlace.correo_principal }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if enlace.telefono_principal %}
+                    <a href="tel:{{ enlace.telefono_principal }}" class="cell-link">
+                        {{ enlace.telefono_principal }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>{{ enlace.extension_telefonica|default:"—" }}</td>
+                <td>
+                    {% if enlace.esta_activo %}
+                        <span class="badge bg-success badge-estado">
+                            <i class="fas fa-check-circle me-1"></i>ACTIVO
+                        </span>
+                    {% else %}
+                        <span class="badge bg-danger badge-estado">
+                            <i class="fas fa-times-circle me-1"></i>INACTIVO
+                        </span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if enlace.nivel_referencia %}
+                        <span class="badge bg-warning text-dark">{{ enlace.nivel_referencia }}</span>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-4">
+    <i class="fas fa-id-card fa-2x text-muted mb-2"></i>
+    <h5 class="text-muted">
+        {% if vista_enlaces == 'todos' %}
+            No hay enlaces registrados para esta institución.
+        {% elif vista_enlaces == 'inactivos' %}
+            No hay enlaces inactivos.
+        {% else %}
+            No hay enlaces activos.
+        {% endif %}
+    </h5>
+    <div class="mt-2">
+        {% if user.is_staff %}
+        <button type="button" data-crear-enlace class="btn btn-success btn-sm"
+                data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
+            <i class="fas fa-plus me-1"></i> Agregar Primer Enlace
+        </button>
+        {% endif %}
+        {% if vista_enlaces == 'activos' %}
+            <a href="?venlaces=inactivos" class="btn btn-outline-warning btn-sm ms-1">
+                Ver inactivos
+            </a>
+            <a href="?venlaces=todos" class="btn btn-outline-secondary btn-sm ms-1">
+                Mostrar todos
+            </a>
+        {% elif vista_enlaces == 'inactivos' %}
+            <a href="?" class="btn btn-outline-secondary btn-sm ms-1">
+                Ver activos
+            </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

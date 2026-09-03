@@ -1,0 +1,7 @@
+Django==6.1
+django-jazzmin==3.0.5
+python-dotenv==1.2.3
+openpyxl==3.1.5
+requests==2.34.2
+playwright==1.62.0
+pillow==12.3.0

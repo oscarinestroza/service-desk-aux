@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+collected_static/
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+local_settings.py
+settings_local.py
+config/secrets.json
+*.pem
+*.key
+*.crt
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Testing / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Deployment / CI
+.docker/
+docker-compose.override.yml
+*.kubeconfig
+
+# Misc
+*.sqlite
+*.sqlite3
+*.db
+*.log*
+*.pid
+*.lock
+
+# Project specific (ajusta si tienes otros)
+enlacesMAO/settings_local.py

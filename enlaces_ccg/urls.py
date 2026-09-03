@@ -1,0 +1,186 @@
+"""
+URL configuration for the enlaces_ccg app.
+
+Rutas:
+    /                                   → lista_edificios
+    /edificio/<int:pk>/                 → detalle_edificio
+    /institucion/<int:pk>/              → perfil_institucion
+    /institucion/<int:pk>/exportar/     → exportar_enlaces
+"""
+
+from django.urls import path
+
+from . import views
+
+app_name = "enlaces_ccg"
+
+urlpatterns = [
+    path("", views.lista_enlaces, name="lista_enlaces"),
+    path("edificios/", views.lista_edificios, name="lista_edificios"),
+    path("login/", views.login_vista, name="login"),
+    path("logout/", views.logout_vista, name="logout"),
+    path("instituciones/", views.lista_instituciones, name="lista_instituciones"),
+    path("enlaces/", views.lista_enlaces, name="lista_enlaces"),
+    path("edificio/<int:pk>/", views.detalle_edificio, name="detalle_edificio"),
+    path("institucion/<int:pk>/", views.perfil_institucion, name="perfil_institucion"),
+    path(
+        "institucion/<int:pk>/detalle/",
+        views.detalle_institucion_json,
+        name="detalle_institucion_json",
+    ),
+    path(
+        "institucion/<int:pk>/enlaces/",
+        views.enlaces_activos_institucion_json,
+        name="enlaces_institucion_json",
+    ),
+    path(
+        "institucion/crear/",
+        views.crear_institucion,
+        name="crear_institucion",
+    ),
+    path(
+        "institucion/<int:pk>/editar/",
+        views.editar_institucion,
+        name="editar_institucion",
+    ),
+    path(
+        "institucion/<int:pk>/exportar/",
+        views.exportar_enlaces,
+        name="exportar_enlaces",
+    ),
+    path(
+        "enlaces/exportar/",
+        views.exportar_enlaces_global,
+        name="exportar_enlaces_global",
+    ),
+    path(
+        "enlaces/<int:pk>/detalle/",
+        views.detalle_enlace_json,
+        name="detalle_enlace_json",
+    ),
+    path(
+        "enlaces/<int:pk>/comentario/",
+        views.guardar_comentario,
+        name="guardar_comentario",
+    ),
+    path(
+        "enlaces/<int:pk>/editar/",
+        views.editar_enlace,
+        name="editar_enlace",
+    ),
+    path(
+        "enlaces/crear/",
+        views.crear_enlace,
+        name="crear_enlace",
+    ),
+    path(
+        "api/instituciones/",
+        views.instituciones_json,
+        name="instituciones_json",
+    ),
+    path(
+        "api/edificios/",
+        views.edificios_json,
+        name="edificios_json",
+    ),
+    path(
+        "enlaces/<int:pk>/adjuntos/",
+        views.adjuntos_json,
+        name="adjuntos_json",
+    ),
+    path(
+        "enlaces/<int:pk>/adjuntos/subir/",
+        views.subir_adjunto,
+        name="subir_adjunto",
+    ),
+    path(
+        "enlaces/<int:pk>/adjuntos/<int:adjunto_id>/eliminar/",
+        views.eliminar_adjunto,
+        name="eliminar_adjunto",
+    ),
+    path(
+        "enlaces/importar/",
+        views.importar_enlaces,
+        name="importar_enlaces",
+    ),
+    path(
+        "enlaces/importar/plantilla/",
+        views.descargar_plantilla_importacion,
+        name="descargar_plantilla",
+    ),
+    path(
+        "instituciones/importar/",
+        views.importar_instituciones,
+        name="importar_instituciones",
+    ),
+    path(
+        "instituciones/importar/plantilla/",
+        views.descargar_plantilla_instituciones,
+        name="descargar_plantilla_instituciones",
+    ),
+    path(
+        "api/niveles-edificio/",
+        views.niveles_edificio,
+        name="niveles_edificio",
+    ),
+    path(
+        "grupos/",
+        views.grupos,
+        name="grupos",
+    ),
+    path(
+        "grupos/<int:pk>/permisos/",
+        views.permisos_grupo,
+        name="permisos_grupo",
+    ),
+    path(
+        "tickets/",
+        views.seguimiento_tickets,
+        name="seguimiento_tickets",
+    ),
+    path(
+        "dashboard/",
+        views.dashboard,
+        name="dashboard",
+    ),
+    path(
+        "indicadores/",
+        views.indicadores_mejora,
+        name="indicadores_mejora",
+    ),
+    path(
+        "importar/deductivas/",
+        views.importar_deductivas,
+        name="importar_deductivas",
+    ),
+    path(
+        "revisiones/tickets/",
+        views.revision_tickets,
+        name="revision_tickets",
+    ),
+    path(
+        "revisiones/correos/",
+        views.revision_correos,
+        name="revision_correos",
+    ),
+    path(
+        "revisiones/cierre-operador/",
+        views.cierre_operador,
+        name="cierre_operador",
+    ),
+    path(
+        "revisiones/comentarios-operador/",
+        views.comentarios_operador,
+        name="comentarios_operador",
+    ),
+    path(
+        "revisiones/recordatorios/",
+        views.recordatorios,
+        name="recordatorios",
+    ),
+    path(
+        "revisiones/plantillas-respuesta/",
+        views.plantillas_respuesta,
+        name="plantillas_respuesta",
+    ),
+]

@@ -1,0 +1,162 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Instituciones — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active" aria-current="page">Instituciones</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if puede_editar %}
+<button type="button" class="btn btn-success btn-sm" data-crear-institucion>
+    <i class="fas fa-plus me-1"></i> Nueva Institución
+</button>
+{% endif %}
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-landmark me-2 text-primary"></i>Todas las Instituciones
+    </h1>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">{{ instituciones|length }} institución{{ instituciones|length|pluralize }}</span>
+    </div>
+</div>
+
+<!-- Slicer por edificio (píldoras) -->
+<div class="ccg-pill-group mb-2">
+    <span class="ccg-pill-label">Edificio:</span>
+    <a class="ccg-pill {% if not edificio_id %}ccg-pill-active{% endif %}"
+       href="?{% if vista != 'activas' %}vista={{ vista }}{% endif %}">Todos</a>
+    {% for ed in edificios %}
+    <a class="ccg-pill {% if edificio_id == ed.pk|stringformat:'s' %}ccg-pill-active{% endif %}"
+       href="?edificio={{ ed.pk }}&vista={{ vista }}">{{ ed.siglas|default:ed.nombre }}</a>
+    {% endfor %}
+</div>
+
+{% if edificio_id %}
+<!-- Filtro por nivel (colapsible) -->
+<div class="mb-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#filtroNivelesCollapse" aria-expanded="{% if niveles %}true{% else %}false{% endif %}" aria-controls="filtroNivelesCollapse">
+        <i class="fas fa-filter me-1"></i> Filtro por nivel
+        <i class="fas fa-chevron-down ms-1" id="nivelToggleIcon"></i>
+    </button>
+    {% if niveles %}
+    <a class="btn btn-outline-danger btn-sm ms-2" title="Quitar filtro de nivel"
+       href="?edificio={{ edificio_id }}&{% if vista != 'activas' %}vista={{ vista }}{% endif %}">
+        <i class="fas fa-times me-1"></i> Quitar filtro
+    </a>
+    {% endif %}
+    <form method="get" id="filtroNivelesCollapse" class="collapse mt-2{% if niveles %} show{% endif %}">
+        <input type="hidden" name="vista" value="{{ vista }}">
+        <input type="hidden" name="edificio" value="{{ edificio_id }}">
+        <div class="ccg-nivel-group">
+            <span class="ccg-pill-label">Nivel:</span>
+            {% for val, label in NIVEL_CHOICES %}
+            {% if val %}
+            <label class="ccg-check-chip {% if val in niveles %}ccg-check-chip-on{% endif %}">
+                <input type="checkbox" name="niveles" value="{{ val }}"
+                       {% if val in niveles %}checked{% endif %}
+                       onchange="this.form.submit()">
+                {{ label }}
+            </label>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<!-- Pestañas por estado -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activas' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=activas{{ qs_niveles }}">Activas</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivas' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=inactivas{{ qs_niveles }}">Inactivas</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todas' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=todas{{ qs_niveles }}">Mostrar todas</a>
+    </li>
+</ul>
+
+{% if instituciones %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Edificio</th>
+                <th>Institución</th>
+                <th>Siglas</th>
+                <th>Enlaces</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inst in instituciones %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button type="button" class="btn btn-outline-info btn-sm" title="Ver enlaces activos"
+                            data-ver-enlaces data-pk="{{ inst.pk }}">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    {% if puede_editar %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" title="Editar"
+                            data-editar-institucion data-pk="{{ inst.pk }}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if inst.edificio %}
+                    <a href="{% url 'enlaces_ccg:detalle_edificio' inst.edificio.pk %}" class="cell-link">
+                        {{ inst.edificio.siglas|default:inst.edificio.nombre }}
+                    </a>
+                    {% else %}
+                        <span class="cell-sub">Sin edificio</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="cell-link fw-semibold">
+                        {{ inst.nombre }}
+                    </a>
+                </td>
+                <td class="cell-sub">{{ inst.siglas|default:"—" }}</td>
+                <td>
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="badge bg-primary text-decoration-none">
+                        {{ inst.num_enlaces }}
+                    </a>
+                </td>
+                <td>
+                    {% if inst.estado == "ACTIVO" %}
+                        <span class="badge bg-success badge-estado">
+                            <i class="fas fa-check-circle me-1"></i>ACTIVO
+                        </span>
+                    {% else %}
+                        <span class="badge bg-danger badge-estado">
+                            <i class="fas fa-times-circle me-1"></i>INACTIVO
+                        </span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-landmark fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">No hay instituciones{% if vista == 'activas' %} activas{% elif vista == 'inactivas' %} inactivas{% endif %}</h4>
+    {% if puede_editar %}
+    <button type="button" class="btn btn-primary mt-2" data-crear-institucion>
+        <i class="fas fa-plus me-1"></i> Agregar Institución
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

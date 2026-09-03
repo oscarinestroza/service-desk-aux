@@ -1,0 +1,170 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Importar Enlaces — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Enlaces</a></li>
+<li class="breadcrumb-item active" aria-current="page">Importar</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="d-flex align-items-center mb-4">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-file-upload me-2 text-primary"></i>Importar Enlaces desde Excel
+            </h1>
+        </div>
+
+        {% if resultado %}
+            {% if resultado.error %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ resultado.error }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% elif resultado.ok %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Importación completada.</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Creados: <strong>{{ resultado.creados }}</strong></li>
+                    <li>Actualizados: <strong>{{ resultado.actualizados }}</strong></li>
+                    {% if resultado.total_errores > 0 %}
+                    <li class="text-warning">Errores: <strong>{{ resultado.total_errores }}</strong></li>
+                    {% endif %}
+                </ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+
+            {% if resultado.errores %}
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <i class="fas fa-exclamation-triangle me-1"></i> Detalle de errores
+                </div>
+                <div class="card-body" style="max-height:200px;overflow-y:auto;">
+                    {% for err in resultado.errores %}
+                        <small class="text-muted d-block">{{ err }}</small>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+        {% endif %}
+
+        <!-- Formulario de carga -->
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-upload me-1"></i> Seleccionar archivo Excel (.xlsx)</span>
+                <a href="{% url 'enlaces_ccg:descargar_plantilla' %}" class="btn btn-outline-success btn-sm">
+                    <i class="fas fa-download me-1"></i> Descargar plantilla
+                </a>
+            </div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data" id="formImportar">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="archivo" class="form-label">Archivo Excel</label>
+                        <input type="file" class="form-control" name="archivo" id="archivo"
+                               accept=".xlsx,.xls" required>
+                        <div class="form-text">Formatos aceptados: .xlsx, .xls</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="btnImportar">
+                        <i class="fas fa-file-import me-1"></i> Importar datos
+                    </button>
+                    <a href="{% url 'enlaces_ccg:lista_enlaces' %}" class="btn btn-outline-secondary ms-2">
+                        Cancelar
+                    </a>
+                </form>
+            </div>
+        </div>
+
+        <!-- Info de columnas esperadas -->
+        <div class="card mt-4 shadow-sm">
+            <div class="card-header" data-bs-toggle="collapse" data-bs-target="#columnasInfo"
+                 style="cursor:pointer;">
+                <i class="fas fa-info-circle me-1"></i>
+                Columnas esperadas en el archivo
+                <i class="fas fa-chevron-down float-end"></i>
+            </div>
+            <div class="collapse" id="columnasInfo">
+                <div class="card-body">
+                    <p class="text-muted mb-2">
+                        El sistema detecta automáticamente las columnas por su nombre (insensible a mayúsculas/minúsculas).
+                        Las columnas <strong>Nombres</strong>, <strong>Primer Apellido</strong> e <strong>Institución</strong> son obligatorias.
+                    </p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6 class="text-uppercase text-muted">Datos Personales</h6>
+                            <ul class="list-unstyled small">
+                                <li>Nombres</li>
+                                <li>Primer Apellido</li>
+                                <li>Segundo Apellido</li>
+                                <li>Género (M/F/O)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-uppercase text-muted">Contacto</h6>
+                            <ul class="list-unstyled small">
+                                <li>Correo Principal</li>
+                                <li>Correo Secundario</li>
+                                <li>Teléfono 1</li>
+                                <li>Teléfono 2</li>
+                                <li>Extensión</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-uppercase text-muted">Institución</h6>
+                            <ul class="list-unstyled small">
+                                <li>Institución</li>
+                                <li>Siglas (o Abreviatura)</li>
+                                <li>Edificio / Unidad Funcional</li>
+                                <li>Estado / Estatus</li>
+                                <li>Nivel Referencia</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6 class="text-uppercase text-muted">SIG</h6>
+                            <ul class="list-unstyled small">
+                                <li>Usuario SIG</li>
+                                <li>Password SIG</li>
+                                <li>Nombre SIG</li>
+                                <li>PIN SIG</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-uppercase text-muted">Alta / Seguimiento / Baja</h6>
+                            <ul class="list-unstyled small">
+                                <li>Fecha Alta (dd/mm/yyyy)</li>
+                                <li>Oficio Alta</li>
+                                <li>Observ. Alta</li>
+                                <li>Fecha Seguimiento</li>
+                                <li>Oficio Seguimiento</li>
+                                <li>Observ. Seguimiento</li>
+                                <li>Fecha Baja</li>
+                                <li>Oficio Baja</li>
+                                <li>Observ. Baja</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('formImportar').addEventListener('submit', function() {
+    const btn = document.getElementById('btnImportar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Importando...';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}{{ edificio.nombre }} — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item">
+    <a href="{% url 'enlaces_ccg:lista_edificios' %}">Edificios</a>
+</li>
+<li class="breadcrumb-item active" aria-current="page">{{ edificio.nombre }}</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if user.is_staff %}
+<button type="button" class="btn btn-success btn-sm"
+        data-crear-institucion data-edificio="{{ edificio.pk }}">
+    <i class="fas fa-plus me-1"></i> Nueva Institución
+</button>
+{% endif %}
+{% endblock %}
+
+{% block contenido %}
+<!-- Cabecera del edificio -->
+<div class="card border-0 shadow-sm mb-4 overflow-hidden">
+    <div class="row g-0">
+        {% if edificio.imagen %}
+        <div class="col-md-4">
+            <img src="{{ edificio.imagen.url }}" alt="{{ edificio.nombre }}"
+                 style="width:100%;height:100%;min-height:200px;object-fit:cover;">
+        </div>
+        {% endif %}
+        <div class="{% if edificio.imagen %}col-md-8{% else %}col-12{% endif %}">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    {% if not edificio.imagen %}
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-building fa-2x text-primary"></i>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <h1 class="h3 mb-1">{{ edificio.nombre }}</h1>
+                        {% if edificio.siglas %}
+                            <span class="badge bg-secondary">{{ edificio.siglas }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if edificio.descripcion %}
+                    <p class="text-muted mt-2 mb-0">{{ edificio.descripcion }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instituciones -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">
+        <i class="fas fa-landmark me-2"></i>Instituciones radicadas
+    </h2>
+    <span class="badge bg-info">{{ instituciones|length }} total</span>
+</div>
+
+<!-- Pestañas por estado (Activas/Inactivas/Todas) -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activas' %}active{% endif %}"
+           href="?vista=activas">Activas</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivas' %}active{% endif %}"
+           href="?vista=inactivas">Inactivas</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todas' %}active{% endif %}"
+           href="?vista=todas">Mostrar todas</a>
+    </li>
+</ul>
+
+{% if instituciones %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Institución</th>
+                <th>Siglas</th>
+                <th>Nivel</th>
+                <th>Enlaces</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inst in instituciones %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button type="button" class="btn btn-outline-info btn-sm" title="Ver enlaces activos"
+                            data-ver-enlaces data-pk="{{ inst.pk }}">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    {% if user.is_staff %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" title="Editar"
+                            data-editar-institucion data-pk="{{ inst.pk }}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="cell-link fw-semibold">
+                        {{ inst.nombre }}
+                    </a>
+                </td>
+                <td><span class="badge bg-secondary">{{ inst.siglas|default:"—" }}</span></td>
+                <td>{{ inst.nivel|join:", "|default:"—" }}</td>
+                <td>
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="badge bg-primary text-decoration-none">
+                        {{ inst.enlaces|length|default:0 }}
+                    </a>
+                </td>
+                <td>
+                    {% if inst.estado == "ACTIVO" %}
+                        <span class="badge bg-success badge-estado">
+                            <i class="fas fa-check-circle me-1"></i>ACTIVO
+                        </span>
+                    {% else %}
+                        <span class="badge bg-danger badge-estado">
+                            <i class="fas fa-times-circle me-1"></i>INACTIVO
+                        </span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-4">
+    <i class="fas fa-landmark fa-2x text-muted mb-2"></i>
+    <h5 class="text-muted">No hay instituciones en este edificio</h5>
+    {% if user.is_staff %}
+    <button type="button" class="btn btn-success btn-sm mt-2"
+            data-crear-institucion data-edificio="{{ edificio.pk }}">
+        <i class="fas fa-plus me-1"></i> Agregar Institución
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

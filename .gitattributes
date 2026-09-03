@@ -1,0 +1,14 @@
+# Normaliza saltos de línea (LF) en archivos de texto
+* text=auto
+
+# Archivos binarios
+*.pdf binary
+*.xlsx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary

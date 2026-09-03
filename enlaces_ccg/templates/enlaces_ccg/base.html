@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="es-hn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Enlaces CCG{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+          rel="stylesheet">
+    <style>
+        :root {
+            --ccg-blue-darkest: #0a1628;
+            --ccg-blue-dark: #0d1b3e;
+            --ccg-blue-mid: #132d5e;
+            --ccg-blue-accent: #1e3f7a;
+            --ccg-blue-light: #2a5298;
+        }
+
+        body { background-color: #f0f2f5; }
+
+        /* ── Sidebar ── */
+        .app-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 260px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(180deg, var(--ccg-blue-darkest) 0%, var(--ccg-blue-dark) 50%, var(--ccg-blue-mid) 100%);
+            color: #fff;
+            overflow-y: hidden;
+            z-index: 1040;
+            padding-top: 0;
+            transition: width 0.25s ease;
+        }
+        .app-sidebar .sidebar-brand {
+            padding: 1rem 1.25rem 1rem;
+            font-weight: 700;
+            font-size: 1.05rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0.5rem;
+            background: rgba(0,0,0,0.15);
+        }
+        .app-sidebar .sidebar-brand .brand-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            margin-right: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .app-sidebar .sidebar-brand small {
+            display: block;
+            font-weight: 400;
+            font-size: 0.7rem;
+            opacity: 0.55;
+            margin-top: 2px;
+        }
+        .app-sidebar .sidebar-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex: 1 1 auto;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .app-sidebar .sidebar-nav .nav-section {
+            padding: 0.7rem 1.25rem 0.3rem;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            opacity: 0.4;
+            font-weight: 600;
+        }
+        .app-sidebar .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 1.25rem;
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+        .app-sidebar .sidebar-nav li a:hover {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+        }
+        .app-sidebar .sidebar-nav li a.active {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border-left-color: #5b9aff;
+        }
+        .app-sidebar .sidebar-nav li a i {
+            width: 20px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .app-sidebar .sidebar-nav li a .badge-new {
+            font-size: 0.6rem;
+            padding: 2px 5px;
+            margin-left: auto;
+        }
+
+        /* ── Auth pill en sidebar ── */
+        .sidebar-auth {
+            padding: 0.75rem 1.25rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: auto;
+        }
+        .sidebar-auth .auth-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(255,255,255,0.08);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .sidebar-auth .auth-pill:hover {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        .sidebar-auth .auth-pill .avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--ccg-blue-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .sidebar-auth .auth-pill .auth-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .sidebar-auth .auth-pill .auth-name {
+            display: block;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sidebar-auth .auth-pill .auth-role {
+            display: block;
+            font-size: 0.65rem;
+            opacity: 0.6;
+        }
+
+        /* ── Contenido principal ── */
+        .app-content {
+            margin-left: 260px;
+            padding: 1.5rem 2rem;
+            min-height: 100vh;
+        }
+
+        /* ── Topbar ── */
+        .app-topbar {
+            background: #fff;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.6rem 2rem;
+            margin: -1.5rem -2rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+        }
+        .app-topbar .breadcrumb {
+            margin: 0;
+            background: none;
+            padding: 0;
+        }
+
+        /* ── Cards ── */
+        .card { transition: transform 0.15s; border: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+
+        .badge-estado { font-size: 0.78rem; }
+
+        /* ── Slicer de edificio (píldoras) ── */
+        .ccg-pill-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+        .ccg-pill-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-right: 4px;
+        }
+        .ccg-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 14px;
+            border-radius: 999px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #495057;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            text-decoration: none;
+            transition: all .15s ease;
+            white-space: nowrap;
+        }
+        .ccg-pill:hover {
+            border-color: #0d6efd;
+            color: #0d6efd;
+            background: #e7f1ff;
+        }
+        .ccg-pill-active {
+            background: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+        .ccg-pill-active:hover {
+            background: #0b5ed7;
+            border-color: #0b5ed7;
+            color: #fff;
+        }
+
+        /* ── Filtro por nivel (checkboxes estilo chip) ── */
+        .ccg-nivel-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+        .ccg-check-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #495057;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: all .15s ease;
+            white-space: nowrap;
+        }
+        .ccg-check-chip input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .ccg-check-chip:hover {
+            border-color: #0d6efd;
+            color: #0d6efd;
+            background: #e7f1ff;
+        }
+        .ccg-check-chip-on {
+            background: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+
+        /* ── Tablas modernas ── */
+        .ccg-table-wrap {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 8px rgba(0,0,0,.06);
+            /* Permite scroll horizontal cuando la tabla es más ancha que la
+               pantalla, sin perder el fondo al desplazarse. */
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .ccg-table-wrap .table {
+            margin: 0;
+            font-size: 0.85rem;
+            /* Ocupa al menos el 100% del contenedor, pero crece con su
+               contenido para habilitar el scroll horizontal en pantallas
+               pequeñas. */
+            width: max-content;
+            min-width: 100%;
+            margin-bottom: 0;
+        }
+        .ccg-table-wrap .table thead th {
+            background: var(--ccg-blue-darkest);
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.75rem 1rem;
+            border: none;
+            white-space: nowrap;
+        }
+        .ccg-table-wrap .table tbody td {
+            padding: 0.65rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid #f0f0f0;
+            white-space: nowrap;
+        }
+        .ccg-table-wrap .table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .ccg-table-wrap .table tbody tr {
+            transition: background 0.12s;
+        }
+        .ccg-table-wrap .table tbody tr:hover {
+            background: #f4f7fd;
+        }
+        .ccg-table-wrap .table .row-num {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: #f0f2f5;
+            color: #888;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+        .ccg-table-wrap .table .cell-name {
+            font-weight: 600;
+            color: var(--ccg-blue-dark);
+        }
+        .ccg-table-wrap .table .cell-sub {
+            font-size: 0.78rem;
+            color: #999;
+        }
+        .ccg-table-wrap .table .cell-link {
+            color: var(--ccg-blue-mid);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .ccg-table-wrap .table .cell-link:hover {
+            color: var(--ccg-blue-light);
+            text-decoration: underline;
+        }
+        .ccg-table-wrap .badge-estado {
+            font-size: 0.72rem;
+            padding: 0.35em 0.65em;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .ccg-table-wrap .badge-estado.bg-success {
+            background: #e6f9ee !important;
+            color: #1a8a4a !important;
+        }
+        .ccg-table-wrap .badge-estado.bg-danger {
+            background: #fde8e8 !important;
+            color: #c0392b !important;
+        }
+
+        /* ── Acciones en tabla ── */
+        .ccg-actions {
+            display: flex;
+            gap: 4px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        .ccg-actions .btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        /* ── Modal edición ── */
+        .modal-ccg .modal-content {
+            border: none;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .modal-ccg .modal-header {
+            background: linear-gradient(135deg, var(--ccg-blue-darkest), var(--ccg-blue-mid));
+            color: #fff;
+            border: none;
+            padding: 1rem 1.5rem;
+        }
+        .modal-ccg .modal-header .btn-close { filter: brightness(0) invert(1); }
+        .modal-ccg .modal-body {
+            padding: 1.25rem 1.5rem;
+            max-height: 65vh;
+            overflow-y: auto;
+        }
+        .modal-ccg .modal-footer {
+            border-top: 1px solid #f0f0f0;
+            padding: 0.75rem 1.5rem;
+        }
+        .modal-ccg .form-label {
+            font-weight: 600;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+        .modal-ccg .form-control,
+        .modal-ccg .form-select {
+            border-radius: 8px;
+            border-color: #dee2e6;
+            font-size: 0.88rem;
+            padding: 0.45rem 0.75rem;
+        }
+        .modal-ccg .form-control:focus,
+        .modal-ccg .form-select:focus {
+            border-color: var(--ccg-blue-light);
+            box-shadow: 0 0 0 0.2rem rgba(42,82,152,.15);
+        }
+        .modal-ccg .section-title {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ccg-blue-mid);
+            font-weight: 700;
+            margin: 1.75rem 0 0.75rem;
+            padding: 0.45rem 0.75rem;
+            background: #eef3fb;
+            border-left: 4px solid var(--ccg-blue-light);
+            border-radius: 4px;
+        }
+        .modal-ccg .section-title:first-child { margin-top: 0; }
+        .ccg-editor-head {
+            background: #f5f8fd;
+            border: 1px solid #e2eaf7;
+            border-radius: 8px;
+            padding: 1rem 1.25rem 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .ccg-editor-name {
+            color: var(--ccg-blue-mid);
+            font-weight: 700;
+            min-height: 1.5em;
+        }
+        .ccg-section-divider {
+            border: 0;
+            border-top: 1px solid #dfe6f0;
+            margin: 1.5rem 0 1.25rem;
+            opacity: 1;
+        }
+        .modal-ccg .field-disabled {
+            background: #f8f9fa !important;
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        .dropdown-export .dropdown-menu {
+            min-width: 280px;
+            padding: 0.5rem;
+        }
+        .dropdown-export .dropdown-item {
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+        }
+        .dropdown-export .dropdown-item:hover {
+            background: #f0f4ff;
+        }
+        .dropdown-export .dropdown-item i {
+            margin-top: 2px;
+            color: var(--ccg-blue-mid);
+        }
+        .dropdown-export .dropdown-item small {
+            display: block;
+            color: #888;
+            font-size: 0.72rem;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="app-sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-icon"><i class="fas fa-shield-halved"></i></span>
+            Enlaces CCG
+            <small>Centro Cívico Gubernamental</small>
+        </div>
+
+        <ul class="sidebar-nav">
+            {% if puede_directorio %}
+            <li class="nav-section">Directorio de Enlaces</li>
+            <li>
+                <a href="{% url 'enlaces_ccg:lista_edificios' %}"
+                   class="{% if request.resolver_match.url_name == 'lista_edificios' %}active{% endif %}">
+                    <i class="fas fa-building"></i> Edificios
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:lista_instituciones' %}"
+                   class="{% if request.resolver_match.url_name == 'lista_instituciones' %}active{% endif %}">
+                    <i class="fas fa-landmark"></i> Instituciones
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:lista_enlaces' %}"
+                   class="{% if request.resolver_match.url_name == 'lista_enlaces' %}active{% endif %}">
+                    <i class="fas fa-id-card"></i> Enlaces
+                </a>
+            </li>
+            {% endif %}
+
+            {% if puede_tickets %}
+            <li class="nav-section">Seguimiento de tickets</li>
+            <li>
+                <a href="{% url 'enlaces_ccg:dashboard' %}"
+                   class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}"
+                   class="{% if request.resolver_match.url_name == 'seguimiento_tickets' %}active{% endif %}">
+                    <i class="fas fa-ticket-alt"></i> Tickets
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:indicadores_mejora' %}"
+                   class="{% if request.resolver_match.url_name == 'indicadores_mejora' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i> Indicadores de mejora continua
+                </a>
+            </li>
+            {% endif %}
+
+            {% if puede_revisiones %}
+            <li class="nav-section">Revisiones Operativas</li>
+            <li>
+                <a href="{% url 'enlaces_ccg:revision_tickets' %}"
+                   class="{% if request.resolver_match.url_name == 'revision_tickets' %}active{% endif %}">
+                    <i class="fas fa-clipboard-check"></i> Revisión de Tickets
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:revision_correos' %}"
+                   class="{% if request.resolver_match.url_name == 'revision_correos' %}active{% endif %}">
+                    <i class="fas fa-envelope-open-text"></i> Revisión de Correos
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:cierre_operador' %}"
+                   class="{% if request.resolver_match.url_name == 'cierre_operador' %}active{% endif %}">
+                    <i class="fas fa-lock"></i> Cierre de Operador
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:comentarios_operador' %}"
+                   class="{% if request.resolver_match.url_name == 'comentarios_operador' %}active{% endif %}">
+                    <i class="fas fa-comments"></i> Comentarios de Operador
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:recordatorios' %}"
+                   class="{% if request.resolver_match.url_name == 'recordatorios' %}active{% endif %}">
+                    <i class="fas fa-bell"></i> Recordatorios
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:plantillas_respuesta' %}"
+                   class="{% if request.resolver_match.url_name == 'plantillas_respuesta' %}active{% endif %}">
+                    <i class="fas fa-reply-all"></i> Plantillas de respuesta
+                </a>
+            </li>
+            {% endif %}
+
+            {% if user.is_staff %}
+            <li class="nav-section">Admin</li>
+            <li>
+                <a href="{% url 'enlaces_ccg:grupos' %}"
+                   class="{% if request.resolver_match.url_name == 'grupos' or request.resolver_match.url_name == 'permisos_grupo' %}active{% endif %}">
+                    <i class="fas fa-user-shield"></i> Grupos y permisos
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:importar_deductivas' %}"
+                   class="{% if request.resolver_match.url_name == 'importar_deductivas' %}active{% endif %}">
+                    <i class="fas fa-file-import"></i> Importar deductivas
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'admin:enlaces_ccg_enlaceautorizado_changelist' %}"
+                   class="{% if request.resolver_match.url_name == 'enlaces_ccg_enlaceautorizado_changelist' %}active{% endif %}">
+                    <i class="fas fa-cog"></i> Admin
+                </a>
+            </li>
+            {% endif %}
+
+        </ul>
+
+        <!-- Auth -->
+        <div class="sidebar-auth">
+            {% if user.is_authenticated %}
+            <a href="{% url 'enlaces_ccg:logout' %}" class="auth-pill">
+                <div class="avatar">{{ user.username|truncatechars:2 }}</div>
+                <div class="auth-info">
+                    <span class="auth-name">{{ user.get_full_name|default:user.username }}</span>
+                    <span class="auth-role">{{ rol_actual|default:"Autorizado" }}</span>
+                </div>
+                <i class="fas fa-right-from-bracket" style="font-size:0.65rem;opacity:0.4;"></i>
+            </a>
+            {% else %}
+            <a href="{% url 'enlaces_ccg:login' %}" class="auth-pill">
+                <div class="avatar"><i class="fas fa-user"></i></div>
+                <div class="auth-info">
+                    <span class="auth-name">Iniciar Sesión</span>
+                    <span class="auth-role">Acceso restringido</span>
+                </div>
+                <i class="fas fa-chevron-right" style="font-size:0.65rem;opacity:0.4;"></i>
+            </a>
+            {% endif %}
+        </div>
+    </aside>
+
+    <!-- ═══════════════ CONTENIDO ═══════════════ -->
+    <div class="app-content">
+        <!-- Topbar -->
+        <div class="app-topbar">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    {% block breadcrumb %}
+                    <li class="breadcrumb-item">
+                        <a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a>
+                    </li>
+                    {% endblock %}
+                </ol>
+            </nav>
+            <div class="d-flex align-items-center gap-2">
+                {% if user.is_authenticated %}
+                    <span class="badge bg-success">
+                        <i class="fas fa-check-circle me-1"></i>
+                        {{ rol_actual|default:"Autorizado" }}
+                    </span>
+                {% endif %}
+                {% block topbar_acciones %}{% endblock %}
+            </div>
+        </div>
+
+        <!-- Mensajes Django -->
+        {% if messages %}
+        <div class="mb-3">
+            {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Bloque principal -->
+        {% block contenido %}{% endblock %}
+    </div>
+
+    <!-- ═══════════════ MODAL DETALLE ═══════════════ -->
+    <div class="modal fade modal-ccg" id="modalEnlace" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Detalle del Enlace</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalEnlaceBody" style="padding:16px;"></div>
+                <div class="modal-footer">
+                    {% if user.is_authenticated %}
+                    <button type="button" class="btn btn-primary" id="btnGuardarComentario">
+                        <i class="fas fa-save me-1"></i> Guardar Comentario
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODAL CREAR / EDITAR ═══════════════ -->
+    <div class="modal fade modal-ccg" id="modalEditar" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-pen-to-square me-2"></i>Editar Enlace</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formEditarEnlace">
+                        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                        <input type="hidden" id="edEnlaceId" value="">
+
+                        <div class="ccg-editor-head">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-8">
+                                    <label class="form-label mb-1">Nombre completo</label>
+                                    <h4 class="ccg-editor-name mb-0" id="edNombrePreview"><i class="fas fa-user text-muted me-2"></i>—</h4>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="edEstado">Estado</label>
+                                    <select class="form-select" name="estado" id="edEstado">
+                                        <option value="ACTIVO">Activo</option>
+                                        <option value="INACTIVO">Inactivo</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <div class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label">Nombres</label>
+                                    <input type="text" class="form-control" name="nombres" id="edNombres" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Primer Apellido</label>
+                                    <input type="text" class="form-control" name="primer_apellido" id="edPrimerApellido" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Segundo Apellido</label>
+                                    <input type="text" class="form-control" name="segundo_apellido" id="edSegundoApellido">
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Institución</label>
+                                <input type="text" class="form-control" id="edInstitucionBusca"
+                                       placeholder="Buscar institución..." autocomplete="off">
+                                <input type="hidden" name="institucion_id" id="edInstitucionId">
+                                <div id="edInstitucionDropdown" class="list-group mt-1"
+                                     style="display:none;max-height:200px;overflow-y:auto;position:absolute;z-index:10;width:calc(100% - 3rem);"></div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Edificio</label>
+                                <input type="text" class="form-control" id="edEdificio" readonly tabindex="-1">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Nivel Referencia</label>
+                                <input type="text" class="form-control" name="nivel_referencia" id="edNivelRef">
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <h6 class="text-uppercase text-muted mb-2"><i class="fas fa-envelope me-1"></i>Correos</h6>
+                                <div class="mb-3">
+                                    <label class="form-label">Correo Principal</label>
+                                    <input type="email" class="form-control" name="correo_principal" id="edCorreoPrincipal">
+                                </div>
+                                <div>
+                                    <label class="form-label">Correo Secundario</label>
+                                    <input type="email" class="form-control" name="correo_secundario" id="edCorreoSecundario">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-uppercase text-muted mb-2"><i class="fas fa-phone me-1"></i>Contacto</h6>
+                                <div class="mb-3">
+                                    <label class="form-label">Teléfono Principal</label>
+                                    <input type="text" class="form-control" name="telefono_principal" id="edTelefonoPrincipal">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Teléfono Secundario</label>
+                                    <input type="text" class="form-control" name="telefono_secundario" id="edTelefonoSecundario">
+                                </div>
+                                <div>
+                                    <label class="form-label">Extensión</label>
+                                    <input type="text" class="form-control" name="extension_telefonica" id="edExtension">
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Usuario SIG</label>
+                                <input type="text" class="form-control" name="usuario_sig" id="edUsuarioSig">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Nombre SIG</label>
+                                <input type="text" class="form-control" name="nombre_sig" id="edNombreSig">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">PIN SIG</label>
+                                <input type="text" class="form-control" name="pin_sig" id="edPinSig">
+                            </div>
+                            <div class="col-md-2" id="edContrasenaSigWrap">
+                                <label class="form-label">Contraseña SIG</label>
+                                <input type="text" class="form-control" name="password_sig" id="edPasswordSig">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Género</label>
+                                <select class="form-select" name="genero" id="edGenero">
+                                    <option value="">—</option>
+                                    <option value="M">Masculino</option>
+                                    <option value="F">Femenino</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Alta</label>
+                                <input type="date" class="form-control" name="fecha_alta" id="edFechaAlta">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Oficio Alta</label>
+                                <input type="text" class="form-control" name="oficio_alta" id="edOficioAlta">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Observaciones Alta</label>
+                                <input type="text" class="form-control" name="observaciones_alta" id="edObsAlta">
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Seguimiento</label>
+                                <input type="date" class="form-control" name="fecha_seguimiento" id="edFechaSeg">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Oficio Seguimiento</label>
+                                <input type="text" class="form-control" name="oficio_seguimiento" id="edOficioSeg">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Observaciones Seguimiento</label>
+                                <input type="text" class="form-control" name="observaciones_seguimiento" id="edObsSeg">
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Baja</label>
+                                <input type="date" class="form-control" name="fecha_baja" id="edFechaBaja">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Oficio Baja</label>
+                                <input type="text" class="form-control" name="oficio_baja" id="edOficioBaja">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Observaciones Baja</label>
+                                <input type="text" class="form-control" name="observaciones_baja" id="edObsBaja">
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <textarea class="form-control" name="comentarios" id="edComentarios" rows="3"
+                                          placeholder="Observaciones o comentarios..."></textarea>
+                            </div>
+                        </div>
+                    </form>
+
+                    <hr class="ccg-section-divider">
+                    <div>
+                        <div id="edListaAdjuntos"></div>
+                        <div class="mt-2">
+                            <form id="formSubirAdjuntoEditar" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
+                                <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                                <div class="flex-fill">
+                                    <input type="file" class="form-control form-control-sm" name="archivo" id="adjArchivo" required>
+                                </div>
+                                <div style="width:200px;">
+                                    <input type="text" class="form-control form-control-sm" name="nombre" id="adjNombre"
+                                           placeholder="Nombre descriptivo (opcional)">
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm" id="btnSubirAdjuntoEditar">
+                                    <i class="fas fa-upload me-1"></i> Subir
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btnGuardarEnlace">
+                        <i class="fas fa-save me-1"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODAL INSTITUCIÓN (CREAR / EDITAR) ═══════════════ -->
+    <div class="modal fade modal-ccg" id="modalInstitucion" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-landmark me-2"></i>Institución</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formInstitucion">
+                        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+                        <input type="hidden" id="instPk" value="">
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label" for="instNombre">Nombre</label>
+                                <input type="text" class="form-control" name="nombre" id="instNombre" required
+                                       placeholder="Nombre completo de la institución">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="instEstado">Estado</label>
+                                <select class="form-select" name="estado" id="instEstado">
+                                    <option value="ACTIVO">Activo</option>
+                                    <option value="INACTIVO">Inactivo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="instSiglas">Siglas</label>
+                                <input type="text" class="form-control" name="siglas" id="instSiglas"
+                                       placeholder="Ej. SESAL, SEPLAN">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="instEdificio">Edificio</label>
+                                <select class="form-select" name="edificio" id="instEdificio">
+                                    <option value="">— Sin edificio —</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Niveles</label>
+                                <div class="dropdown" id="dropdownNiveles">
+                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                                            id="btnDropdownNiveles" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <span id="instNivelDisplayText">Seleccione niveles...</span>
+                                    </button>
+                                    <input type="hidden" name="nivel" id="instNivel" value="[]">
+                                    <div class="dropdown-menu dropdown-menu-end p-3 w-auto" style="max-height: 300px; overflow-y: auto; min-width: 220px;"
+                                         id="dropdownMenuNiveles" data-bs-popper="none">
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnNivelesSeleccionarTodos">
+                                                <i class="fas fa-check-square me-1"></i> Todos
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNivelesLimpiar">
+                                                <i class="fas fa-times me-1"></i> Limpiar
+                                            </button>
+                                        </div>
+                                        <hr class="dropdown-divider">
+                                        <div id="nivelesCheckboxes" class="row g-1">
+                                            <div class="col-12 text-muted text-center py-2 small">Seleccione un edificio primero</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="ccg-section-divider">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="instContactoTelefono">Teléfono / Extensión</label>
+                                <input type="text" class="form-control" name="contacto_telefono" id="instContactoTelefono"
+                                       placeholder="Ej. 2222-0000 o extensión 1234">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btnGuardarInstitucion">
+                        <i class="fas fa-save me-1"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODAL VER ENLACES DE INSTITUCIÓN ═══════════════ -->
+    <div class="modal fade modal-ccg" id="modalVerEnlaces" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title mb-0">
+                        <i class="fas fa-id-card me-2"></i>
+                        <span id="verInstNombre"></span>
+                        <small class="fw-normal text-muted ms-2" id="verInstSiglas"></small>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Información de la institución -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-3 bg-light rounded">
+                        <span class="fw-semibold text-muted small me-1">Edificio:</span>
+                        <span id="verInstEdificio" class="fw-medium">—</span>
+                        <span id="verInstNiveles" class="d-flex flex-wrap gap-1"></span>
+                    </div>
+
+                    <!-- Tabla de enlaces -->
+                    <div class="ccg-table-wrap">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Correo</th>
+                                    <th>Teléfono</th>
+                                    <th class="text-center">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="verEnlacesBody"></tbody>
+                        </table>
+                    </div>
+                    <!-- Teléfono / Extensión debajo de la tabla -->
+                    <div class="mt-3 fw-medium" id="verInstTelefono">—</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (function() {
+        const csrfToken = '{{ csrf_token }}';
+
+        // ── Modal Detalle ──
+        const modalDetalle = new bootstrap.Modal(document.getElementById('modalEnlace'));
+        let enlacePk = null;
+
+        function renderDetalle(d) {
+            const seccion = function(titulo, icono, contenido) {
+                return `
+                <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                    <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+                        <h6 class="text-uppercase mb-0" style="color:#5a6268;">
+                            <i class="fas ${icono} me-1"></i>${titulo}
+                        </h6>
+                    </div>
+                    <div style="padding:12px 14px;">
+                        ${contenido}
+                    </div>
+                </div>`;
+            };
+            const fila = function(k, v) {
+                return `<tr><td class="text-muted" style="width:35%">${k}</td><td>${v}</td></tr>`;
+            };
+            const tabla = function(contenido) {
+                return `<table class="table table-sm table-borderless align-middle mb-0">${contenido}</table>`;
+            };
+
+            let main = '';
+
+            main += seccion('Ubicación', 'fa-building', tabla(
+                fila('Edificio', d.edificio_id
+                    ? `<a href="/edificio/${d.edificio_id}/" class="text-decoration-none">${d.edificio}${d.edificio_siglas ? ' (' + d.edificio_siglas + ')' : ''}</a>`
+                    : `${d.edificio || '—'}${d.edificio_siglas ? ' (' + d.edificio_siglas + ')' : ''}`) +
+                fila('Institución', d.institucion_id
+                    ? `<a href="/institucion/${d.institucion_id}/" class="text-decoration-none">${d.institucion}${d.siglas ? ' (' + d.siglas + ')' : ''}</a>`
+                    : `${d.institucion || '—'}${d.siglas ? ' (' + d.siglas + ')' : ''}`) +
+                fila('Nivel Ref.', d.nivel_referencia || '—')
+            ));
+
+let contactoContenido = `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        ${tabla(
+                            fila('Correo Principal', d.correo_principal ? '<a href="mailto:' + d.correo_principal + '">' + d.correo_principal + '</a>' : '—') +
+                            fila('Correo Secundario', d.correo_secundario ? '<a href="mailto:' + d.correo_secundario + '">' + d.correo_secundario + '</a>' : '—')
+                        )}
+                    </div>
+                    <div class="col-md-6">
+                        ${tabla(
+                            fila('Teléfono Principal', d.telefono_principal || '—') +
+                            fila('Teléfono Secundario', d.telefono_secundario || '—') +
+                            fila('Extensión', d.extension_telefonica || '—')
+                        )}
+                    </div>
+                </div>`;
+            main += seccion('Datos de Contacto', 'fa-address-book', contactoContenido);
+
+            if (d.fecha_alta || d.oficio_alta || d.fecha_seguimiento || d.fecha_baja) {
+                main += seccion('Altas y Seguimiento', 'fa-calendar', tabla(
+                    `<tr><td class="text-muted" style="width:35%">Fecha Alta</td><td>${d.fecha_alta || '—'}</td>
+                        <td class="text-muted" style="width:30%">Oficio Alta</td><td>${d.oficio_alta || '—'}</td></tr>` +
+                    `<tr><td class="text-muted">Fecha Seguimiento</td><td>${d.fecha_seguimiento || '—'}</td>
+                        <td class="text-muted">Oficio Seguimiento</td><td>${d.oficio_seguimiento || '—'}</td></tr>` +
+                    `<tr><td class="text-muted">Fecha Baja</td><td>${d.fecha_baja || '—'}</td>
+                        <td class="text-muted">Oficio Baja</td><td>${d.oficio_baja || '—'}</td></tr>`
+                ));
+            }
+
+            main += seccion('Comentarios', 'fa-sticky-note',
+                `<textarea class="form-control" id="campoComentarios" rows="3"
+                    placeholder="Agregar observaciones o comentarios..."
+                    ${'{% if not user.is_authenticated %}disabled{% endif %}'}>${d.comentarios || ''}</textarea>`
+            );
+
+            main += seccion('Documentos Adjuntos', 'fa-paperclip',
+                `<div id="listaAdjuntos"></div>`
+            );
+
+            let html = `
+            <div class="text-center p-3 mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;">
+                <div class="mb-1"><i class="fas fa-user-circle fa-2x" style="color:#6c757d;"></i></div>
+                <h4 class="mb-1">${d.nombre_completo}</h4>
+                <div class="row g-2 mt-1 text-center" style="margin:0;">
+                    <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                        <span class="small text-muted">Usuario SIG:</span>
+                        <span style="color:#495057;">${d.usuario_sig || '—'}</span>
+                    </div>
+                    <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                        <span class="small text-muted">PIN:</span>
+                        <span style="color:#495057;">${d.pin_sig || '—'}</span>
+                    </div>
+                    <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                        <span class="small text-muted">Estado:</span>
+                        <span class="badge ${d.estado === 'ACTIVO' ? 'bg-success' : 'bg-danger'} fs-6">${d.estado}</span>
+                    </div>
+                </div>
+            </div>
+            ${main}`;
+
+            document.getElementById('modalEnlaceBody').innerHTML = html;
+            if (enlacePk) cargarAdjuntos(enlacePk);
+        }
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-ver-enlace');
+            if (!btn) return;
+            enlacePk = btn.dataset.pk;
+            document.getElementById('modalEnlaceBody').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>`;
+            modalDetalle.show();
+
+            fetch(`/enlaces/${enlacePk}/detalle/`)
+                .then(r => r.json())
+                .then(d => renderDetalle(d))
+                .catch(() => {
+                    document.getElementById('modalEnlaceBody').innerHTML =
+                        '<div class="alert alert-danger">Error al cargar los datos.</div>';
+                });
+        });
+
+        document.getElementById('btnGuardarComentario')?.addEventListener('click', function() {
+            if (!enlacePk) return;
+            const comentario = document.getElementById('campoComentarios')?.value || '';
+            const formData = new FormData();
+            formData.append('comentarios', comentario);
+            formData.append('csrfmiddlewaretoken', csrfToken);
+
+            fetch(`/enlaces/${enlacePk}/comentario/`, {
+                method: 'POST',
+                body: formData,
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    const btn = document.getElementById('btnGuardarComentario');
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i> Guardado';
+                    btn.classList.replace('btn-primary', 'btn-success');
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="fas fa-save me-1"></i> Guardar Comentario';
+                        btn.classList.replace('btn-success', 'btn-primary');
+                    }, 2000);
+                } else {
+                    alert(d.error || 'Error al guardar');
+                }
+            })
+            .catch(() => alert('Error de conexión'));
+        });
+
+        // ── Adjuntos (vista: solo ver y descargar) ──
+        function cargarAdjuntos(pk) {
+            fetch(`/enlaces/${pk}/adjuntos/`)
+                .then(r => r.json())
+                .then(d => {
+                    const cont = document.getElementById('listaAdjuntos');
+                    if (!cont) return;
+                    if (!d.adjuntos.length) {
+                        cont.innerHTML = '<p class="text-muted small mb-0">No hay documentos adjuntos.</p>';
+                        return;
+                    }
+                    cont.innerHTML = d.adjuntos.map(a => `
+                        <div class="d-flex align-items-center justify-content-between border rounded-3 px-3 py-2 mb-2" style="background:#f8f9fa;">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="${a.icono} fa-lg text-primary"></i>
+                                <div>
+                                    <a href="${a.archivo_url}" target="_blank" class="fw-semibold text-decoration-none">${a.nombre}</a>
+                                    <div class="small text-muted">${a.tamano} &middot; ${a.subido_en}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                });
+        }
+
+        document.addEventListener('submit', function(e) {
+            if (e.target.id !== 'formSubirAdjuntoEditar') return;
+            e.preventDefault();
+            if (!edPk) return;
+            const form = e.target;
+            const formData = new FormData(form);
+            const btn = document.getElementById('btnSubirAdjuntoEditar');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            fetch(`/enlaces/${edPk}/adjuntos/subir/`, {
+                method: 'POST',
+                body: formData,
+            })
+            .then(r => r.json())
+            .then(d => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload me-1"></i> Subir';
+                if (d.ok) {
+                    form.reset();
+                    cargarAdjuntosEdicion(edPk);
+                } else {
+                    alert(d.error || 'Error al subir');
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload me-1"></i> Subir';
+                alert('Error de conexión');
+            });
+        });
+
+        // ── Modal Crear / Editar ──
+        const modalEditar = new bootstrap.Modal(document.getElementById('modalEditar'));
+        let institucionesCache = [];
+        let modoCreacion = false;
+        let edPk = null;
+
+        // ── Adjuntos (edición: ver, descargar, agregar y quitar) ──
+        function cargarAdjuntosEdicion(pk) {
+            if (!pk) {
+                const cont = document.getElementById('edListaAdjuntos');
+                if (cont) cont.innerHTML = '<p class="text-muted small mb-0">Guardar el enlace primero para adjuntar documentos.</p>';
+                return;
+            }
+            fetch(`/enlaces/${pk}/adjuntos/`)
+                .then(r => r.json())
+                .then(d => {
+                    const cont = document.getElementById('edListaAdjuntos');
+                    if (!cont) return;
+                    if (!d.adjuntos.length) {
+                        cont.innerHTML = '<p class="text-muted small mb-0">No hay documentos adjuntos.</p>';
+                        return;
+                    }
+                    cont.innerHTML = d.adjuntos.map(a => `
+                        <div class="d-flex align-items-center justify-content-between border rounded-3 px-3 py-2 mb-2" style="background:#f8f9fa;">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="${a.icono} fa-lg text-primary"></i>
+                                <div>
+                                    <a href="${a.archivo_url}" target="_blank" class="fw-semibold text-decoration-none">${a.nombre}</a>
+                                    <div class="small text-muted">${a.tamano} &middot; ${a.subido_en}</div>
+                                </div>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm btn-eliminar-adjunto-edicion" data-id="${a.id}" title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `).join('');
+
+                    cont.querySelectorAll('.btn-eliminar-adjunto-edicion').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            if (!confirm('¿Eliminar este archivo adjunto?')) return;
+                            fetch(`/enlaces/${pk}/adjuntos/${this.dataset.id}/eliminar/`, {
+                                method: 'POST',
+                                headers: {'X-CSRFToken': csrfToken},
+                            })
+                            .then(r => r.json())
+                            .then(dd => { if (dd.ok) cargarAdjuntosEdicion(pk); });
+                        });
+                    });
+                });
+        }
+
+        function setModo() {
+            document.querySelector('#modalEditar .modal-title').innerHTML = modoCreacion
+                ? '<i class="fas fa-plus me-2"></i>Nuevo Enlace'
+                : '<i class="fas fa-pen-to-square me-2"></i>Editar Enlace';
+            const nombreSig = document.getElementById('edNombreSig');
+            nombreSig.readOnly = modoCreacion;
+            nombreSig.classList.toggle('field-disabled', modoCreacion);
+            const contrasenaSigWrap = document.getElementById('edContrasenaSigWrap');
+            if (contrasenaSigWrap) {
+                contrasenaSigWrap.style.display = modoCreacion ? '' : 'none';
+            }
+            if (!modoCreacion) {
+                document.getElementById('edPasswordSig').value = '';
+            }
+            document.getElementById('btnGuardarEnlace').innerHTML = modoCreacion
+                ? '<i class="fas fa-save me-1"></i> Guardar'
+                : '<i class="fas fa-save me-1"></i> Guardar Cambios';
+        }
+
+        function actualizarNombreSig() {
+            const n = document.getElementById('edNombres').value.trim();
+            const p = document.getElementById('edPrimerApellido').value.trim();
+            const s = document.getElementById('edSegundoApellido').value.trim();
+            document.getElementById('edNombreSig').value = [n, p, s].filter(Boolean).join(' ');
+        }
+
+        function actualizarNombrePreview() {
+            const n = document.getElementById('edNombres').value.trim();
+            const p = document.getElementById('edPrimerApellido').value.trim();
+            const s = document.getElementById('edSegundoApellido').value.trim();
+            document.getElementById('edNombrePreview').textContent =
+                [n, p, s].filter(Boolean).join(' ');
+        }
+
+        function abrirCrear(inst) {
+            modoCreacion = true;
+            edPk = null;
+            document.getElementById('formEditarEnlace').reset();
+            document.getElementById('edEnlaceId').value = '';
+            document.getElementById('edEstado').value = 'ACTIVO';
+            document.getElementById('edNombreSig').value = '';
+            document.getElementById('edInstitucionId').value = '';
+            document.getElementById('edInstitucionBusca').value = '';
+            document.getElementById('edInstitucionDropdown').style.display = 'none';
+            document.getElementById('edEdificio').value = '';
+            document.getElementById('edNombrePreview').textContent = '';
+            cargarAdjuntosEdicion(null);
+            if (inst && inst.id) {
+                document.getElementById('edInstitucionId').value = inst.id;
+                document.getElementById('edInstitucionBusca').value = inst.nombre + (inst.siglas ? ' (' + inst.siglas + ')' : '');
+                if (inst.edificio) document.getElementById('edEdificio').value = inst.edificio;
+            }
+            setModo();
+            modalEditar.show();
+        }
+
+        function abrirEditar(pk) {
+            modoCreacion = false;
+            edPk = pk;
+            fetch(`/enlaces/${pk}/detalle/`)
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('edEnlaceId').value = d.id;
+                    document.getElementById('edNombres').value = d.nombres || '';
+                    document.getElementById('edPrimerApellido').value = d.primer_apellido || '';
+                    document.getElementById('edSegundoApellido').value = d.segundo_apellido || '';
+                    document.getElementById('edGenero').value = d.genero || '';
+                    document.getElementById('edCorreoPrincipal').value = d.correo_principal || '';
+                    document.getElementById('edCorreoSecundario').value = d.correo_secundario || '';
+                    document.getElementById('edTelefonoPrincipal').value = d.telefono_principal || '';
+                    document.getElementById('edTelefonoSecundario').value = d.telefono_secundario || '';
+                    document.getElementById('edExtension').value = d.extension_telefonica || '';
+                    document.getElementById('edNivelRef').value = d.nivel_referencia || '';
+                    document.getElementById('edUsuarioSig').value = d.usuario_sig || '';
+                    document.getElementById('edNombreSig').value = d.nombre_sig || '';
+                    document.getElementById('edPinSig').value = d.pin_sig || '';
+                    document.getElementById('edPasswordSig').value = d.password_sig || '';
+                    document.getElementById('edEstado').value = d.estado || 'ACTIVO';
+                    document.getElementById('edComentarios').value = d.comentarios || '';
+                    document.getElementById('edFechaAlta').value = d.fecha_alta || '';
+                    document.getElementById('edOficioAlta').value = d.oficio_alta || '';
+                    document.getElementById('edObsAlta').value = d.observaciones_alta || '';
+                    document.getElementById('edFechaSeg').value = d.fecha_seguimiento || '';
+                    document.getElementById('edOficioSeg').value = d.oficio_seguimiento || '';
+                    document.getElementById('edObsSeg').value = d.observaciones_seguimiento || '';
+                    document.getElementById('edFechaBaja').value = d.fecha_baja || '';
+                    document.getElementById('edOficioBaja').value = d.oficio_baja || '';
+                    document.getElementById('edObsBaja').value = d.observaciones_baja || '';
+                    document.getElementById('edInstitucionId').value = d.institucion_id || '';
+                    document.getElementById('edInstitucionBusca').value = d.institucion + (d.siglas ? ' (' + d.siglas + ')' : '');
+                    document.getElementById('edEdificio').value = d.edificio ? (d.edificio + (d.edificio_siglas ? ' (' + d.edificio_siglas + ')' : '')) : '';
+                    actualizarNombrePreview();
+                    setModo();
+                    modalEditar.show();
+                    cargarAdjuntosEdicion(pk);
+                });
+        }
+
+        // Delegación global para editar
+        document.addEventListener('click', function(e) {
+            const btnEditar = e.target.closest('.btn-editar-enlace');
+            if (btnEditar) { abrirEditar(btnEditar.dataset.pk); return; }
+
+            const btnCrear = e.target.closest('[data-crear-enlace]');
+            if (btnCrear) {
+                e.preventDefault();
+                const inst = btnCrear.dataset.instId ? {
+                    id: btnCrear.dataset.instId,
+                    nombre: btnCrear.dataset.instNombre || '',
+                    siglas: btnCrear.dataset.instSiglas || '',
+                } : null;
+                abrirCrear(inst);
+            }
+        });
+
+        ['edNombres', 'edPrimerApellido', 'edSegundoApellido'].forEach(id => {
+            document.getElementById(id)?.addEventListener('input', function() {
+                actualizarNombrePreview();
+                if (modoCreacion) actualizarNombreSig();
+            });
+        });
+
+        // Búsqueda de instituciones
+        let searchTimeout = null;
+        document.getElementById('edInstitucionBusca')?.addEventListener('input', function() {
+            const val = this.value.trim();
+            clearTimeout(searchTimeout);
+            if (val.length < 2) {
+                document.getElementById('edInstitucionDropdown').style.display = 'none';
+                return;
+            }
+            searchTimeout = setTimeout(() => {
+                fetch(`/api/instituciones/?q=${encodeURIComponent(val)}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        institucionesCache = d.instituciones;
+                        const dd = document.getElementById('edInstitucionDropdown');
+                        if (!d.instituciones.length) {
+                            dd.style.display = 'none';
+                            return;
+                        }
+                        dd.innerHTML = d.instituciones.map(i =>
+                            `<button type="button" class="list-group-item list-group-item-action py-2"
+                                     data-id="${i.id}" data-name="${i.nombre}" data-siglas="${i.siglas}" data-edificio="${i.edificio || ''}">
+                                <strong>${i.nombre}</strong>
+                                ${i.siglas ? '<br><small class="text-muted">' + i.siglas + '</small>' : ''}
+                                ${i.edificio ? '<br><small class="text-muted"><i class="fas fa-building me-1"></i>' + i.edificio + '</small>' : ''}
+                            </button>`
+                        ).join('');
+                        dd.style.display = 'block';
+
+                        dd.querySelectorAll('button').forEach(b => {
+                            b.addEventListener('click', function() {
+                                document.getElementById('edInstitucionId').value = this.dataset.id;
+                                document.getElementById('edInstitucionBusca').value = this.dataset.name + (this.dataset.siglas ? ' (' + this.dataset.siglas + ')' : '');
+                                document.getElementById('edEdificio').value = this.dataset.edificio || '';
+                                dd.style.display = 'none';
+                            });
+                        });
+                    });
+            }, 300);
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#edInstitucionBusca') && !e.target.closest('#edInstitucionDropdown')) {
+                document.getElementById('edInstitucionDropdown').style.display = 'none';
+            }
+        });
+
+        // Guardar (crear o editar)
+        document.getElementById('btnGuardarEnlace')?.addEventListener('click', function() {
+            const form = document.getElementById('formEditarEnlace');
+            const formData = new FormData(form);
+            const pk = document.getElementById('edEnlaceId').value;
+            const url = modoCreacion ? '/enlaces/crear/' : `/enlaces/${pk}/editar/`;
+            const labelOK = modoCreacion ? 'Nuevo Enlace' : 'Guardar Cambios';
+            const btn = this;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Guardando...';
+
+            fetch(url, {
+                method: 'POST',
+                body: formData,
+            })
+            .then(r => r.json())
+            .then(d => {
+                btn.disabled = false;
+                if (d.ok) {
+                    btn.innerHTML = '<i class="fas fa-check me-1"></i> Guardado';
+                    btn.classList.replace('btn-primary', 'btn-success');
+                    setTimeout(() => {
+                        btn.innerHTML = `<i class="fas fa-save me-1"></i> ${labelOK}`;
+                        btn.classList.replace('btn-success', 'btn-primary');
+                        modalEditar.hide();
+                        window.location.reload();
+                    }, 1200);
+                } else {
+                    btn.innerHTML = `<i class="fas fa-save me-1"></i> ${labelOK}`;
+                    btn.classList.replace('btn-success', 'btn-primary');
+                    alert(d.error || 'Error al guardar');
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-save me-1"></i> ${labelOK}`;
+                btn.classList.replace('btn-success', 'btn-primary');
+                alert('Error de conexión');
+            });
+        });
+
+        // ── Modal Institución (crear / editar) ──
+        const modalInstitucion = new bootstrap.Modal(document.getElementById('modalInstitucion'));
+        let edificiosCargados = false;
+
+        function cargarEdificiosInstitucion() {
+            if (edificiosCargados) return Promise.resolve();
+            return fetch('/api/edificios/')
+                .then(r => r.json())
+                .then(d => {
+                    const sel = document.getElementById('instEdificio');
+                    sel.innerHTML = '<option value="">— Sin edificio —</option>';
+                    (d.edificios || []).forEach(ed => {
+                        const opt = document.createElement('option');
+                        opt.value = ed.id;
+                        opt.textContent = ed.nombre;
+                        opt.dataset.siglas = ed.siglas || '';
+                        sel.appendChild(opt);
+                    });
+                    edificiosCargados = true;
+                });
+        }
+
+        function abrirCrearInstitucion(edificioId) {
+            document.getElementById('instPk').value = '';
+            document.getElementById('formInstitucion').reset();
+            document.getElementById('instNombre').value = '';
+            document.getElementById('instEstado').value = 'ACTIVO';
+            document.querySelector('#modalInstitucion .modal-title').innerHTML =
+                '<i class="fas fa-plus me-2"></i>Nueva Institución';
+            const btn = document.getElementById('btnGuardarInstitucion');
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Guardar';
+            btn.classList.replace('btn-success', 'btn-primary');
+            cargarEdificiosInstitucion().then(() => {
+                document.getElementById('instEdificio').value = edificioId || '';
+                modalInstitucion.show();
+            });
+        }
+
+        function abrirEditarInstitucion(pk) {
+            document.querySelector('#modalInstitucion .modal-title').innerHTML =
+                '<i class="fas fa-pen-to-square me-2"></i>Editar Institución';
+            const btn = document.getElementById('btnGuardarInstitucion');
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Guardar';
+            btn.classList.replace('btn-success', 'btn-primary');
+            cargarEdificiosInstitucion().then(() => {
+                return fetch(`/institucion/${pk}/detalle/`).then(r => r.json());
+            }).then(d => {
+                document.getElementById('instPk').value = d.id;
+                document.getElementById('instNombre').value = d.nombre || '';
+                document.getElementById('instSiglas').value = d.siglas || '';
+                document.getElementById('instNivel').value = JSON.stringify(d.nivel || []);
+                document.getElementById('instEstado').value = d.estado || 'ACTIVO';
+                document.getElementById('instContactoTelefono').value = d.contacto_telefono || '';
+                document.getElementById('instEdificio').value = d.edificio_id || '';
+                modalInstitucion.show();
+            });
+        }
+
+        document.addEventListener('click', function(e) {
+            const btnCrear = e.target.closest('[data-crear-institucion]');
+            if (btnCrear) { e.preventDefault(); abrirCrearInstitucion(btnCrear.dataset.edificio); return; }
+
+            const btnEditar = e.target.closest('[data-editar-institucion]');
+            if (btnEditar) { e.preventDefault(); abrirEditarInstitucion(btnEditar.dataset.pk); return; }
+        });
+
+        document.getElementById('btnGuardarInstitucion')?.addEventListener('click', function() {
+            const form = document.getElementById('formInstitucion');
+            const formData = new FormData(form);
+            const pk = document.getElementById('instPk').value;
+            const url = pk ? `/institucion/${pk}/editar/` : '/institucion/crear/';
+            const labelOK = pk ? 'Guardar Cambios' : 'Guardar';
+            const btn = this;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Guardando...';
+
+            fetch(url, { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(d => {
+                    btn.disabled = false;
+                    if (d.ok) {
+                        btn.innerHTML = '<i class="fas fa-check me-1"></i> Guardado';
+                        btn.classList.replace('btn-primary', 'btn-success');
+                        setTimeout(() => {
+                            btn.classList.replace('btn-success', 'btn-primary');
+                            modalInstitucion.hide();
+                            window.location.reload();
+                        }, 1200);
+                    } else {
+                        btn.innerHTML = `<i class="fas fa-save me-1"></i> ${labelOK}`;
+                        btn.classList.replace('btn-success', 'btn-primary');
+                        alert(d.error || 'Error al guardar');
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fas fa-save me-1"></i> ${labelOK}`;
+                    btn.classList.replace('btn-success', 'btn-primary');
+                    alert('Error de conexión');
+                });
+        });
+
+        // ── Modal Ver Enlaces de Institución ──
+        const modalVerEnlaces = new bootstrap.Modal(document.getElementById('modalVerEnlaces'));
+
+        function escapeHtmlUnsafe(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function verEnlaces(pk) {
+            document.getElementById('verInstNombre').textContent = 'Cargando...';
+            document.getElementById('verInstSiglas').textContent = '';
+            document.getElementById('verInstEdificio').textContent = '—';
+            document.getElementById('verInstTelefono').textContent = '—';
+            document.getElementById('verEnlacesBody').innerHTML = `
+                <tr><td colspan="4"><i class="fas fa-spinner fa-spin me-2"></i>Cargando enlaces...</td></tr>`;
+            modalVerEnlaces.show();
+            document.getElementById('verInstNiveles').innerHTML = '';
+            fetch(`/institucion/${pk}/enlaces/`)
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('verInstNombre').textContent = d.institucion || '';
+                    document.getElementById('verInstSiglas').textContent = d.siglas ? `(${d.siglas})` : '';
+                    const nivelesEl = document.getElementById('verInstNiveles');
+                    if (nivelesEl) {
+                        nivelesEl.innerHTML = (d.niveles && d.niveles.length)
+                            ? d.niveles.map(n => `<span class="badge bg-secondary">${escapeHtmlUnsafe(n)}</span>`).join('')
+                            : '';
+                    }
+                    document.getElementById('verInstEdificio').textContent = d.edificio || '—';
+                    const telEl = document.getElementById('verInstTelefono');
+                    if (telEl) telEl.textContent = d.telefono_institucion || '—';
+                    const body = document.getElementById('verEnlacesBody');
+                    if (!d.enlaces || !d.enlaces.length) {
+                        body.innerHTML = `
+                            <tr><td colspan="4" class="text-center text-muted">
+                                No hay enlaces activos en esta institución.
+                            </td></tr>`;
+                        return;
+                    }
+                    body.innerHTML = d.enlaces.map(e => `
+                        <tr>
+                            <td class="cell-name fw-semibold">${escapeHtmlUnsafe(e.nombre)}</td>
+                            <td>${escapeHtmlUnsafe(e.correo)}</td>
+                            <td>${escapeHtmlUnsafe(e.telefono)}</td>
+                            <td class="text-center">
+                                <span class="badge bg-success badge-estado">
+                                    <i class="fas fa-check-circle me-1"></i>${escapeHtmlUnsafe(e.estado_display)}
+                                </span>
+                            </td>
+                        </tr>`).join('');
+                })
+                .catch(() => {
+                    document.getElementById('verInstNombre').textContent = '';
+                    document.getElementById('verInstSiglas').textContent = '';
+                    document.getElementById('verInstEdificio').textContent = '—';
+                    document.getElementById('verInstTelefono').textContent = '—';
+                    document.getElementById('verEnlacesBody').innerHTML = `
+                        <tr><td colspan="4" class="text-center text-danger">Error al cargar los enlaces.</td></tr>`;
+                });
+        }
+
+        document.addEventListener('click', function(e) {
+            const btnVer = e.target.closest('[data-ver-enlaces]');
+            if (btnVer) { e.preventDefault(); verEnlaces(btnVer.dataset.pk); return; }
+        });
+
+        // ── Selector de niveles por edificio ──
+        const NIVELES_POR_EDIFICIO = {
+            "CBA": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5"],
+            "CBB": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5", "Nivel 6", "Nivel 7"],
+            "CBC": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5", "Nivel 6", "Nivel 7"],
+            "TORRE 1": ["PB"] + Array.from({length: 23}, (_, i) => `Nivel ${i+1}`),
+            "TORRE 2": ["PB"] + Array.from({length: 24}, (_, i) => `Nivel ${i+1}`),
+        };
+
+        let nivelesSeleccionados = [];
+
+        function actualizarDisplayNiveles() {
+            const display = document.getElementById('instNivelDisplayText');
+            const hidden = document.getElementById('instNivel');
+            if (nivelesSeleccionados.length === 0) {
+                if (display) display.textContent = 'Seleccione niveles...';
+            } else {
+                if (display) display.textContent = nivelesSeleccionados.join(', ');
+            }
+            hidden.value = JSON.stringify(nivelesSeleccionados);
+        }
+
+        function poblarCheckboxesNiveles(edificioSiglas) {
+            const container = document.getElementById('nivelesCheckboxes');
+            const niveles = NIVELES_POR_EDIFICIO[edificioSiglas] || [];
+            const labelEdificio = document.getElementById('nivelEdificioSeleccionado');
+            if (labelEdificio) labelEdificio.textContent = edificioSiglas ? ` ${edificioSiglas} (${niveles.length} niveles)` : '';
+            if (niveles.length === 0) {
+                container.innerHTML = '<div class="col-12 text-muted text-center py-3">Seleccione un edificio primero</div>';
+                return;
+            }
+            container.innerHTML = niveles.map(n => `
+                <div class="col-md-3 col-sm-4 col-6">
+                    <div class="form-check">
+                        <input class="form-check-input nivel-checkbox" type="checkbox" value="${n}"
+                               id="nivel_${n.replace(/\s+/g, '_')}" ${nivelesSeleccionados.includes(n) ? 'checked' : ''}>
+                        <label class="form-check-label small" for="nivel_${n.replace(/\s+/g, '_')}">${n}</label>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('instEdificio')?.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const edificioSiglas = selectedOption.dataset.siglas || '';
+            poblarCheckboxesNiveles(edificioSiglas);
+            nivelesSeleccionados = [];
+            actualizarDisplayNiveles();
+        });
+
+        document.getElementById('btnNivelesSeleccionarTodos')?.addEventListener('click', function() {
+            document.querySelectorAll('.nivel-checkbox').forEach(cb => { cb.checked = true; actualizarDesdeCheckboxes(); });
+        });
+
+        document.getElementById('btnNivelesLimpiar')?.addEventListener('click', function() {
+            document.querySelectorAll('.nivel-checkbox').forEach(cb => { cb.checked = false; actualizarDesdeCheckboxes(); });
+        });
+
+        // Evitar que el dropdown se cierre al hacer click dentro
+        document.getElementById('dropdownMenuNiveles')?.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        function actualizarDesdeCheckboxes() {
+            nivelesSeleccionados = Array.from(document.querySelectorAll('.nivel-checkbox:checked')).map(cb => cb.value);
+            actualizarDisplayNiveles();
+        }
+
+        document.getElementById('nivelesCheckboxes')?.addEventListener('change', function(e) {
+            if (e.target.classList && e.target.classList.contains('nivel-checkbox')) {
+                actualizarDesdeCheckboxes();
+            }
+        });
+
+        // Al abrir dropdown, poblar checkboxes
+        document.getElementById('dropdownNiveles')?.addEventListener('show.bs.dropdown', function() {
+            const edificioSel = document.getElementById('instEdificio');
+            const selectedOption = edificioSel.options[edificioSel.selectedIndex];
+            const edificioSiglas = selectedOption && selectedOption.dataset
+                ? (selectedOption.dataset.siglas || '')
+                : '';
+            poblarCheckboxesNiveles(edificioSiglas);
+            // Restaurar selección actual
+            document.querySelectorAll('.nivel-checkbox').forEach(cb => {
+                cb.checked = nivelesSeleccionados.includes(cb.value);
+            });
+        });
+
+        // Al abrir modal de edición de institución, cargar niveles seleccionados del hidden input
+        document.getElementById('modalInstitucion')?.addEventListener('show.bs.modal', function() {
+            const hidden = document.getElementById('instNivel');
+            try {
+                nivelesSeleccionados = JSON.parse(hidden.value || '[]');
+            } catch { nivelesSeleccionados = []; }
+            actualizarDisplayNiveles();
+        });
+
+    })();
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
