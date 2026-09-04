@@ -621,20 +621,6 @@ class SIGClient:
 
         time.sleep(2)
 
-        # Verificar si hay error SweetAlert
-        try:
-            error_modal = page.locator(
-                ".swal2-html-container, .swal2-title, .swal2-content"
-            ).first
-            error_text = (error_modal.inner_text() or "").strip()
-            if error_text:
-                logger.error("Error en login (SweetAlert): %s", error_text)
-                raise SIGClientError(f"Login falló: {error_text}")
-        except Exception as e:
-            if isinstance(e, SIGClientError):
-                raise
-            pass
-
         # Verificar que no estemos en página de login
         current = page.url
         if "seguridad/entrar" in current.lower() or "login" in current.lower():
