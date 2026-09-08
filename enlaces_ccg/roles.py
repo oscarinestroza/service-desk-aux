@@ -13,7 +13,7 @@ Capacidades (permisos lógicos):
     - directorio : ver listados de edificios/instituciones/enlaces + exportar
     - editar     : crear/editar enlaces e instituciones del directorio
     - tickets    : sección Seguimiento de tickets
-    - revisiones : sección Revisiones Operativas
+    - revisiones : sección Modulo Operativo MAO
     - admin      : panel de administración de Django
 """
 
@@ -168,6 +168,8 @@ VISTAS = [
      "ver": (CAP_REVISIONES,)},
     {"clave": "plantillas_respuesta", "etiqueta": "Plantillas de respuesta", "seccion": CAP_REVISIONES,
      "ver": (CAP_REVISIONES,)},
+    {"clave": "documentos", "etiqueta": "Documentos y carpetas", "seccion": CAP_DIRECTORIO,
+     "ver": (CAP_DIRECTORIO,)},
 ]
 
 
@@ -175,7 +177,7 @@ SECCIONES = [
     {"clave": CAP_DIRECTORIO, "etiqueta": "Directorio de Enlaces"},
     {"clave": CAP_TICKETS, "etiqueta": "Seguimiento de tickets"},
     {"clave": CAP_IMPORTAR, "etiqueta": "Importaciones"},
-    {"clave": CAP_REVISIONES, "etiqueta": "Revisiones Operativas"},
+    {"clave": CAP_REVISIONES, "etiqueta": "Modulo Operativo MAO"},
 ]
 
 
@@ -186,7 +188,7 @@ def nombres_capacidades():
         CAP_EDITAR: "Editar directorio",
         CAP_TICKETS: "Seguimiento de tickets",
         CAP_IMPORTAR: "Importaciones",
-        CAP_REVISIONES: "Revisiones Operativas",
+        CAP_REVISIONES: "Modulo Operativo MAO",
         CAP_ADMIN: "Panel de administración",
     }
 

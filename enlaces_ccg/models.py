@@ -2,7 +2,7 @@
 Models para la gestión de Enlaces Autorizados del CCG Honduras.
 
 Relación jerárquica:
-    Edificio → Institución → EnlaceAutorizado
+    Edificio ↔ Institución (M2M through InstitucionEdificio) → EnlaceAutorizado
 """
 
 from django.db import models
@@ -82,13 +82,12 @@ class Institucion(models.Model):
         (f"Nivel {i}", f"Nivel {i}") for i in range(1, 25)
     ]
 
-    edificio = models.ForeignKey(
+    edificio = models.ManyToManyField(
         Edificio,
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
+        through="InstitucionEdificio",
         related_name="instituciones",
-        help_text="Edificio donde radica la institución",
+        help_text="Edificio(s) donde radica la institución",
     )
     nombre = models.CharField(
         max_length=200,
@@ -100,18 +99,13 @@ class Institucion(models.Model):
         default="",
         help_text="Siglas de la institución (ej. SESAL, SEPLAN)",
     )
-    nivel = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="Niveles/pisos dentro del edificio (ej. [\"PB\", \"Nivel 1\", \"Nivel 2\"])",
-    )
     # Niveles disponibles por edificio (siglas del edificio -> lista de niveles)
     NIVELES_POR_EDIFICIO = {
         "CBA": ["PB"] + [f"Nivel {i}" for i in range(1, 6)],
         "CBB": ["PB"] + [f"Nivel {i}" for i in range(1, 8)],
         "CBC": ["PB"] + [f"Nivel {i}" for i in range(1, 8)],
-        "TORRE 1": ["PB"] + [f"Nivel {i}" for i in range(1, 24)],
-        "TORRE 2": ["PB"] + [f"Nivel {i}" for i in range(1, 25)],
+        "T1": ["PB"] + [f"Nivel {i}" for i in range(1, 24)],
+        "T2": ["PB"] + [f"Nivel {i}" for i in range(1, 25)],
     }
 
     estado = models.CharField(
@@ -154,6 +148,37 @@ class Institucion(models.Model):
         if self.siglas:
             return f"{self.nombre} ({self.siglas})"
         return self.nombre
+
+
+# ---------------------------------------------------------------------------
+# InstitucionEdificio (tabla intermedia M2M)
+# ---------------------------------------------------------------------------
+class InstitucionEdificio(models.Model):
+    """Relación Institución ↔ Edificio con niveles propios por edificio."""
+
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.CASCADE,
+        related_name="instituciones_edificios",
+    )
+    edificio = models.ForeignKey(
+        Edificio,
+        on_delete=models.CASCADE,
+        related_name="instituciones_edificios",
+    )
+    nivel = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Niveles/pisos en este edificio (ej. ["PB", "Nivel 1", "Nivel 2"])',
+    )
+
+    class Meta:
+        unique_together = ("institucion", "edificio")
+        verbose_name = "Institución – Edificio"
+        verbose_name_plural = "Instituciones – Edificios"
+
+    def __str__(self):
+        return f"{self.institucion} → {self.edificio}"
 
 
 # ---------------------------------------------------------------------------
@@ -372,8 +397,18 @@ class EnlaceAutorizado(models.Model):
 
     @property
     def edificio(self):
-        """Devuelve el edificio de la institución a la que pertenece."""
-        return self.institucion.edificio
+        """Devuelve el primer edificio de la institución (compatibilidad)."""
+        if self.institucion_id:
+            ed = self.institucion.edificio.first()
+            return ed
+        return None
+
+    @property
+    def edificios(self):
+        """Devuelve todos los edificios de la institución."""
+        if self.institucion_id:
+            return self.institucion.edificio.all()
+        return []
 
     @property
     def nombre_completo_admin(self):
@@ -667,3 +702,144 @@ class ConfiguracionSIG(models.Model):
         """Devuelve el registro singleton de configuración o uno vacío."""
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+# ---------------------------------------------------------------------------
+# Documentos y carpetas (documentos compartidos / adjuntos de correo)
+# ---------------------------------------------------------------------------
+def ruta_documento(instance, filename):
+    """Ruta de almacenamiento: documentos/<carpeta_slug>/<archivo>"""
+    return f"documentos/{instance.carpeta.slug}/{filename}"
+
+
+class DocumentoCarpeta(models.Model):
+    """Carpeta que agrupa documentos (visibles para el directorio).
+
+    La carpeta con slug `adjuntos-nuevos-enlaces` (nombre "Adjuntos:
+    Nuevos Enlaces MAO") se adjunta automáticamente al correo de
+    creación de usuarios del SIG.
+    """
+
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text="Identificador corto y único (solo letras, números, guiones).",
+        verbose_name="Identificador (slug)",
+    )
+    nombre = models.CharField(
+        max_length=200,
+        help_text="Nombre visible de la carpeta.",
+        verbose_name="Nombre",
+    )
+    descripcion = models.TextField(
+        blank=True,
+        default="",
+        help_text="Descripción opcional de la carpeta.",
+        verbose_name="Descripción",
+    )
+    seccion = models.ForeignKey(
+        "Seccion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="carpetas",
+        verbose_name="Sección",
+        help_text="Cada carpeta usa una sola sección del catálogo (una sección puede usarse en varias carpetas).",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Carpeta de documentos"
+        verbose_name_plural = "Carpetas de documentos"
+
+    def __str__(self):
+        return self.nombre
+
+
+class Seccion(models.Model):
+    """Catálogo global de secciones de documentos.
+
+    Las secciones se crean una sola vez y pueden usarse en varias carpetas.
+    """
+
+    nombre = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Nombre de la sección (catálogo compartido entre carpetas).",
+        verbose_name="Nombre",
+    )
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Sección de documentos"
+        verbose_name_plural = "Secciones de documentos"
+
+    def __str__(self):
+        return self.nombre
+
+
+class Documento(models.Model):
+    """Archivo dentro de una carpeta de documentos (DocumentoCarpeta)."""
+
+    carpeta = models.ForeignKey(
+        DocumentoCarpeta,
+        on_delete=models.CASCADE,
+        related_name="documentos",
+        verbose_name="Carpeta",
+    )
+    archivo = models.FileField(
+        upload_to=ruta_documento,
+        help_text="Archivo (PDF, imagen, documento, etc.).",
+        verbose_name="Archivo",
+    )
+    nombre = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Nombre descriptivo del documento.",
+        verbose_name="Nombre",
+    )
+    subido_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-subido_en"]
+        verbose_name = "Documento"
+        verbose_name_plural = "Documentos"
+
+    def __str__(self):
+        return self.nombre or self.archivo.name
+
+    @property
+    def nombre_archivo(self):
+        return self.archivo.name.split("/")[-1]
+
+    @property
+    def tamano_legible(self):
+        """Devuelve el tamaño del archivo en formato legible."""
+        try:
+            bytes_val = self.archivo.size
+        except Exception:
+            return "—"
+        if bytes_val < 1024:
+            return f"{bytes_val} B"
+        elif bytes_val < 1024 * 1024:
+            return f"{bytes_val / 1024:.1f} KB"
+        return f"{bytes_val / (1024 * 1024):.1f} MB"
+
+    @property
+    def icono(self):
+        """Icono FA según tipo de archivo."""
+        nombre = (self.archivo.name or "").lower()
+        if nombre.endswith((".pdf",)):
+            return "fas fa-file-pdf"
+        if nombre.endswith((".doc", ".docx", ".odt")):
+            return "fas fa-file-word"
+        if nombre.endswith((".xls", ".xlsx", ".ods")):
+            return "fas fa-file-excel"
+        if nombre.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+            return "fas fa-file-image"
+        if nombre.endswith((".mp4", ".avi", ".mov")):
+            return "fas fa-file-video"
+        return "fas fa-file"

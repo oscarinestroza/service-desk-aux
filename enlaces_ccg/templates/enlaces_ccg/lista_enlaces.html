@@ -201,10 +201,12 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if enlace.institucion and enlace.institucion.edificio %}
-                    <a href="{% url 'enlaces_ccg:detalle_edificio' enlace.institucion.edificio.pk %}" class="cell-link">
-                        {{ enlace.institucion.edificio.siglas|default:enlace.institucion.edificio.nombre }}
-                    </a>
+                    {% if enlace.institucion %}
+                        {% for ed in enlace.institucion.edificio.all %}
+                        <a href="{% url 'enlaces_ccg:detalle_edificio' ed.pk %}" class="cell-link">
+                            {{ ed.siglas|default:ed.nombre }}{% if not forloop.last %}, {% endif %}
+                        </a>
+                        {% empty %}—{% endfor %}
                     {% else %}—{% endif %}
                 </td>
                 <td>

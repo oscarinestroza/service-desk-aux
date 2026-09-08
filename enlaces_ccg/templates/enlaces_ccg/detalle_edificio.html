@@ -109,7 +109,13 @@
                     </a>
                 </td>
                 <td><span class="badge bg-secondary">{{ inst.siglas|default:"—" }}</span></td>
-                <td>{{ inst.nivel|join:", "|default:"—" }}</td>
+                <td>
+                    {% for ie in inst.instituciones_edificios.all %}
+                        {% if ie.edificio_id == edificio.pk %}
+                            {{ ie.nivel|join:", "|default:"—" }}
+                        {% endif %}
+                    {% endfor %}
+                </td>
                 <td>
                     <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="badge bg-primary text-decoration-none">
                         {{ inst.enlaces|length|default:0 }}

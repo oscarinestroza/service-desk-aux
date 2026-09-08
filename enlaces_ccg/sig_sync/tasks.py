@@ -12,10 +12,108 @@ opcional (el SIG redirige al catálogo tras crear y la URL no conserva el ID).
 """
 
 import logging
+import mimetypes
 
 from celery import shared_task
+from django.utils.html import escape
 
 logger = logging.getLogger("sig_sync")
+
+
+def _plantilla_email_html(titulo, header_bg, intro, secciones, footer_note=None):
+    """Devuelve un correo HTML autocontenido (inline styles para Outlook).
+
+    `secciones` es una lista de dicts:
+        - {"titulo": str, "filas": [("clave", "valor"), ...]}  → tabla de datos
+        - {"texto": str}                                         → párrafo simple
+    Los valores deben llegar ya escapados con `escape()`.
+    """
+    bloques = []
+    for sec in secciones:
+        if "texto" in sec:
+            bloques.append(f'<p style="margin:0 0 16px 0;">{sec["texto"]}</p>')
+        elif "filas" in sec:
+            filas_html = "".join(
+                f"""
+                <tr>
+                  <td width="140" style="padding:8px 16px;color:#71717a;font-size:14px;vertical-align:top;">{k}</td>
+                  <td style="padding:8px 16px;color:#18181b;font-size:14px;vertical-align:top;word-break:break-all;">{v}</td>
+                </tr>"""
+                for k, v in sec["filas"]
+            )
+            bloques.append(
+                f"""
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;background-color:#fafafa;border:1px solid #e4e4e7;border-radius:6px;">
+                  <tr>
+                    <td colspan="2" style="background-color:#ffffff;border-bottom:1px solid #e4e4e7;padding:8px 16px;font-size:12px;font-weight:bold;letter-spacing:.05em;color:#71717a;text-transform:uppercase;">{sec["titulo"]}</td>
+                  </tr>
+                  {filas_html}
+                </table>"""
+            )
+
+    footer = footer_note or (
+        "Este correo fue generado automáticamente por el sistema de Enlaces CCG. "
+        "Por favor no responda a este mensaje."
+    )
+
+    return f"""
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;padding:24px 0;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e4e4e7;">
+        <tr>
+          <td style="padding:26px 32px;background-color:{header_bg};">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td><span style="color:#ffffff;font-size:18px;font-weight:bold;">{escape(titulo)}</span></td>
+                <td align="right"><span style="color:#ffffff;font-size:13px;opacity:.9;">Enlaces CCG</span></td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px;color:#18181b;font-size:15px;line-height:1.6;">
+            <p style="margin:0 0 16px 0;">{intro}</p>
+            {''.join(bloques)}
+            <p style="margin:0;color:#71717a;font-size:12px;border-top:1px solid #e4e4e7;padding-top:16px;">
+              {escape(footer)}
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>"""
+
+
+def _adjuntos_carpeta_nuevos_enlaces():
+    """Devuelve lista de (nombre_archivo, contenido bytes, mimetype) para los
+    documentos de la carpeta 'Adjuntos: Nuevos Enlaces MAO'."""
+    from enlaces_ccg.models import DocumentoCarpeta
+
+    adjuntos = []
+    carpeta = DocumentoCarpeta.objects.filter(
+        slug="adjuntos-nuevos-enlaces"
+    ).first()
+    if not carpeta:
+        return adjuntos
+    for doc in carpeta.documentos.all():
+        nombre = doc.nombre_archivo
+        try:
+            with doc.archivo.open("rb") as f:
+                contenido = f.read()
+        except Exception as e:
+            logger.error("No se pudo leer adjunto %s: %s", doc.pk, e)
+            continue
+        mimetype, _ = mimetypes.guess_type(nombre)
+        adjuntos.append((nombre, contenido, mimetype or "application/octet-stream"))
+    return adjuntos
 
 
 def _enviar_correo_creacion(enlace):
@@ -30,7 +128,6 @@ def _enviar_correo_creacion(enlace):
     Se evitan destinatarios duplicados.
     """
     from django.conf import settings
-    from django.core.mail import send_mail
     from enlaces_ccg.utils import aplicar_emisor_a_settings, obtener_config_correo
 
     extras = obtener_config_correo()["correo_notificacion"]
@@ -68,15 +165,50 @@ def _enviar_correo_creacion(enlace):
         f"Este correo fue generado automáticamente por el sistema de Enlaces CCG."
     )
 
+    mensaje_html = _plantilla_email_html(
+        titulo="Nuevo usuario SIG creado",
+        header_bg="#16a34a",
+        intro=(
+            f"Buen día <strong>{escape(enlace.nombre_completo)}</strong>,<br><br>"
+            f"Por este medio compartimos sus credenciales para seguimiento de "
+            f"solicitudes en la MAO (Plataforma SIG):"
+        ),
+        secciones=[
+            {
+                "titulo": "Credenciales de acceso",
+                "filas": [
+                    ("URL", '<a href="https://sig.gia.mx/webapp/" style="color:#16a34a;">https://sig.gia.mx/webapp/</a>'),
+                    ("Usuario", escape(enlace.usuario_sig)),
+                    ("Contraseña", f"<strong>{escape(password)}</strong>"),
+                ],
+            },
+            {
+                "texto": "Favor su apoyo confirmando si pudo acceder correctamente.",
+            },
+            {
+                "texto": "De igual manera, le compartimos la presentación utilizada "
+                         "en la última capacitación para su referencia.",
+            },
+            {
+                "texto": "Cualquier duda o consulta estamos a la orden.",
+            },
+        ],
+    )
+
     try:
         aplicar_emisor_a_settings()
-        send_mail(
+        from django.core.mail import EmailMultiAlternatives
+
+        email = EmailMultiAlternatives(
             subject=asunto,
-            message=mensaje,
+            body=mensaje,
             from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=destinatarios,
-            fail_silently=False,
+            to=destinatarios,
         )
+        email.attach_alternative(mensaje_html, "text/html")
+        for nombre, contenido, mimetype in _adjuntos_carpeta_nuevos_enlaces():
+            email.attach(nombre, contenido, mimetype)
+        email.send(fail_silently=False)
         logger.info("Correo enviado a %s para enlace %s", destinatarios, enlace.pk)
     except Exception as e:
         logger.error("Error enviando correo para enlace %s: %s", enlace.pk, e)
@@ -121,11 +253,47 @@ def _enviar_correo_review(enlace, motivo):
 
     try:
         aplicar_emisor_a_settings()
+        mensaje_html = _plantilla_email_html(
+            titulo="[REVISIÓN] Falló la creación SIG",
+            header_bg="#dc2626",
+            intro=(
+                "La creación automática del usuario en el SIG falló y requiere "
+                "revisión para crearse manualmente."
+            ),
+            secciones=[
+                {
+                    "titulo": "Motivo del error",
+                    "filas": [("Detalle", escape(motivo))],
+                },
+                {
+                    "titulo": "Datos del enlace",
+                    "filas": [
+                        ("Nombre", escape(enlace.nombre_completo)),
+                        ("Institución", escape(enlace.institucion.nombre if enlace.institucion else "Sin especificar")),
+                        ("Estado", escape(f"{enlace.estado}")),
+                    ],
+                },
+                {
+                    "titulo": "Credenciales SIG propuestas",
+                    "filas": [
+                        ("URL", '<a href="https://sig.gia.mx/webapp/" style="color:#dc2626;">https://sig.gia.mx/webapp/</a>'),
+                        ("Usuario", escape(enlace.usuario_sig)),
+                        ("Contraseña", f"<strong>{escape(password)}</strong>"),
+                        ("PIN", escape(enlace.pin_sig or "—")),
+                    ],
+                },
+                {
+                    "texto": "Por favor cree el usuario manualmente en el SIG y "
+                             "luego marque el enlace como sincronizado.",
+                },
+            ],
+        )
         send_mail(
             subject=asunto,
             message=mensaje,
             from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
             recipient_list=destinatarios,
+            html_message=mensaje_html,
             fail_silently=False,
         )
         logger.info("Correo de revisión enviado a %s para enlace %s", destinatarios, enlace.pk)
@@ -158,8 +326,8 @@ def crear_enlace_sig(enlace_id):
 
     try:
         enlace = EnlaceAutorizado.objects.select_related(
-            "institucion", "institucion__edificio"
-        ).get(pk=enlace_id)
+            "institucion"
+        ).prefetch_related("institucion__edificio").get(pk=enlace_id)
     except EnlaceAutorizado.DoesNotExist:
         logger.error("Enlace %s no existe", enlace_id)
         return

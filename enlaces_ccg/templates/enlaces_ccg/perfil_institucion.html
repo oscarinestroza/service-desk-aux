@@ -7,13 +7,13 @@
     <a href="{% url 'enlaces_ccg:lista_edificios' %}">Edificios</a>
 </li>
 <li class="breadcrumb-item">
-    {% if institucion.edificio %}
-    <a href="{% url 'enlaces_ccg:detalle_edificio' institucion.edificio.pk %}">
-        {{ institucion.edificio.nombre }}
+    {% for ed in institucion.edificio.all %}
+    <a href="{% url 'enlaces_ccg:detalle_edificio' ed.pk %}">
+        {{ ed.nombre }}{% if not forloop.last %}, {% endif %}
     </a>
-    {% else %}
+    {% empty %}
         Sin edificio
-    {% endif %}
+    {% endfor %}
 </li>
 <li class="breadcrumb-item active" aria-current="page">
     {{ institucion.siglas|default:institucion.nombre }}
@@ -91,12 +91,16 @@
                         {% if institucion.siglas %}
                             <span class="badge bg-secondary me-1">{{ institucion.siglas }}</span>
                         {% endif %}
-                        <span class="badge bg-info">{{ institucion.nivel|join:", "|default:"—" }}</span>
-                        {% if institucion.edificio %}
-                            <span class="badge bg-dark">{{ institucion.edificio.nombre }}</span>
-                        {% else %}
-                            <span class="badge bg-secondary">Sin edificio</span>
-                        {% endif %}
+                        <span class="badge bg-dark">
+                            {% for ie in institucion.instituciones_edificios.all %}
+                                {{ ie.edificio.nombre }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                Sin edificio
+                            {% endfor %}
+                        </span>
+                        {% for ie in institucion.instituciones_edificios.all %}
+                            {% if ie.nivel %} <span class="badge bg-info">{{ ie.edificio.nombre }}: {{ ie.nivel|join:", "|default:"—" }}</span>{% endif %}
+                        {% endfor %}
                     </div>
                 </div>
             </div>

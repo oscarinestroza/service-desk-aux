@@ -1,0 +1,545 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Documentos y carpetas — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Documentos</li>
+{% if carpeta %}
+<li class="breadcrumb-item active" aria-current="page">{{ carpeta.nombre }}</li>
+{% endif %}
+{% endblock %}
+
+{% block contenido %}
+{% if carpeta %}
+<!-- ── Detalle de carpeta ── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <a href="{% url 'enlaces_ccg:documentos' %}" class="text-decoration-none me-2">
+            <i class="fas fa-arrow-left text-secondary"></i>
+        </a>
+        <i class="fas fa-folder-open me-2 text-warning"></i>{{ carpeta.nombre }}
+        <small class="text-muted d-block fs-6 fw-normal mt-1">{{ carpeta.descripcion }}</small>
+    </h1>
+    <div class="d-flex gap-2" id="detalleCarpetaHeader" data-carpeta="{{ carpeta.slug }}">
+        {% if puede_gestionar_documentos %}
+        <button class="btn btn-primary" id="btnSubirDocumento" data-carpeta="{{ carpeta.slug }}">
+            <i class="fas fa-upload me-1"></i>Subir documento
+        </button>
+        {% endif %}
+        {% if puede_editar_carpeta %}
+        <button class="btn btn-outline-secondary" id="btnEditarCarpeta"
+                data-carpeta="{{ carpeta.slug }}" data-slug="{{ carpeta.slug }}"
+                data-nombre="{{ carpeta.nombre }}" data-descripcion="{{ carpeta.descripcion }}">
+            <i class="fas fa-pen me-1"></i>
+        </button>
+        {% endif %}
+        {% if puede_gestionar_documentos %}
+        <button class="btn btn-outline-danger" id="btnEliminarCarpeta"
+                data-carpeta="{{ carpeta.slug }}" data-nombre="{{ carpeta.nombre }}">
+            <i class="fas fa-trash"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if documentos %}
+{% if carpeta.seccion %}
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white">
+        <span class="fw-semibold">
+            <i class="fas fa-layer-group me-2 text-primary"></i>{{ carpeta.seccion.nombre }}
+            <span class="badge bg-light text-dark ms-1">{{ documentos|length }}</span>
+        </span>
+    </div>
+</div>
+{% endif %}
+<div class="table-responsive">
+    <table class="table table-bordered table-hover table-sm align-middle bg-white mb-2">
+        <thead class="table-light">
+            <tr>
+                <th>Documento</th>
+                <th class="text-center" style="width: 12%;">Tamaño</th>
+                <th class="text-center" style="width: 15%;">Subido</th>
+                <th class="text-center" style="width: 12%;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documentos %}
+            <tr>
+                <td>
+                    <i class="{{ doc.icono }} me-2 text-primary"></i>
+                    <a href="{{ doc.archivo.url }}" target="_blank" rel="noopener">{{ doc.nombre }}</a>
+                </td>
+                <td class="text-center text-muted">{{ doc.tamano_legible }}</td>
+                <td class="text-center text-muted">{{ doc.subido_en|date:"d/m/Y H:i" }}</td>
+                <td class="text-center">
+                    {% if puede_gestionar_documentos %}
+                    <button class="btn btn-outline-danger btn-sm btn-eliminar-doc"
+                            data-carpeta="{{ carpeta.slug }}" data-id="{{ doc.pk }}"
+                            data-nombre="{{ doc.nombre }}" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-light border text-center py-5">
+    <i class="fas fa-folder-open fa-2x text-muted mb-2 d-block"></i>
+    Esta carpeta no tiene documentos todavía.
+</div>
+{% endif %}
+
+{% else %}
+<!-- ── Índice de carpetas ── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-folder-open me-2 text-primary"></i>Documentos y carpetas
+    </h1>
+    <div class="d-flex gap-2">
+        {% if puede_editar_carpeta %}
+        <button class="btn btn-outline-primary" id="btnAdminSecciones"
+                data-edit-url="{% url 'enlaces_ccg:editar_seccion' 0 %}"
+                data-del-url="{% url 'enlaces_ccg:eliminar_seccion' 0 %}"
+                data-secciones-en-uso="{% for s in secciones %}{% if s.carpetas.exists %}{{ s.pk }},{% endif %}{% endfor %}"
+                data-csrf="{{ csrf_token }}">
+            <i class="fas fa-layer-group me-1"></i>Administrar secciones
+        </button>
+        {% endif %}
+        {% if puede_gestionar_documentos %}
+        <button class="btn btn-primary" id="btnNuevaCarpeta">
+            <i class="fas fa-plus-circle me-1"></i>Nueva carpeta
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted">
+    Documentos compartidos del directorio. Los archivos de la carpeta
+    «Adjuntos: Nuevos Enlaces MAO» se adjuntan automáticamente al correo
+    con credenciales de nuevos usuarios del SIG.
+</p>
+
+{% if carpetas_por_seccion %}
+{% for grupo in carpetas_por_seccion %}
+<div class="mb-4">
+    <h4 class="h6 fw-bold text-uppercase text-secondary mb-2 border-bottom pb-1">
+        {% if grupo.seccion %}
+            <i class="fas fa-layer-group me-2 text-primary"></i>{{ grupo.seccion }}
+        {% else %}
+            <i class="fas fa-folder-open me-2 text-muted"></i>Sin sección
+        {% endif %}
+    </h4>
+    <div class="row g-3">
+        {% for carp in grupo.carpetas %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title mb-1">
+                        <i class="fas fa-folder me-2 text-warning"></i>
+                        <a href="{% url 'enlaces_ccg:detalle_carpeta' carp.slug %}" class="text-decoration-none">
+                            {{ carp.nombre }}
+                        </a>
+                    </h5>
+                    <span class="badge bg-light text-dark">
+                        {{ carp.num_docs }} documento{{ carp.num_docs|pluralize }}
+                    </span>
+                    {% if carp.descripcion %}
+                    <p class="text-muted small mt-2 mb-0">{{ carp.descripcion }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="alert alert-light border text-center py-5">
+    <i class="fas fa-folder-plus fa-2x text-muted mb-2 d-block"></i>
+    No hay carpetas de documentos.
+</div>
+{% endif %}
+{% endif %}
+
+
+<!-- ── Modal: nueva carpeta ── -->
+<div class="modal fade" id="modalNuevaCarpeta" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva carpeta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Nombre</label>
+                    <input type="text" class="form-control" id="nuevaCarpetaNombre" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Identificador (slug)</label>
+                    <input type="text" class="form-control" id="nuevaCarpetaSlug"
+                           placeholder="ej. adjuntos-nuevos-enlaces" required>
+                    <div class="form-text">Solo letras, números y guiones.</div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label">Descripción (opcional)</label>
+                    <textarea class="form-control" id="nuevaCarpetaDescripcion" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarNuevaCarpeta">Crear</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: administrar secciones ── -->
+<div class="modal fade" id="modalAdminSecciones" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-layer-group me-1"></i>Administrar secciones</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex gap-2 mb-3">
+                    <input type="text" class="form-control form-control-sm" id="adminNuevaSeccionNombre"
+                           placeholder="Nueva sección">
+                    <button type="button" class="btn btn-sm btn-primary flex-shrink-0" id="btnAdminCrearSeccion">
+                        <i class="fas fa-plus"></i> Crear
+                    </button>
+                </div>
+                <ul class="list-group list-group-flush" id="listaAdminSecciones">
+                    {% for s in secciones %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center"
+                        data-id="{{ s.pk }}" data-enuso="{% if s.carpetas.exists %}1{% else %}0{% endif %}">
+                        <span>
+                            <i class="fas fa-layer-group me-2 text-primary"></i>{{ s.nombre }}
+                            {% if s.carpetas.exists %}
+                            <span class="badge bg-warning text-dark ms-1" title="Está en uso por una o más carpetas">en uso</span>
+                            {% endif %}
+                        </span>
+                        <span class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-secondary btn-sec-editar"
+                                    data-id="{{ s.pk }}" data-nombre="{{ s.nombre }}"
+                                    {% if s.carpetas.exists %}disabled{% endif %} title="Editar nombre">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-sec-eliminar"
+                                    data-id="{{ s.pk }}" data-nombre="{{ s.nombre }}"
+                                    {% if s.carpetas.exists %}disabled{% endif %} title="Eliminar sección">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted text-center">
+                        No hay secciones en el catálogo. Crea una nueva arriba.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: editar carpeta ── -->
+<div class="modal fade" id="modalEditarCarpeta" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Editar carpeta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Nombre</label>
+                    <input type="text" class="form-control" id="editarCarpetaNombre" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Identificador (slug)</label>
+                    <input type="text" class="form-control" id="editarCarpetaSlug" required>
+                    <div class="form-text">Solo letras, números y guiones.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Sección (catálogo compartido)</label>
+                    <select class="form-select" id="editarCarpetaSeccion">
+                        <option value="">— Sin sección —</option>
+                        {% for s in secciones %}
+                        <option value="{{ s.pk }}" {% if s.pk == carpeta.seccion_id %}selected{% endif %}>{{ s.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="d-flex gap-2 align-items-center mt-2">
+                        <input type="text" class="form-control form-control-sm" id="nuevaSeccionNombre"
+                               placeholder="Crear nueva sección para el catálogo">
+                        <button type="button" class="btn btn-sm btn-primary flex-shrink-0" id="btnCrearNuevaSeccion">
+                            <i class="fas fa-plus"></i> Crear
+                        </button>
+                    </div>
+                    <div class="form-text">
+                        Es un catálogo compartido: una sección creada aquí podrá usarse en otras carpetas.
+                        Cada carpeta tiene una sola sección.
+                    </div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label">Descripción</label>
+                    <textarea class="form-control" id="editarCarpetaDescripcion" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarEditarCarpeta">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: subir documento ── -->
+<div class="modal fade" id="modalSubirDocumento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-upload me-1"></i>Subir documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formSubirDocumento" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% if carpeta.seccion %}
+                    <div class="mb-3">
+                        <label class="form-label">Sección</label>
+                        <input type="text" class="form-control" value="{{ carpeta.seccion.nombre }}" disabled>
+                    </div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label">Archivo</label>
+                        <input type="file" class="form-control" id="subirDocArchivo" required>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label">Nombre (opcional)</label>
+                        <input type="text" class="form-control" id="subirDocNombre"
+                               placeholder="Dejar vacío para usar el nombre del archivo">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarSubirDoc">Subir</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const csrf = () => document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    function postJson(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrf()},
+            body: body,
+        }).then(r => r.json());
+    }
+
+    // Nueva carpeta
+    const btnNueva = document.getElementById('btnNuevaCarpeta');
+    if (btnNueva) {
+        const modal = new bootstrap.Modal(document.getElementById('modalNuevaCarpeta'));
+        btnNueva.addEventListener('click', () => {
+            document.getElementById('nuevaCarpetaNombre').value = '';
+            document.getElementById('nuevaCarpetaSlug').value = '';
+            document.getElementById('nuevaCarpetaDescripcion').value = '';
+            modal.show();
+        });
+        document.getElementById('btnGuardarNuevaCarpeta').addEventListener('click', async () => {
+            const fd = new FormData();
+            fd.append('nombre', document.getElementById('nuevaCarpetaNombre').value.trim());
+            fd.append('slug', document.getElementById('nuevaCarpetaSlug').value.trim());
+            fd.append('descripcion', document.getElementById('nuevaCarpetaDescripcion').value.trim());
+            const d = await postJson('{% url "enlaces_ccg:crear_carpeta" %}', fd);
+            if (d.ok) window.location.reload();
+            else alert(d.error || 'Error al crear carpeta');
+        });
+    }
+
+    // Administrar secciones (catálogo)
+    const btnAdminSec = document.getElementById('btnAdminSecciones');
+    if (btnAdminSec && document.getElementById('modalAdminSecciones')) {
+        const modal = new bootstrap.Modal(document.getElementById('modalAdminSecciones'));
+        const inputNuevaSec = document.getElementById('adminNuevaSeccionNombre');
+        const csrfToken = btnAdminSec.dataset.csrf;
+        const lista = document.getElementById('listaAdminSecciones');
+
+        function postTo(url, body) {
+            return fetch(url, {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrfToken},
+                body: body,
+            }).then(r => r.json());
+        }
+        function marcarEnUso(li) {
+            const usados = btnAdminSec.dataset.seccionesEnUso.split(',').filter(Boolean);
+            if (usados.includes(li.dataset.id)) {
+                li.dataset.enuso = '1';
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-warning text-dark ms-1';
+                badge.textContent = 'en uso';
+                li.querySelector('span:first-child').appendChild(badge);
+                li.querySelectorAll('.btn-sec-editar, .btn-sec-eliminar').forEach(b => (b.disabled = true));
+            }
+        }
+
+        btnAdminSec.addEventListener('click', () => {
+            inputNuevaSec.value = '';
+            modal.show();
+        });
+
+        document.getElementById('btnAdminCrearSeccion').addEventListener('click', async () => {
+            const nombre = inputNuevaSec.value.trim();
+            if (!nombre) { alert('Escriba el nombre de la sección'); return; }
+            const fd = new FormData();
+            fd.append('nombre', nombre);
+            const d = await postTo('{% url "enlaces_ccg:crear_seccion" %}', fd);
+            if (d.ok) window.location.reload();
+            else alert(d.error || 'Error al crear sección');
+        });
+
+        lista.addEventListener('click', async e => {
+            const btnEditarSec = e.target.closest('.btn-sec-editar');
+            const btnElimSec = e.target.closest('.btn-sec-eliminar');
+            if (!btnEditarSec && !btnElimSec) return;
+
+            const id = btnEditarSec ? btnEditarSec.dataset.id : btnElimSec.dataset.id;
+            const nombre = btnEditarSec ? btnEditarSec.dataset.nombre : btnElimSec.dataset.nombre;
+            const fd = new FormData();
+
+            if (btnElimSec) {
+                if (!confirm(`¿Eliminar la sección «${nombre}» del catálogo?`)) return;
+                const d = await postTo(`{% url "enlaces_ccg:eliminar_seccion" 0 %}`.replace('0', id), fd);
+                if (d.ok) window.location.reload();
+                else alert(d.error || 'Error al eliminar sección');
+            } else {
+                const nuevoNombre = prompt(`Nuevo nombre para la sección «${nombre}»:`, nombre);
+                if (nuevoNombre === null) return;
+                const finalNuevoNombre = nuevoNombre.trim();
+                if (!finalNuevoNombre) { alert('El nombre no puede quedar vacío'); return; }
+                fd.append('nombre', finalNuevoNombre);
+                const d = await postTo(`{% url "enlaces_ccg:editar_seccion" 0 %}`.replace('0', id), fd);
+                if (d.ok) window.location.reload();
+                else alert(d.error || 'Error al editar sección');
+            }
+        });
+    }
+
+    // Editar carpeta (sección única del catálogo)
+    const btnEditar = document.getElementById('btnEditarCarpeta');
+    if (btnEditar) {
+        const modal = new bootstrap.Modal(document.getElementById('modalEditarCarpeta'));
+        const selectSeccion = document.getElementById('editarCarpetaSeccion');
+        const inputNueva = document.getElementById('nuevaSeccionNombre');
+        const btnCrearSeccion = document.getElementById('btnCrearNuevaSeccion');
+
+        let slug = btnEditar.dataset.carpeta;
+
+        btnEditar.addEventListener('click', () => {
+            document.getElementById('editarCarpetaNombre').value = btnEditar.dataset.nombre;
+            document.getElementById('editarCarpetaSlug').value = btnEditar.dataset.slug;
+            document.getElementById('editarCarpetaDescripcion').value = btnEditar.dataset.descripcion;
+            inputNueva.value = '';
+            modal.show();
+        });
+
+        btnCrearSeccion.addEventListener('click', async () => {
+            const nombre = inputNueva.value.trim();
+            if (!nombre) { alert('Escriba el nombre de la nueva sección'); return; }
+            const fd = new FormData();
+            fd.append('nombre', nombre);
+            const d = await postJson('{% url "enlaces_ccg:crear_seccion" %}', fd);
+            if (d.ok) {
+                const opt = new Option(d.nombre, String(d.id), true, true);
+                selectSeccion.add(opt);
+                selectSeccion.value = String(d.id);
+                inputNueva.value = '';
+            } else {
+                const existente = Array.from(selectSeccion.options).find(o => o.value && o.text.toLowerCase() === nombre.toLowerCase());
+                if (existente) {
+                    selectSeccion.value = existente.value;
+                    inputNueva.value = '';
+                } else {
+                    alert(d.error || 'Error al crear sección');
+                }
+            }
+        });
+
+        document.getElementById('btnGuardarEditarCarpeta').addEventListener('click', async () => {
+            const fd = new FormData();
+            fd.append('nombre', document.getElementById('editarCarpetaNombre').value.trim());
+            fd.append('slug', document.getElementById('editarCarpetaSlug').value.trim());
+            fd.append('descripcion', document.getElementById('editarCarpetaDescripcion').value.trim());
+            fd.append('seccion_id', selectSeccion.value || '');
+            const d = await postJson(`{% url "enlaces_ccg:renombrar_carpeta" "x" %}`.replace('x', slug), fd);
+            if (d.ok) {
+                if (d.slug && d.slug !== slug) {
+                    window.location.href = `{% url "enlaces_ccg:documentos" %}` + d.slug + '/';
+                } else {
+                    window.location.reload();
+                }
+            } else alert(d.error || 'Error al editar carpeta');
+        });
+    }
+
+    // Eliminar carpeta
+    const btnElim = document.getElementById('btnEliminarCarpeta');
+    if (btnElim) {
+        btnElim.addEventListener('click', async () => {
+            if (!confirm(`¿Eliminar la carpeta «${btnElim.dataset.nombre}» y todos sus documentos?`)) return;
+            const d = await postJson(`{% url "enlaces_ccg:eliminar_carpeta" "x" %}`.replace('x', btnElim.dataset.carpeta), new FormData());
+            if (d.ok) window.location.href = '{% url "enlaces_ccg:documentos" %}';
+            else alert(d.error || 'Error al eliminar carpeta');
+        });
+    }
+
+    // Subir documento
+    const btnSubir = document.getElementById('btnSubirDocumento');
+    if (btnSubir) {
+        const modal = new bootstrap.Modal(document.getElementById('modalSubirDocumento'));
+        let slug = btnSubir.dataset.carpeta;
+        btnSubir.addEventListener('click', () => {
+            document.getElementById('subirDocArchivo').value = '';
+            document.getElementById('subirDocNombre').value = '';
+            modal.show();
+        });
+        document.getElementById('btnGuardarSubirDoc').addEventListener('click', async () => {
+            const archivo = document.getElementById('subirDocArchivo').files[0];
+            if (!archivo) { alert('Seleccione un archivo'); return; }
+            const fd = new FormData();
+            fd.append('archivo', archivo);
+            fd.append('nombre', document.getElementById('subirDocNombre').value.trim());
+            const d = await postJson(`{% url "enlaces_ccg:subir_documento" "x" %}`.replace('x', slug), fd);
+            if (d.ok) window.location.reload();
+            else alert(d.error || 'Error al subir documento');
+        });
+    }
+
+    // Eliminar documento (delegado)
+    document.querySelectorAll('.btn-eliminar-doc').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm(`¿Eliminar el documento «${btn.dataset.nombre}»?`)) return;
+            const url = `{% url "enlaces_ccg:eliminar_documento" "c" 0 %}`.replace('c', btn.dataset.carpeta).replace('0', btn.dataset.id);
+            const d = await postJson(url, new FormData());
+            if (d.ok) window.location.reload();
+            else alert(d.error || 'Error al eliminar documento');
+        });
+    });
+})();
+</script>
+{% endblock %}

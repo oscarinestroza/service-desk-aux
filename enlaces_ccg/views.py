@@ -15,7 +15,7 @@ from datetime import datetime
 from django.contrib import auth, messages
 from django.contrib.auth.decorators import login_required
 from django.db import models
-from django.db.models import BooleanField, Count, ExpressionWrapper, Q
+from django.db.models import Count, Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from urllib.parse import quote
@@ -24,7 +24,10 @@ from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
-from .models import Adjunto, Edificio, EnlaceAutorizado, Institucion
+from .models import (
+    Adjunto, Documento, DocumentoCarpeta, Edificio, EnlaceAutorizado,
+    Institucion, InstitucionEdificio, Seccion,
+)
 from .roles import (
     CAP_ADMIN,
     CAP_DIRECTORIO,
@@ -33,6 +36,7 @@ from .roles import (
     CAP_REVISIONES,
     CAP_TICKETS,
     requiere,
+    tiene,
 )
 
 
@@ -158,7 +162,7 @@ def _fila_completa(enlace):
         enlace.pin_sig or "",
         enlace.institucion.nombre if enlace.institucion else "",
         enlace.institucion.siglas or "" if enlace.institucion else "",
-        enlace.institucion.edificio.nombre if enlace.institucion and enlace.institucion.edificio else "",
+        ", ".join(ed.nombre for ed in enlace.institucion.edificio.all()) if enlace.institucion else "",
         enlace.fecha_alta.strftime("%d/%m/%Y") if enlace.fecha_alta else "",
         enlace.oficio_alta or "",
         enlace.observaciones_alta or "",
@@ -204,7 +208,7 @@ def _fila_activo(enlace):
         enlace.estado,
         enlace.institucion.nombre if enlace.institucion else "",
         enlace.institucion.siglas or "" if enlace.institucion else "",
-        enlace.institucion.edificio.nombre if enlace.institucion and enlace.institucion.edificio else "",
+        ", ".join(ed.nombre for ed in enlace.institucion.edificio.all()) if enlace.institucion else "",
         enlace.nivel_referencia or "",
         enlace.usuario_sig or "",
         enlace.fecha_alta.strftime("%d/%m/%Y") if enlace.fecha_alta else "",
@@ -229,7 +233,7 @@ def _fila_simple(enlace):
     """Devuelve una tupla con las 6 columnas esenciales para exportación simple."""
     nombre_completo = f"{enlace.nombres} {enlace.primer_apellido} {enlace.segundo_apellido}".strip()
     return (
-        enlace.institucion.edificio.nombre if enlace.institucion and enlace.institucion.edificio else "",
+        ", ".join(ed.nombre for ed in enlace.institucion.edificio.all()) if enlace.institucion else "",
         enlace.institucion.nombre if enlace.institucion else "",
         nombre_completo,
         enlace.correo_principal,
@@ -313,6 +317,12 @@ def recordatorios(request):
 def plantillas_respuesta(request):
     """Vista de Plantillas de respuesta (en construcción)."""
     return render(request, "enlaces_ccg/plantillas_respuesta.html")
+
+
+@requiere(CAP_REVISIONES)
+def aprendizaje(request):
+    """Vista de Aprendizaje (en construcción)."""
+    return render(request, "enlaces_ccg/aprendizaje.html")
 
 
 @requiere(CAP_ADMIN)
@@ -428,27 +438,24 @@ def lista_instituciones(request):
     edificio_id = request.GET.get("edificio", "")
     niveles = request.GET.getlist("niveles")
     qs = (
-        Institucion.objects.select_related("edificio")
-        .annotate(num_enlaces=Count("enlaces", filter=Q(enlaces__estado="ACTIVO")))
-        .order_by("edificio__nombre", "nombre")
+        Institucion.objects.annotate(num_enlaces=Count("enlaces", filter=Q(enlaces__estado="ACTIVO")))
+        .order_by("nombre")
     )
     if vista == "activas":
         qs = qs.filter(estado="ACTIVO")
     elif vista == "inactivas":
         qs = qs.filter(estado="INACTIVO")
     if edificio_id.isdigit():
-        qs = qs.filter(edificio_id=edificio_id)
+        qs = qs.filter(edificio__id=edificio_id)
         if niveles:
-            # `contains` (jsonb @>) no lo soporta SQLite (solo PostgreSQL),
-            # así que se evalúa del lado Python sobre la lista JSON del modelo,
-            # portable entre ambos backends.
-            qs = qs.filter(
-                pk__in=[
-                    i.pk
-                    for i in Institucion.objects.filter(edificio_id=int(edificio_id))
-                    if any(n in (i.nivel or []) for n in niveles)
-                ]
-            )
+            # Filtra instituciones que tengan los niveles en el edificio seleccionado.
+            # `contains` (jsonb @>) no lo soporta SQLite, así que se evalúa del lado Python.
+            inst_ids = [
+                ie.institucion_id
+                for ie in InstitucionEdificio.objects.filter(edificio_id=int(edificio_id))
+                if any(n in (ie.nivel or []) for n in niveles)
+            ]
+            qs = qs.filter(pk__in=inst_ids)
     edificios = Edificio.objects.order_by("nombre")
     return render(
         request,
@@ -492,8 +499,8 @@ def lista_enlaces(request):
     if col not in dict(COLUMNAS_BUSQUEDA):
         col = "todas"
 
-    enlaces = EnlaceAutorizado.objects.select_related(
-        "institucion", "institucion__edificio"
+    enlaces = EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
+        "institucion__edificio"
     )
 
     if vista == "activos":
@@ -505,15 +512,15 @@ def lista_enlaces(request):
     # vista == "todos" -> no filtrar por estado (incluye OPERADORA CC)
 
     if edificio_id.isdigit():
-        enlaces = enlaces.filter(institucion__edificio_id=edificio_id)
+        enlaces = enlaces.filter(institucion__edificio__id=edificio_id)
         if niveles:
             # Filtro por nivel. `contains` (jsonb @>) no lo soporta SQLite
             # (solo PostgreSQL), así que se evalúa del lado Python sobre la
             # lista JSON del modelo, portable entre ambos backends.
             inst_ids = [
-                i.pk
-                for i in Institucion.objects.filter(edificio_id=int(edificio_id))
-                if any(n in (i.nivel or []) for n in niveles)
+                ie.institucion_id
+                for ie in InstitucionEdificio.objects.filter(edificio_id=int(edificio_id))
+                if any(n in (ie.nivel or []) for n in niveles)
             ]
             enlaces = enlaces.filter(institucion_id__in=inst_ids)
 
@@ -556,7 +563,6 @@ def lista_enlaces(request):
             )
 
     enlaces = enlaces.order_by(
-        "institucion__edificio__nombre",
         "institucion__nombre",
         "primer_apellido",
         "segundo_apellido",
@@ -590,7 +596,7 @@ def detalle_edificio(request, pk):
     if vista not in ("activas", "inactivas", "todas"):
         vista = "activas"
 
-    qs = edificio.instituciones.order_by("nombre")
+    qs = edificio.instituciones.prefetch_related("instituciones_edificios__edificio").order_by("nombre")
     if vista == "activas":
         qs = qs.filter(estado="ACTIVO")
     elif vista == "inactivas":
@@ -607,7 +613,7 @@ def detalle_edificio(request, pk):
 def perfil_institucion(request, pk):
     """Perfil de una institución con sus enlaces autorizados."""
     institucion = get_object_or_404(
-        Institucion.objects.select_related("edificio"), pk=pk
+        Institucion.objects.prefetch_related("edificio", "instituciones_edificios__edificio"), pk=pk
     )
     vista_enlaces = request.GET.get("venlaces", "activos")
     if vista_enlaces not in ("activos", "inactivos", "todos"):
@@ -645,7 +651,7 @@ def exportar_enlaces(request, pk):
         todos=1              → incluir inactivos (solo para plantilla=completa)
     """
     institucion = get_object_or_404(
-        Institucion.objects.select_related("edificio"), pk=pk
+        Institucion.objects.prefetch_related("edificio"), pk=pk
     )
 
     plantilla = request.GET.get("plantilla", "activos")
@@ -737,8 +743,8 @@ def exportar_enlaces_global(request):
     plantilla = request.GET.get("plantilla", "activos")
     mostrar_todos = request.GET.get("todos") == "1"
 
-    enlaces = EnlaceAutorizado.objects.select_related(
-        "institucion", "institucion__edificio"
+    enlaces = EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
+        "institucion__edificio"
     )
 
     if plantilla == "completa":
@@ -755,13 +761,7 @@ def exportar_enlaces_global(request):
         )
         titulo_hoja = "Enlaces Activos CCG"
 
-    enlaces = enlaces.annotate(
-        sin_edificio=ExpressionWrapper(
-            Q(institucion__edificio__isnull=True), output_field=BooleanField()
-        )
-    ).order_by(
-        "sin_edificio",
-        "institucion__edificio__nombre",
+    enlaces = enlaces.order_by(
         "institucion__nombre",
         "nombres",
         "primer_apellido",
@@ -824,16 +824,20 @@ def exportar_enlaces_global(request):
 def detalle_enlace_json(request, pk):
     """Devuelve los datos de un enlace en formato JSON (para el modal)."""
     enlace = get_object_or_404(
-        EnlaceAutorizado.objects.select_related("institucion", "institucion__edificio"),
+        EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
+            "institucion__edificio"
+        ),
         pk=pk,
     )
-    edificio_nombre = ""
-    edificio_siglas = ""
-    edificio_id = None
-    if enlace.institucion and enlace.institucion.edificio:
-        edificio_nombre = enlace.institucion.edificio.nombre
-        edificio_siglas = enlace.institucion.edificio.siglas or ""
-        edificio_id = enlace.institucion.edificio.pk
+    edificios_nombre = ""
+    edificios_siglas = ""
+    primer_edificio_id = None
+    if enlace.institucion_id:
+        edificios = list(enlace.institucion.edificio.all())
+        edificios_nombre = ", ".join(ed.nombre for ed in edificios)
+        edificios_siglas = ", ".join(ed.siglas or "" for ed in edificios if ed.siglas)
+        if edificios:
+            primer_edificio_id = edificios[0].pk
     return JsonResponse({
         "id": enlace.pk,
         "nombres": enlace.nombres,
@@ -856,9 +860,9 @@ def detalle_enlace_json(request, pk):
         "institucion_id": enlace.institucion.pk if enlace.institucion else None,
         "institucion": enlace.institucion.nombre if enlace.institucion else "",
         "siglas": enlace.institucion.siglas or "" if enlace.institucion else "",
-        "edificio_id": edificio_id,
-        "edificio": edificio_nombre,
-        "edificio_siglas": edificio_siglas,
+        "edificio_id": primer_edificio_id,
+        "edificio": edificios_nombre,
+        "edificio_siglas": edificios_siglas,
         "comentarios": enlace.comentarios or "",
         "fecha_alta": enlace.fecha_alta.isoformat() if enlace.fecha_alta else "",
         "oficio_alta": enlace.oficio_alta or "",
@@ -1012,14 +1016,17 @@ def crear_enlace(request):
 def instituciones_json(request):
     """Devuelve lista de instituciones para el select del modal de edición."""
     term = request.GET.get("q", "").strip()
-    qs = Institucion.objects.select_related("edificio").order_by("nombre")
+    qs = Institucion.objects.prefetch_related("edificio").order_by("nombre")
     if term:
         qs = qs.filter(Q(nombre__icontains=term) | Q(siglas__icontains=term))
     resultados = []
     for inst in qs[:50]:
-        edificio = ""
-        if inst.edificio:
-            edificio = f"{inst.edificio.nombre} ({inst.edificio.siglas})" if inst.edificio.siglas else inst.edificio.nombre
+        edificio_parts = []
+        for ed in inst.edificio.all():
+            edificio_parts.append(
+                f"{ed.nombre} ({ed.siglas})" if ed.siglas else ed.nombre
+            )
+        edificio = ", ".join(edificio_parts)
         resultados.append({
             "id": inst.pk,
             "nombre": inst.nombre,
@@ -1039,16 +1046,22 @@ def detalle_institucion_json(request, pk):
         return JsonResponse({"ok": False, "error": "No autenticado"}, status=403)
 
     inst = get_object_or_404(
-        Institucion.objects.select_related("edificio"),
+        Institucion.objects.prefetch_related("instituciones_edificios__edificio"),
         pk=pk,
     )
+    edificios = list(inst.instituciones_edificios.select_related("edificio"))
+    edificio_ids = [ie.edificio_id for ie in edificios]
+    niveles_edificios = {
+        ie.edificio_id: ie.nivel or []
+        for ie in edificios
+    }
     return JsonResponse({
         "id": inst.pk,
         "nombre": inst.nombre,
         "siglas": inst.siglas or "",
-        "nivel": inst.nivel or "",
         "estado": inst.estado,
-        "edificio_id": inst.edificio.pk if inst.edificio else None,
+        "edificio_ids": edificio_ids,
+        "niveles_edificios": niveles_edificios,
         "contacto_nombre": inst.contacto_nombre or "",
         "contacto_correo": inst.contacto_correo or "",
         "contacto_telefono": inst.contacto_telefono or "",
@@ -1084,6 +1097,7 @@ def crear_institucion(request):
     try:
         inst.full_clean()
         inst.save()
+        _aplicar_edificios_niveles(inst)
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
@@ -1103,38 +1117,91 @@ def editar_institucion(request, pk):
     try:
         inst.full_clean()
         inst.save()
+        _aplicar_edificios_niveles(inst)
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
     return JsonResponse({"ok": True, "id": inst.pk})
 
 
-def _aplicar_datos_institucion(inst, data):
+def _aplicar_edificios_niveles(inst):
+    """Aplica la relación M2M Institucion ↔ Edificio con sus niveles,
+    tras que la institución ya está guardada (tiene PK)."""
+    nuevos = inst._nuevos_edificios_niveles
+
+    # Determinar edificios que se mantienen (con niveles actualizados)
+    ids_mantenidos = {item["edificio_id"] for item in nuevos}
+
+    # Eliminar relaciones de edificios ya no presentes
+    InstitucionEdificio.objects.filter(institucion=inst).exclude(
+        edificio_id__in=ids_mantenidos
+    ).delete()
+
+    # Actualizar o crear las relaciones
+    for item in nuevos:
+        InstitucionEdificio.objects.update_or_create(
+            institucion=inst,
+            edificio_id=item["edificio_id"],
+            defaults={"nivel": item["nivel"]},
+        )
+
+
+def _aplicar_datos_institucion(inst, data, request_user=None):
     """Aplica los campos del form de institución a la instancia."""
     inst.nombre = data.get("nombre", "").strip()
     inst.siglas = data.get("siglas", "").strip()
-    # nivel es un JSONField (lista); el form lo envía como JSON string
-    nivel_raw = (data.get("nivel", "") or "").strip()
-    if nivel_raw:
-        try:
-            inst.nivel = json.loads(nivel_raw)
-        except (ValueError, TypeError):
-            inst.nivel = []
-    else:
-        inst.nivel = []
     inst.estado = data.get("estado", inst.estado or "ACTIVO")
     inst.contacto_nombre = data.get("contacto_nombre", "").strip()
     inst.contacto_correo = data.get("contacto_correo", "").strip()
     inst.contacto_telefono = data.get("contacto_telefono", "").strip()
 
-    edificio_id = data.get("edificio", "").strip()
-    if edificio_id:
+    # Niveles por edificio: el form envía `edificios_niveles` como JSON string
+    # con el formato [{"edificio_id": 1, "nivel": ["PB","Nivel 1"]}, ...]
+    edificios_niveles = []
+    raw = (data.get("edificios_niveles", "") or "").strip()
+    if raw:
         try:
-            inst.edificio = Edificio.objects.get(pk=int(edificio_id))
-        except (Edificio.DoesNotExist, ValueError, TypeError):
-            inst.edificio = None
-    else:
-        inst.edificio = None
+            edificios_niveles = json.loads(raw)
+        except (ValueError, TypeError):
+            edificios_niveles = []
+
+    # Compatibilidad con el campo simple `edificio` (un solo id) + `nivel`
+    if not edificios_niveles:
+        edificio_id = data.get("edificio", "").strip()
+        nivel_raw = (data.get("nivel", "") or "").strip()
+        nivel_lista = []
+        if nivel_raw:
+            try:
+                nivel_lista = json.loads(nivel_raw)
+            except (ValueError, TypeError):
+                nivel_lista = []
+        if edificio_id:
+            try:
+                edificios_niveles = [{
+                    "edificio_id": int(edificio_id),
+                    "nivel": nivel_lista,
+                }]
+            except (ValueError, TypeError):
+                edificios_niveles = []
+
+    # Reconstruir la relación M2M con sus niveles
+    nuevas = []
+    for item in edificios_niveles:
+        try:
+            ed_id = int(item.get("edificio_id"))
+        except (TypeError, ValueError):
+            continue
+        if ed_id <= 0:
+            continue
+        nivel = item.get("nivel") or []
+        if not isinstance(nivel, list):
+            nivel = []
+        nuevas.append({
+            "edificio_id": ed_id,
+            "nivel": [str(n) for n in nivel],
+        })
+
+    inst._nuevos_edificios_niveles = nuevas
 
 
 @requiere(CAP_DIRECTORIO)
@@ -1154,11 +1221,18 @@ def enlaces_activos_institucion_json(request, pk):
             "estado": e.estado,
             "estado_display": e.get_estado_display(),
         })
+    ed_niveles = list(
+        InstitucionEdificio.objects.filter(institucion=inst).select_related("edificio")
+    )
+    edificios_nombre = ", ".join(ie.edificio.nombre for ie in ed_niveles)
     return JsonResponse({
         "institucion": inst.nombre_completo,
         "siglas": inst.siglas or "",
-        "edificio": inst.edificio.nombre if inst.edificio else "",
-        "niveles": inst.nivel or [],
+        "edificio": edificios_nombre,
+        "edificios_niveles": [
+            {"edificio_id": ie.edificio_id, "nombre": ie.edificio.nombre, "niveles": ie.nivel or []}
+            for ie in ed_niveles
+        ],
         "telefono_institucion": inst.contacto_telefono or "",
         "enlaces": filas,
         "total": enlaces.count(),
@@ -1432,34 +1506,43 @@ def importar_enlaces(request):
                         inst_siglas = _val("institucion_siglas")
                         edificio_nombre = _val("edificio_nombre")
 
-                        # Buscar o crear institución + edificio (el nombre es el
-                        # identificador; las siglas pueden repetirse, p.ej. SEFIN)
+                        # Buscar o crear institución + edificios (el nombre es el
+                        # identificador; las siglas pueden repetirse, p.ej. SEFIN).
+                        # El campo edificio puede traer varios separados por ';'.
                         inst_key = inst_nombre.upper() if inst_nombre else inst_siglas.upper()
                         if inst_key not in instituciones_cache:
                             institucion = None
                             if inst_nombre:
                                 institucion = Institucion.objects.filter(
                                     nombre__iexact=inst_nombre
-                                ).select_related("edificio").first()
+                                ).first()
                             if not institucion and inst_siglas:
                                 institucion = Institucion.objects.filter(
                                     siglas__iexact=inst_siglas
-                                ).select_related("edificio").first()
+                                ).first()
 
-                            if not institucion:
-                                # Crear edificio e institución nuevos
-                                edificio_obj = None
-                                if edificio_nombre:
-                                    nombre_edificio_trunc = edificio_nombre[:100]
+                            edificios_objs = []
+                            if edificio_nombre:
+                                for parte in [p.strip() for p in edificio_nombre.split(";") if p.strip()]:
+                                    nombre_edificio_trunc = parte[:100]
                                     edificio_obj, _ = Edificio.objects.get_or_create(
                                         nombre__iexact=nombre_edificio_trunc,
                                         defaults={"nombre": nombre_edificio_trunc},
                                     )
+                                    if edificio_obj not in edificios_objs:
+                                        edificios_objs.append(edificio_obj)
 
+                            if not institucion:
                                 institucion = Institucion.objects.create(
-                                    edificio=edificio_obj,
                                     nombre=inst_nombre[:200],
                                     siglas=inst_siglas[:60],
+                                )
+
+                            # Vincular edificios a la institución (M2M through)
+                            for edificio_obj in edificios_objs:
+                                InstitucionEdificio.objects.get_or_create(
+                                    institucion=institucion,
+                                    edificio=edificio_obj,
                                 )
                             instituciones_cache[inst_key] = institucion
 
@@ -1750,32 +1833,35 @@ def importar_instituciones(request):
                         else:
                             estado = "ACTIVO"
 
-                        # Buscar edificio
-                        edificio_obj = None
+                        # Buscar edificios (pueden venir varios separados por ';')
+                        edificios_objs = []
                         if edificio_nombre:
-                            cache_key = edificio_nombre.strip().upper()
-                            if cache_key not in edificios_cache:
-                                # Buscar por nombre exacto
-                                edificio_obj = Edificio.objects.filter(
-                                    nombre__iexact=edificio_nombre.strip()
-                                ).first()
-                                # Buscar por nombre que contenga el texto
-                                if not edificio_obj:
+                            for parte in [p.strip() for p in edificio_nombre.split(";") if p.strip()]:
+                                cache_key = parte.upper()
+                                if cache_key not in edificios_cache:
+                                    # Buscar por nombre exacto
                                     edificio_obj = Edificio.objects.filter(
-                                        nombre__icontains=edificio_nombre.strip()
+                                        nombre__iexact=parte
                                     ).first()
-                                # Buscar por siglas
-                                if not edificio_obj:
-                                    edificio_obj = Edificio.objects.filter(
-                                        siglas__iexact=edificio_nombre.strip()
-                                    ).first()
-                                # Crear si no existe
-                                if not edificio_obj:
-                                    edificio_obj = Edificio.objects.create(
-                                        nombre=edificio_nombre.strip()[:100]
-                                    )
-                                edificios_cache[cache_key] = edificio_obj
-                            edificio_obj = edificios_cache[cache_key]
+                                    # Buscar por nombre que contenga el texto
+                                    if not edificio_obj:
+                                        edificio_obj = Edificio.objects.filter(
+                                            nombre__icontains=parte
+                                        ).first()
+                                    # Buscar por siglas
+                                    if not edificio_obj:
+                                        edificio_obj = Edificio.objects.filter(
+                                            siglas__iexact=parte
+                                        ).first()
+                                    # Crear si no existe
+                                    if not edificio_obj:
+                                        edificio_obj = Edificio.objects.create(
+                                            nombre=parte[:100]
+                                        )
+                                    edificios_cache[cache_key] = edificio_obj
+                                edificio_obj = edificios_cache[cache_key]
+                                if edificio_obj not in edificios_objs:
+                                    edificios_objs.append(edificio_obj)
 
                         # Buscar institución existente por NOMBRE exacto (el nombre es
                         # el identificador único; las siglas pueden repetirse, p.ej. SEFIN)
@@ -1785,19 +1871,23 @@ def importar_instituciones(request):
                             institucion.nombre = nombre[:200]
                             if siglas:
                                 institucion.siglas = siglas
-                            if edificio_obj:
-                                institucion.edificio = edificio_obj
                             institucion.estado = estado
                             institucion.save()
                             actualizadas += 1
                         else:
-                            Institucion.objects.create(
+                            institucion = Institucion.objects.create(
                                 nombre=nombre[:200],
                                 siglas=siglas,
-                                edificio=edificio_obj,
                                 estado=estado,
                             )
                             creadas += 1
+
+                        # Vincular edificios (M2M through)
+                        for edificio_obj in edificios_objs:
+                            InstitucionEdificio.objects.get_or_create(
+                                institucion=institucion,
+                                edificio=edificio_obj,
+                            )
 
                     resultado = {
                         "ok": True,
@@ -1886,3 +1976,230 @@ def descargar_plantilla_instituciones(request):
     )
     resp["Content-Disposition"] = 'attachment; filename="plantilla_instituciones_ccg.xlsx"'
     return resp
+
+
+# ---------------------------------------------------------------------------
+# Documentos y carpetas
+# ---------------------------------------------------------------------------
+def _es_staff(user):
+    return user.is_authenticated and getattr(user, "is_staff", False)
+
+
+@requiere(CAP_DIRECTORIO)
+def documentos(request):
+    """Página de Documentos: lista carpetas con su nº de documentos.
+
+    Visible para todos con acceso a directorio. La gestión (crear/editar/
+    eliminar carpetas y subir/eliminar archivos) es solo para staff.
+    """
+    carpetas = list(
+        DocumentoCarpeta.objects.select_related("seccion").annotate(
+            num_docs=Count("documentos")
+        ).order_by("seccion__nombre", "nombre")
+    )
+    agrupadas = []
+    seccion_actual = ("__ini__", None)
+    for carp in carpetas:
+        clave = carp.seccion_id
+        if clave != seccion_actual[0]:
+            seccion_actual = (clave, carp.seccion.nombre if carp.seccion else None)
+            agrupadas.append({"seccion": seccion_actual[1], "carpetas": []})
+        agrupadas[-1]["carpetas"].append(carp)
+    return render(request, "enlaces_ccg/documentos.html", {
+        "carpetas": carpetas,
+        "carpetas_por_seccion": agrupadas,
+        "secciones": list(Seccion.objects.all()),
+        "puede_gestionar_documentos": _es_staff(request.user),
+        "puede_editar_carpeta": _es_staff(request.user),
+    })
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def crear_carpeta(request):
+    """Crea una nueva carpeta de documentos (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    nombre = request.POST.get("nombre", "").strip()
+    slug = request.POST.get("slug", "").strip().lower()
+    descripcion = request.POST.get("descripcion", "").strip()
+
+    if not nombre or not slug:
+        return JsonResponse({"ok": False, "error": "Nombre e identificador son obligatorios"}, status=400)
+    if not slug.replace("-", "").isalnum():
+        return JsonResponse({"ok": False, "error": "Identificador inválido (solo letras, números y guiones)"}, status=400)
+    if DocumentoCarpeta.objects.filter(slug=slug).exists():
+        return JsonResponse({"ok": False, "error": f"Ya existe una carpeta con el identificador «{slug}»"}, status=400)
+
+    DocumentoCarpeta.objects.create(slug=slug, nombre=nombre, descripcion=descripcion)
+    return JsonResponse({"ok": True})
+
+
+@requiere(CAP_DIRECTORIO)
+def detalle_carpeta(request, carpeta_slug):
+    """Muestra los documentos de una carpeta con su sección única.
+
+    `secciones` es el catálogo global (para el combobox del modal de editar).
+    """
+    carpeta = get_object_or_404(DocumentoCarpeta, slug=carpeta_slug)
+    documentos = list(carpeta.documentos.select_related("carpeta"))
+    return render(request, "enlaces_ccg/documentos.html", {
+        "carpeta": carpeta,
+        "secciones": list(Seccion.objects.all()),
+        "documentos": documentos,
+        "puede_gestionar_documentos": _es_staff(request.user),
+        "puede_editar_carpeta": _es_staff(request.user),
+    })
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def renombrar_carpeta(request, carpeta_slug):
+    """Edita nombre, slug, descripción y sección única de una carpeta
+    (seccion_id = id del catálogo global, o vacío para ninguna). Solo staff."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    carpeta = get_object_or_404(DocumentoCarpeta, slug=carpeta_slug)
+    slug_nuevo = request.POST.get("slug", "").strip().lower()
+    nombre = request.POST.get("nombre", "").strip()
+    descripcion = request.POST.get("descripcion", "").strip()
+
+    # Validar slug si se intenta cambiar
+    if slug_nuevo and slug_nuevo != carpeta.slug:
+        if not slug_nuevo.replace("-", "").isalnum():
+            return JsonResponse({"ok": False, "error": "Identificador inválido (solo letras, números y guiones)"}, status=400)
+        if DocumentoCarpeta.objects.filter(slug=slug_nuevo).exclude(pk=carpeta.pk).exists():
+            return JsonResponse({"ok": False, "error": f"Ya existe una carpeta con el identificador «{slug_nuevo}»"}, status=400)
+        carpeta.slug = slug_nuevo
+
+    if nombre:
+        carpeta.nombre = nombre
+    carpeta.descripcion = descripcion
+
+    # Sección única de la carpeta
+    seccion_id = request.POST.get("seccion_id", "").strip()
+    carpeta.seccion = None
+    if seccion_id and seccion_id.isdigit() and Seccion.objects.filter(pk=int(seccion_id)).exists():
+        carpeta.seccion_id = int(seccion_id)
+
+    carpeta.save(update_fields=["nombre", "slug", "descripcion", "seccion", "actualizado_en"])
+    return JsonResponse({"ok": True, "slug": carpeta.slug})
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def crear_seccion(request):
+    """Crea una sección en el catálogo global (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    nombre = request.POST.get("nombre", "").strip()
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "El nombre de la sección es obligatorio"}, status=400)
+    if Seccion.objects.filter(nombre__iexact=nombre).exists():
+        return JsonResponse({"ok": False, "error": f"Ya existe una sección «{nombre}»"}, status=400)
+    seccion = Seccion.objects.create(nombre=nombre)
+    return JsonResponse({"ok": True, "id": seccion.pk, "nombre": seccion.nombre})
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def editar_seccion(request, seccion_id):
+    """Edita el nombre de una sección del catálogo (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    seccion = get_object_or_404(Seccion, pk=seccion_id)
+    nombre = request.POST.get("nombre", "").strip()
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "El nombre de la sección es obligatorio"}, status=400)
+    if Seccion.objects.filter(nombre__iexact=nombre).exclude(pk=seccion.pk).exists():
+        return JsonResponse({"ok": False, "error": f"Ya existe una sección «{nombre}» en el catálogo"}, status=400)
+    seccion.nombre = nombre
+    seccion.save(update_fields=["nombre"])
+    return JsonResponse({"ok": True, "id": seccion.pk, "nombre": seccion.nombre})
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def eliminar_seccion(request, seccion_id):
+    """Elimina una sección del catálogo solo si no está en uso (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    seccion = get_object_or_404(Seccion, pk=seccion_id)
+    if seccion.carpetas.exists():
+        return JsonResponse(
+            {"ok": False, "error": f"No se puede eliminar: la sección «{seccion.nombre}» está en uso"},
+            status=400,
+        )
+    seccion.delete()
+    return JsonResponse({"ok": True})
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def eliminar_carpeta(request, carpeta_slug):
+    """Elimina una carpeta y sus archivos del disco (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    carpeta = get_object_or_404(DocumentoCarpeta, slug=carpeta_slug)
+    for doc in carpeta.documentos.all():
+        try:
+            doc.archivo.delete(save=False)
+        except Exception:
+            pass
+    carpeta.delete()
+    return JsonResponse({"ok": True})
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def subir_documento(request, carpeta_slug):
+    """Sube un archivo a una carpeta (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    carpeta = get_object_or_404(DocumentoCarpeta, slug=carpeta_slug)
+    archivo = request.FILES.get("archivo")
+    if not archivo:
+        return JsonResponse({"ok": False, "error": "No se envió ningún archivo"}, status=400)
+
+    nombre = request.POST.get("nombre", "").strip() or archivo.name
+    doc = Documento.objects.create(
+        carpeta=carpeta,
+        archivo=archivo,
+        nombre=nombre,
+    )
+    return JsonResponse({
+        "ok": True,
+        "documento": {
+            "id": doc.pk,
+            "nombre": doc.nombre,
+            "archivo_nombre": doc.nombre_archivo,
+            "archivo_url": doc.archivo.url,
+            "tamano": doc.tamano_legible,
+            "icono": doc.icono,
+            "subido_en": doc.subido_en.strftime("%d/%m/%Y %H:%M"),
+        },
+    })
+
+
+@requiere(CAP_DIRECTORIO)
+@require_POST
+def eliminar_documento(request, carpeta_slug, documento_id):
+    """Elimina un documento de una carpeta y su archivo del disco (solo staff)."""
+    if not _es_staff(request.user):
+        return JsonResponse({"ok": False, "error": "Sin permisos"}, status=403)
+
+    doc = get_object_or_404(Documento, pk=documento_id, carpeta__slug=carpeta_slug)
+    archivo = doc.archivo
+    doc.delete()
+    try:
+        archivo.delete(save=False)
+    except Exception:
+        pass
+    return JsonResponse({"ok": True})

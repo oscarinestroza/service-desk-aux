@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+.env
+db.sqlite3
+media/
+staticfiles/
+.git/
+.gitignore
+README.md
+celery_out.log
+celery_err.log

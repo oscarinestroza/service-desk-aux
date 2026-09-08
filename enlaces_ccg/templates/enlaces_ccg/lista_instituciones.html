@@ -113,13 +113,13 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if inst.edificio %}
-                    <a href="{% url 'enlaces_ccg:detalle_edificio' inst.edificio.pk %}" class="cell-link">
-                        {{ inst.edificio.siglas|default:inst.edificio.nombre }}
+                    {% for ed in inst.edificio.all %}
+                    <a href="{% url 'enlaces_ccg:detalle_edificio' ed.pk %}" class="cell-link">
+                        {{ ed.siglas|default:ed.nombre }}{% if not forloop.last %}, {% endif %}
                     </a>
-                    {% else %}
+                    {% empty %}
                         <span class="cell-sub">Sin edificio</span>
-                    {% endif %}
+                    {% endfor %}
                 </td>
                 <td>
                     <a href="{% url 'enlaces_ccg:perfil_institucion' inst.pk %}" class="cell-link fw-semibold">

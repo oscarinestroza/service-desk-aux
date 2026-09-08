@@ -514,6 +514,12 @@
                     <i class="fas fa-id-card"></i> Enlaces
                 </a>
             </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:documentos' %}"
+                   class="{% if request.resolver_match.url_name == 'documentos' or request.resolver_match.url_name == 'detalle_carpeta' %}active{% endif %}">
+                    <i class="fas fa-folder-open"></i> Documentos
+                </a>
+            </li>
             {% endif %}
 
             {% if puede_tickets %}
@@ -539,7 +545,7 @@
             {% endif %}
 
             {% if puede_revisiones %}
-            <li class="nav-section">Revisiones Operativas</li>
+            <li class="nav-section">Modulo Operativo MAO</li>
             <li>
                 <a href="{% url 'enlaces_ccg:revision_tickets' %}"
                    class="{% if request.resolver_match.url_name == 'revision_tickets' %}active{% endif %}">
@@ -574,6 +580,12 @@
                 <a href="{% url 'enlaces_ccg:plantillas_respuesta' %}"
                    class="{% if request.resolver_match.url_name == 'plantillas_respuesta' %}active{% endif %}">
                     <i class="fas fa-reply-all"></i> Plantillas de respuesta
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:aprendizaje' %}"
+                   class="{% if request.resolver_match.url_name == 'aprendizaje' %}active{% endif %}">
+                    <i class="fas fa-graduation-cap"></i> Aprendizaje
                 </a>
             </li>
             {% endif %}
@@ -929,35 +941,17 @@
                                        placeholder="Ej. SESAL, SEPLAN">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label" for="instEdificio">Edificio</label>
-                                <select class="form-select" name="edificio" id="instEdificio">
-                                    <option value="">— Sin edificio —</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Niveles</label>
-                                <div class="dropdown" id="dropdownNiveles">
-                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
-                                            id="btnDropdownNiveles" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <span id="instNivelDisplayText">Seleccione niveles...</span>
-                                    </button>
-                                    <input type="hidden" name="nivel" id="instNivel" value="[]">
-                                    <div class="dropdown-menu dropdown-menu-end p-3 w-auto" style="max-height: 300px; overflow-y: auto; min-width: 220px;"
-                                         id="dropdownMenuNiveles" data-bs-popper="none">
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnNivelesSeleccionarTodos">
-                                                <i class="fas fa-check-square me-1"></i> Todos
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnNivelesLimpiar">
-                                                <i class="fas fa-times me-1"></i> Limpiar
-                                            </button>
-                                        </div>
-                                        <hr class="dropdown-divider">
-                                        <div id="nivelesCheckboxes" class="row g-1">
-                                            <div class="col-12 text-muted text-center py-2 small">Seleccione un edificio primero</div>
-                                        </div>
-                                    </div>
+                                <label class="form-label">Edificio(s) y Niveles</label>
+                                <div id="instEdificiosList">
+                                    <!-- Cada fila: select edificio + dropdown niveles + botón quitar -->
                                 </div>
+                                <input type="hidden" name="edificios_niveles" id="instEdificiosNiveles" value="[]">
+                                <input type="hidden" name="edificio" id="instEdificio" value="">
+                                <input type="hidden" name="nivel" id="instNivel" value="[]">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2"
+                                        id="btnAgregarEdificio">
+                                    <i class="fas fa-plus me-1"></i> Agregar edificio
+                                </button>
                             </div>
                         </div>
 
@@ -1504,23 +1498,156 @@ let contactoContenido = `
         // ── Modal Institución (crear / editar) ──
         const modalInstitucion = new bootstrap.Modal(document.getElementById('modalInstitucion'));
         let edificiosCargados = false;
+        let edificiosCatalogo = [];
+        let filasEdificios = []; // [{edificio_id, nombre, siglas, nivel:[]}]
+        let rowSeq = 0;
 
         function cargarEdificiosInstitucion() {
             if (edificiosCargados) return Promise.resolve();
             return fetch('/api/edificios/')
                 .then(r => r.json())
                 .then(d => {
-                    const sel = document.getElementById('instEdificio');
-                    sel.innerHTML = '<option value="">— Sin edificio —</option>';
-                    (d.edificios || []).forEach(ed => {
-                        const opt = document.createElement('option');
-                        opt.value = ed.id;
-                        opt.textContent = ed.nombre;
-                        opt.dataset.siglas = ed.siglas || '';
-                        sel.appendChild(opt);
-                    });
+                    edificiosCatalogo = d.edificios || [];
                     edificiosCargados = true;
                 });
+        }
+
+        function esOptsEdificios(select) {
+            select.innerHTML = '<option value="">— Sin edificio —</option>';
+            edificiosCatalogo.forEach(ed => {
+                const opt = document.createElement('option');
+                opt.value = ed.id;
+                opt.textContent = ed.nombre;
+                opt.dataset.siglas = ed.siglas || '';
+                select.appendChild(opt);
+            });
+        }
+
+        function renderFilaEdificio(row, selectValue) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'inst-edificio-fila mb-2 p-2 border rounded';
+            wrapper.dataset.rowId = rowSeq;
+            const selSiglas = row.siglas || '';
+
+            wrapper.innerHTML = `
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm edificio-select fw">
+                        <option value="">— Sin edificio —</option>
+                    </select>
+                    <button type="button" class="btn btn-outline-danger btn-sm btn-quitar-fila" title="Quitar">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="mt-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-niveles-fila"
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-layer-group me-1"></i> Niveles
+                            <span class="badge bg-secondary ms-1 niveles-count">0</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-3" style="min-width:240px;">
+                            <div class="d-flex justify-content-between mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-fila-todos">Todos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary btn-fila-limpiar">Limpiar</button>
+                            </div>
+                            <div class="niveles-fila-checkboxes row g-1 text-nowrap"></div>
+                        </div>
+                    </div>
+                </div>`;
+
+            const select = wrapper.querySelector('.edificio-select');
+            esOptsEdificios(select);
+            if (row.edificio_id) select.value = row.edificio_id;
+
+            // poblar niveles del edificio seleccionado
+            let nivelesDisponibles = [];
+            const repoblarNiveles = () => {
+                const cont = wrapper.querySelector('.niveles-fila-checkboxes');
+                const sl = wrapper.querySelector('.edificio-select');
+                const optSel = sl.options[sl.selectedIndex];
+                const siglas = (optSel && optSel.dataset.siglas) || '';
+                nivelesDisponibles = NIVELES_POR_EDIFICIO[siglas] || [];
+                if (!nivelesDisponibles.length) {
+                    cont.innerHTML = '<div class="text-muted small">Seleccione un edificio primero</div>';
+                } else {
+                    cont.innerHTML = nivelesDisponibles.map(n => `
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input nivel-fila-checkbox" type="checkbox" value="${n}"
+                                       id="nf_${rowSeq}_${n.replace(/\s+/g,'_')}" ${row.nivel.includes(n) ? 'checked' : ''}>
+                                <label class="form-check-label small" for="nf_${rowSeq}_${n.replace(/\s+/g,'_')}">${n}</label>
+                            </div>
+                        </div>`).join('');
+                }
+            };
+            repoblarNiveles();
+
+            select.addEventListener('change', function() {
+                row.edificio_id = this.value ? parseInt(this.value) : null;
+                const optSel = this.options[this.selectedIndex];
+                row.nombre = optSel && optSel.value ? optSel.textContent : '';
+                row.siglas = (optSel && optSel.dataset ? optSel.dataset.siglas : '') || '';
+                row.nivel = [];
+                repoblarNiveles();
+                actualizarResumenFilas();
+            });
+
+            wrapper.querySelector('.niveles-fila-checkboxes').addEventListener('change', function(e) {
+                const cb = e.target.closest('.nivel-fila-checkbox');
+                if (!cb) return;
+                row.nivel = Array.from(wrapper.querySelectorAll('.nivel-fila-checkbox:checked')).map(c => c.value);
+                actualizarResumenFilas();
+            });
+
+            wrapper.querySelector('.btn-fila-todos').addEventListener('click', function() {
+                wrapper.querySelectorAll('.nivel-fila-checkbox').forEach(cb => cb.checked = true);
+                row.nivel = Array.from(wrapper.querySelectorAll('.nivel-fila-checkbox:checked')).map(c => c.value);
+                actualizarResumenFilas();
+            });
+
+            wrapper.querySelector('.btn-fila-limpiar').addEventListener('click', function() {
+                wrapper.querySelectorAll('.nivel-fila-checkbox').forEach(cb => cb.checked = false);
+                row.nivel = [];
+                actualizarResumenFilas();
+            });
+
+            wrapper.querySelector('.btn-quitar-fila').addEventListener('click', function() {
+                wrapper.remove();
+                filasEdificios = filasEdificios.filter(f => f._seq !== row._seq);
+                actualizarResumenFilas();
+            });
+
+            return wrapper;
+        }
+
+        function actualizarResumenFilas() {
+            const hidden = document.getElementById('instEdificiosNiveles');
+            const payload = filasEdificios
+                .filter(f => f.edificio_id)
+                .map(f => ({ edificio_id: f.edificio_id, nivel: f.nivel || [] }));
+            hidden.value = JSON.stringify(payload);
+            // compatibilidad: primer edificio en los campos simples
+            const first = payload[0];
+            document.getElementById('instEdificio').value = first ? String(first.edificio_id) : '';
+            document.getElementById('instNivel').value = first ? JSON.stringify(first.nivel) : '[]';
+        }
+
+        function agregarFilaEdificio(rowOpts) {
+            rowSeq++;
+            const row = Object.assign({
+                _seq: rowSeq,
+                edificio_id: null,
+                nombre: '',
+                siglas: '',
+                nivel: []
+            }, rowOpts || {});
+            row._seq = rowSeq;
+            filasEdificios.push(row);
+            const cont = document.getElementById('instEdificiosList');
+            const wrapper = renderFilaEdificio(row, null);
+            cont.appendChild(wrapper);
+            actualizarResumenFilas();
+            return row;
         }
 
         function abrirCrearInstitucion(edificioId) {
@@ -1528,13 +1655,20 @@ let contactoContenido = `
             document.getElementById('formInstitucion').reset();
             document.getElementById('instNombre').value = '';
             document.getElementById('instEstado').value = 'ACTIVO';
+            document.getElementById('instEdificiosList').innerHTML = '';
+            filasEdificios = [];
+            rowSeq = 0;
             document.querySelector('#modalInstitucion .modal-title').innerHTML =
                 '<i class="fas fa-plus me-2"></i>Nueva Institución';
             const btn = document.getElementById('btnGuardarInstitucion');
             btn.innerHTML = '<i class="fas fa-save me-1"></i> Guardar';
             btn.classList.replace('btn-success', 'btn-primary');
             cargarEdificiosInstitucion().then(() => {
-                document.getElementById('instEdificio').value = edificioId || '';
+                if (edificioId) {
+                    const row = agregarFilaEdificio({ edificio_id: parseInt(edificioId) });
+                } else {
+                    agregarFilaEdificio({});
+                }
                 modalInstitucion.show();
             });
         }
@@ -1551,10 +1685,23 @@ let contactoContenido = `
                 document.getElementById('instPk').value = d.id;
                 document.getElementById('instNombre').value = d.nombre || '';
                 document.getElementById('instSiglas').value = d.siglas || '';
-                document.getElementById('instNivel').value = JSON.stringify(d.nivel || []);
                 document.getElementById('instEstado').value = d.estado || 'ACTIVO';
                 document.getElementById('instContactoTelefono').value = d.contacto_telefono || '';
-                document.getElementById('instEdificio').value = d.edificio_id || '';
+                document.getElementById('instEdificiosList').innerHTML = '';
+                filasEdificios = [];
+                rowSeq = 0;
+                const mapNiveles = d.niveles_edificios || {};
+                const ids = d.edificio_ids || [];
+                if (ids.length) {
+                    ids.forEach(id => {
+                        agregarFilaEdificio({
+                            edificio_id: id,
+                            nivel: mapNiveles[id] || []
+                        });
+                    });
+                } else {
+                    agregarFilaEdificio({});
+                }
                 modalInstitucion.show();
             });
         }
@@ -1565,6 +1712,10 @@ let contactoContenido = `
 
             const btnEditar = e.target.closest('[data-editar-institucion]');
             if (btnEditar) { e.preventDefault(); abrirEditarInstitucion(btnEditar.dataset.pk); return; }
+        });
+
+        document.getElementById('btnAgregarEdificio')?.addEventListener('click', function() {
+            agregarFilaEdificio({});
         });
 
         document.getElementById('btnGuardarInstitucion')?.addEventListener('click', function() {
@@ -1629,9 +1780,13 @@ let contactoContenido = `
                     document.getElementById('verInstSiglas').textContent = d.siglas ? `(${d.siglas})` : '';
                     const nivelesEl = document.getElementById('verInstNiveles');
                     if (nivelesEl) {
-                        nivelesEl.innerHTML = (d.niveles && d.niveles.length)
-                            ? d.niveles.map(n => `<span class="badge bg-secondary">${escapeHtmlUnsafe(n)}</span>`).join('')
-                            : '';
+                        const en = (d.edificios_niveles || []).map(x => {
+                            const badgeN = (x.niveles && x.niveles.length)
+                                ? x.niveles.map(n => `<span class="badge bg-secondary">${escapeHtmlUnsafe(n)}</span>`).join('')
+                                : '';
+                            return `<div><strong>${escapeHtmlUnsafe(x.nombre)}:</strong> ${badgeN || '—'}</div>`;
+                        }).join('');
+                        nivelesEl.innerHTML = en || '';
                     }
                     document.getElementById('verInstEdificio').textContent = d.edificio || '—';
                     const telEl = document.getElementById('verInstTelefono');
@@ -1676,97 +1831,9 @@ let contactoContenido = `
             "CBA": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5"],
             "CBB": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5", "Nivel 6", "Nivel 7"],
             "CBC": ["PB", "Nivel 1", "Nivel 2", "Nivel 3", "Nivel 4", "Nivel 5", "Nivel 6", "Nivel 7"],
-            "TORRE 1": ["PB"] + Array.from({length: 23}, (_, i) => `Nivel ${i+1}`),
-            "TORRE 2": ["PB"] + Array.from({length: 24}, (_, i) => `Nivel ${i+1}`),
+            "T1": ["PB", ...Array.from({length: 23}, (_, i) => `Nivel ${i+1}`)],
+            "T2": ["PB", ...Array.from({length: 24}, (_, i) => `Nivel ${i+1}`)],
         };
-
-        let nivelesSeleccionados = [];
-
-        function actualizarDisplayNiveles() {
-            const display = document.getElementById('instNivelDisplayText');
-            const hidden = document.getElementById('instNivel');
-            if (nivelesSeleccionados.length === 0) {
-                if (display) display.textContent = 'Seleccione niveles...';
-            } else {
-                if (display) display.textContent = nivelesSeleccionados.join(', ');
-            }
-            hidden.value = JSON.stringify(nivelesSeleccionados);
-        }
-
-        function poblarCheckboxesNiveles(edificioSiglas) {
-            const container = document.getElementById('nivelesCheckboxes');
-            const niveles = NIVELES_POR_EDIFICIO[edificioSiglas] || [];
-            const labelEdificio = document.getElementById('nivelEdificioSeleccionado');
-            if (labelEdificio) labelEdificio.textContent = edificioSiglas ? ` ${edificioSiglas} (${niveles.length} niveles)` : '';
-            if (niveles.length === 0) {
-                container.innerHTML = '<div class="col-12 text-muted text-center py-3">Seleccione un edificio primero</div>';
-                return;
-            }
-            container.innerHTML = niveles.map(n => `
-                <div class="col-md-3 col-sm-4 col-6">
-                    <div class="form-check">
-                        <input class="form-check-input nivel-checkbox" type="checkbox" value="${n}"
-                               id="nivel_${n.replace(/\s+/g, '_')}" ${nivelesSeleccionados.includes(n) ? 'checked' : ''}>
-                        <label class="form-check-label small" for="nivel_${n.replace(/\s+/g, '_')}">${n}</label>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        document.getElementById('instEdificio')?.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const edificioSiglas = selectedOption.dataset.siglas || '';
-            poblarCheckboxesNiveles(edificioSiglas);
-            nivelesSeleccionados = [];
-            actualizarDisplayNiveles();
-        });
-
-        document.getElementById('btnNivelesSeleccionarTodos')?.addEventListener('click', function() {
-            document.querySelectorAll('.nivel-checkbox').forEach(cb => { cb.checked = true; actualizarDesdeCheckboxes(); });
-        });
-
-        document.getElementById('btnNivelesLimpiar')?.addEventListener('click', function() {
-            document.querySelectorAll('.nivel-checkbox').forEach(cb => { cb.checked = false; actualizarDesdeCheckboxes(); });
-        });
-
-        // Evitar que el dropdown se cierre al hacer click dentro
-        document.getElementById('dropdownMenuNiveles')?.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-
-        function actualizarDesdeCheckboxes() {
-            nivelesSeleccionados = Array.from(document.querySelectorAll('.nivel-checkbox:checked')).map(cb => cb.value);
-            actualizarDisplayNiveles();
-        }
-
-        document.getElementById('nivelesCheckboxes')?.addEventListener('change', function(e) {
-            if (e.target.classList && e.target.classList.contains('nivel-checkbox')) {
-                actualizarDesdeCheckboxes();
-            }
-        });
-
-        // Al abrir dropdown, poblar checkboxes
-        document.getElementById('dropdownNiveles')?.addEventListener('show.bs.dropdown', function() {
-            const edificioSel = document.getElementById('instEdificio');
-            const selectedOption = edificioSel.options[edificioSel.selectedIndex];
-            const edificioSiglas = selectedOption && selectedOption.dataset
-                ? (selectedOption.dataset.siglas || '')
-                : '';
-            poblarCheckboxesNiveles(edificioSiglas);
-            // Restaurar selección actual
-            document.querySelectorAll('.nivel-checkbox').forEach(cb => {
-                cb.checked = nivelesSeleccionados.includes(cb.value);
-            });
-        });
-
-        // Al abrir modal de edición de institución, cargar niveles seleccionados del hidden input
-        document.getElementById('modalInstitucion')?.addEventListener('show.bs.modal', function() {
-            const hidden = document.getElementById('instNivel');
-            try {
-                nivelesSeleccionados = JSON.parse(hidden.value || '[]');
-            } catch { nivelesSeleccionados = []; }
-            actualizarDisplayNiveles();
-        });
 
     })();
     </script>

@@ -604,6 +604,8 @@ class SIGClient:
         boton = page.locator("//button[.//span[text()='INGRESAR']]").first
         boton.click(timeout=timeout_ms)
 
+        logger.info("Sesion iniciada en SIG como %s", self.username)
+
         # Esperar cambio de URL (sale del login)
         try:
             page.wait_for_url(
@@ -619,7 +621,9 @@ class SIGClient:
         except Exception:
             pass
 
-        time.sleep(2)
+        time.sleep(1)
+
+        logger.info("Primer wait")
 
         # Verificar que no estemos en página de login
         current = page.url

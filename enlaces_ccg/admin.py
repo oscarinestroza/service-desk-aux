@@ -14,8 +14,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 from .models import (
-    Adjunto, ConfiguracionCorreo, ConfiguracionSIG, Edificio, EnlaceAutorizado,
-    Institucion, SyncLog,
+    Adjunto, ConfiguracionCorreo, ConfiguracionSIG, Documento, DocumentoCarpeta,
+    Edificio,
+    EnlaceAutorizado,
+    Institucion,
+    InstitucionEdificio,
+    Seccion,
+    SyncLog,
 )
 
 
@@ -56,7 +61,7 @@ def _generar_excel_enlaces(enlaces, titulo, subtitulo, archivo_prefijo):
             e.nivel_referencia or "", e.usuario_sig or "", e.nombre_sig or "",
             e.institucion.nombre if e.institucion else "",
             e.institucion.siglas or "" if e.institucion else "",
-            e.institucion.edificio.nombre if e.institucion and e.institucion.edificio else "",
+            ", ".join(ed.nombre for ed in e.institucion.edificio.all()) if e.institucion else "",
             e.fecha_alta.strftime("%d/%m/%Y") if e.fecha_alta else "",
             e.oficio_alta or "", e.observaciones_alta or "",
             e.fecha_seguimiento.strftime("%d/%m/%Y") if e.fecha_seguimiento else "",
@@ -147,20 +152,31 @@ class EdificioAdmin(admin.ModelAdmin):
 
 
 # ---------------------------------------------------------------------------
+# InstitucionEdificio (inline en InstitucionAdmin)
+# ---------------------------------------------------------------------------
+class InstitucionEdificioInline(admin.TabularInline):
+    model = InstitucionEdificio
+    extra = 1
+    fields = ("edificio", "nivel")
+    autocomplete_fields = ("edificio",)
+
+
+# ---------------------------------------------------------------------------
 # Institucion
 # ---------------------------------------------------------------------------
 @admin.register(Institucion)
 class InstitucionAdmin(admin.ModelAdmin):
     change_list_template = "admin/enlaces_ccg/institucion/change_list.html"
 
-    list_display = ("nombre", "siglas", "edificio", "nivel", "estado", "creado_en")
+    list_display = ("nombre", "siglas", "edificios_display", "estado", "creado_en")
     list_filter = ("edificio", "estado")
     search_fields = ("nombre", "siglas")
-    list_select_related = ("edificio",)
+
+    inlines = [InstitucionEdificioInline]
 
     fieldsets = (
         (None, {
-            "fields": ("edificio", "nivel", "nombre", "siglas", "estado"),
+            "fields": ("nombre", "siglas", "estado"),
         }),
         ("Contacto", {
             "classes": ("collapse",),
@@ -168,8 +184,12 @@ class InstitucionAdmin(admin.ModelAdmin):
         }),
     )
 
-    class Media:
-        js = ("admin/js/nivel_dinamico.js",)
+    @admin.display(description="Edificio(s)")
+    def edificios_display(self, obj):
+        edificios = obj.edificio.all()
+        if not edificios:
+            return "—"
+        return ", ".join(ed.nombre for ed in edificios)
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +262,9 @@ class EnlaceAutorizadoAdmin(admin.ModelAdmin):
 
     @admin.action(description="Exportar seleccionados a Excel (.xlsx)")
     def exportar_seleccionados_excel(self, request, queryset):
-        enlaces = queryset.select_related("institucion", "institucion__edificio").order_by(
+        enlaces = queryset.select_related("institucion").prefetch_related(
+            "institucion__edificio"
+        ).order_by(
             "institucion__nombre", "primer_apellido", "segundo_apellido", "nombres"
         )
         sub = f"Generado {datetime.now().strftime('%d/%m/%Y %H:%M')} — {request.user.username}"
@@ -252,7 +274,9 @@ class EnlaceAutorizadoAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         if request.POST.get("action") == "exportar_todos_excel":
             enlaces = EnlaceAutorizado.objects.select_related(
-                "institucion", "institucion__edificio"
+                "institucion"
+            ).prefetch_related(
+                "institucion__edificio"
             ).order_by("institucion__nombre", "primer_apellido", "segundo_apellido", "nombres")
             sub = f"Todos los enlaces — Generado {datetime.now().strftime('%d/%m/%Y %H:%M')}"
             return _generar_excel_enlaces(enlaces, "Todos los Enlaces CCG", sub, "enlaces_todos")
@@ -273,8 +297,8 @@ class EnlaceAutorizadoAdmin(admin.ModelAdmin):
     def response_change(self, request, obj):
         if "_exportar_excel" in request.POST:
             enlaces = EnlaceAutorizado.objects.filter(pk=obj.pk).select_related(
-                "institucion", "institucion__edificio"
-            )
+                "institucion"
+            ).prefetch_related("institucion__edificio")
             sub = f"{obj.nombre_completo} — {datetime.now().strftime('%d/%m/%Y %H:%M')}"
             return _generar_excel_enlaces(enlaces, f"Enlace: {obj.nombre_completo}", sub, f"enlace_{obj.pk}")
 
@@ -382,3 +406,40 @@ class ConfiguracionSIGAdmin(admin.ModelAdmin):
         return super().changeform_view(
             request, str(obj.pk), form_url, extra_context
         )
+
+
+# ---------------------------------------------------------------------------
+# Documentos y carpetas
+# ---------------------------------------------------------------------------
+class DocumentoInline(admin.TabularInline):
+    model = Documento
+    extra = 1
+    fields = ("archivo", "nombre", "subido_en")
+    readonly_fields = ("subido_en",)
+
+
+@admin.register(DocumentoCarpeta)
+class DocumentoCarpetaAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "slug", "seccion", "num_documentos", "creado_en")
+    search_fields = ("nombre", "slug")
+    prepopulated_fields = {}
+    inlines = [DocumentoInline]
+
+    @admin.display(description="Documentos")
+    def num_documentos(self, obj):
+        return obj.documentos.count()
+
+
+@admin.register(Documento)
+class DocumentoAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "carpeta", "subido_en")
+    list_select_related = ("carpeta",)
+    search_fields = ("nombre", "carpeta__nombre")
+    list_filter = ("carpeta",)
+    readonly_fields = ("subido_en",)
+
+
+@admin.register(Seccion)
+class SeccionAdmin(admin.ModelAdmin):
+    list_display = ("nombre",)
+    search_fields = ("nombre",)

@@ -73,8 +73,8 @@ class Command(BaseCommand):
 
         # Determinar enlaces a sincronizar
         qs = EnlaceAutorizado.objects.select_related(
-            "institucion", "institucion__edificio"
-        )
+            "institucion"
+        ).prefetch_related("institucion__edificio")
 
         if sync_all:
             # Todos los que tienen usuario_sig o que necesitan crear
