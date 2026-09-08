@@ -87,12 +87,10 @@ def config_sig():
         return None
 
 
-def sig_usuario_configurado():
-    """True si hay usuario SIG configurado (en BD o settings)."""
+def sig_usuario_configurado() -> bool:
+    """True si hay usuario SIG configurado en BD."""
     cfg = config_sig()
-    if cfg and cfg.usuario:
-        return True
-    return bool(getattr(settings, "SIG_USER", ""))
+    return bool(cfg and cfg.usuario)
 
 
 class SIGClientError(Exception):
@@ -110,23 +108,13 @@ class SIGClient:
         headless=True,
         timeout=None,
     ):
-        self.base_url = (base_url or getattr(settings, "SIG_URL", "")).rstrip("/")
-        self.username = username or getattr(settings, "SIG_USER", "")
-        self.password = password or getattr(settings, "SIG_PASSWORD", "")
-        self.timeout = timeout or getattr(settings, "SIG_TIMEOUT", 30)
-        try:
-            cfg = ConfiguracionSIG.cargar()
-            self.base_url = base_url or cfg.url_valor(self.base_url)
-            self.username = username or cfg.usuario_valor(self.username)
-            self.password = password or cfg.password_valor(self.password)
-            self.timeout = timeout or cfg.timeout_valor(self.timeout)
-            # Normalizar base_url (no debe terminar en '/')
-            if self.base_url:
-                self.base_url = self.base_url.rstrip("/")
-        except Exception as exc:  # noqa: BLE001 - la BD puede no estar lista
-            logger.warning(
-                "No se pudo leer ConfiguracionSIG (%s); usando settings.", exc
-            )
+        cfg = ConfiguracionSIG.cargar()
+        self.base_url = (base_url or cfg.url_valor()).rstrip("/")
+        self.username = username or cfg.usuario_valor()
+        self.password = password or cfg.password_valor()
+        self.timeout = timeout or cfg.timeout_valor()
+        if self.base_url:
+            self.base_url = self.base_url.rstrip("/")
         self.playwright = None
         self.browser = None
         self.context = None
@@ -648,9 +636,10 @@ class SIGClient:
 
         # ---- Campos de texto ----
         self._safe_send_keys(SEL["usuario"], enlace.usuario_sig)
-        self._safe_send_keys(
-            SEL["password"], _sha256(enlace.password_sig or settings.SIG_DEFAULT_PASSWORD)
-        )
+        from ..models import ConfiguracionSIG
+        cfg_sig = ConfiguracionSIG.cargar()
+        pwd = enlace.password_sig or cfg_sig.default_password_valor()
+        self._safe_send_keys(SEL["password"], _sha256(pwd))
         self._safe_send_keys(SEL["nombre"], enlace.nombres)
         self._safe_send_keys(SEL["apellido_paterno"], enlace.primer_apellido)
         self._safe_send_keys(SEL["apellido_materno"], enlace.segundo_apellido or "")

@@ -184,27 +184,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ---------------------------------------------------------------------------
-# SIG — Sistema de Información Gerencial (Selenium sync)
+# SIG — Configuración vía Admin UI (modelo ConfiguracionSIG)
 # ---------------------------------------------------------------------------
-import os
-SIG_URL = os.environ.get('SIG_URL', '')
-SIG_USER = os.environ.get('SIG_USER', '')
-SIG_PASSWORD = os.environ.get('SIG_PASSWORD', '')
-SIG_DEFAULT_PASSWORD = os.environ.get('SIG_DEFAULT_PASSWORD', '')
-SIG_TIMEOUT = int(os.environ.get('SIG_TIMEOUT', '30'))
-# Correo de revisión: se notifica cuando falla la creación automática en el SIG
-# para que la creación se haga manualmente. Por ahora en prueba.
-SIG_REVIEW_EMAIL = os.environ.get('SIG_REVIEW_EMAIL', '')
 
 # Email configuration — smtplib con TLS (puerto 587)
-# Configurar via variables de entorno (ver .env.example)
+# Configuración vía Admin UI (modelo ConfiguracionCorreo)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.office365.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+EMAIL_HOST = ''
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+DEFAULT_FROM_EMAIL = ''
 
 
 # ---------------------------------------------------------------------------

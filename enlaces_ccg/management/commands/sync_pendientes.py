@@ -45,10 +45,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        if not getattr(settings, "SIG_USER", ""):
+        from enlaces_ccg.models import ConfiguracionSIG
+        cfg = ConfiguracionSIG.cargar()
+        if not cfg.usuario_valor():
             raise CommandError(
-                "SIG_USER no está configurado en settings. "
-                "Configure las variables de entorno SIG_USER, SIG_PASSWORD, SIG_URL."
+                "Usuario SIG no configurado. "
+                "Configure la URL, usuario y contraseña del SIG en el admin: "
+                "Configuración SIG (/admin/enlaces_ccg/configuracionsig/)."
             )
 
         dry_run = options["dry_run"]

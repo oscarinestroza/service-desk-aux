@@ -1,0 +1,60 @@
+# docker-compose.prod.yml — Stack completo local (web + worker + db + redis)
+# Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+
+services:
+  # Reutiliza db y redis de docker-compose.yml
+  db:
+    # Configuración ya definida en docker-compose.yml
+
+  redis:
+    # Configuración ya definida en docker-compose.yml
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enlacesmao_web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://enlacesmao:enlacesmao@db:5432/enlacesmao
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - media:/app/media
+      - static:/app/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enlacesmao_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://enlacesmao:enlacesmao@db:5432/enlacesmao
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A enlacesMAO worker --loglevel=info --concurrency=1
+
+volumes:
+  media:
+  static:

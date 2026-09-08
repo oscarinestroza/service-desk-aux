@@ -24,12 +24,12 @@ def enviar_correo_notificacion(
     """
     Envía un correo electrónico usando smtplib con soporte TLS (puerto 587).
 
-    Lee las credenciales de settings:
-        - EMAIL_HOST          (servidor SMTP)
-        - EMAIL_PORT          (puerto, default 587)
-        - EMAIL_HOST_USER     (usuario / remitente)
-        - EMAIL_HOST_PASSWORD (contraseña o app-password)
-        - DEFAULT_FROM_EMAIL  (dirección From)
+    Lee las credenciales desde ConfiguracionCorreo (admin):
+        - smtp_host         (servidor SMTP)
+        - smtp_port         (puerto, default 587)
+        - smtp_use_tls      (usar TLS)
+        - correo_emisor     (usuario / remitente)
+        - password_emisor   (contraseña o app-password)
 
     Args:
         asunto:       Asunto del correo.
@@ -45,18 +45,20 @@ def enviar_correo_notificacion(
         logger.warning("enviar_correo_notificacion: sin destinatarios, se omite envío.")
         return False
 
-    # --- Configuración: prioriza la DB (editable en admin) sobre settings ---
-    host = getattr(settings, "EMAIL_HOST", "smtp.gmail.com")
-    port = getattr(settings, "EMAIL_PORT", 587)
-    base = _config_basico()
-    user = base["correo_emisor"]
-    password = base["password_emisor"]
-    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", user)
+    from .models import ConfiguracionCorreo
+    cfg = ConfiguracionCorreo.cargar()
+
+    host = cfg.smtp_host_valor()
+    port = cfg.smtp_port_valor()
+    use_tls = cfg.smtp_use_tls_valor()
+    user = cfg.correo_emisor_valor()
+    password = cfg.password_emisor_valor()
+    from_email = cfg.default_from_email_valor() or user
 
     if not user or not password:
         logger.error(
-            "enviar_correo_notificacion: EMAIL_HOST_USER o EMAIL_HOST_PASSWORD "
-            "no están configurados en settings."
+            "enviar_correo_notificacion: correo_emisor o password_emisor "
+            "no están configurados en ConfiguracionCorreo (admin)."
         )
         return False
 
@@ -73,8 +75,9 @@ def enviar_correo_notificacion(
     try:
         with smtplib.SMTP(host, port) as server:
             server.ehlo()
-            server.starttls()
-            server.ehlo()
+            if use_tls:
+                server.starttls()
+                server.ehlo()
             server.login(user, password)
             server.sendmail(from_email, destinatarios, msg.as_string())
         logger.info("Correo enviado exitosamente a: %s", destinatarios)
@@ -82,7 +85,7 @@ def enviar_correo_notificacion(
 
     except smtplib.SMTPAuthenticationError:
         logger.error(
-            "Error de autenticación SMTP. Verifique EMAIL_HOST_USER / EMAIL_HOST_PASSWORD."
+            "Error de autenticación SMTP. Verifique correo_emisor / password_emisor en admin."
         )
         return False
     except smtplib.SMTPConnectError:
@@ -97,11 +100,7 @@ def enviar_correo_notificacion(
 
 
 def obtener_config_correo():
-    """Devuelve la configuración de correo efectiva.
-
-    Los valores definidos en el modelo singleton `ConfiguracionCorreo`
-    (editables desde el admin) tienen prioridad; si no están, se usa el
-    fallback de `settings`.
+    """Devuelve la configuración de correo efectiva desde ConfiguracionCorreo (admin).
 
     Returns:
         dict con:
@@ -113,39 +112,23 @@ def obtener_config_correo():
     from .models import ConfiguracionCorreo
 
     cfg = ConfiguracionCorreo.cargar()
-
-    from django.conf import settings as s
     return {
-        "correo_emisor": cfg.emisor(
-            fallback=getattr(s, "EMAIL_HOST_USER", "")
-        ),
-        "password_emisor": cfg.emisor_password(
-            fallback=getattr(s, "EMAIL_HOST_PASSWORD", "")
-        ),
-        "correo_review": cfg.review_lista(
-            fallback=[getattr(s, "SIG_REVIEW_EMAIL", "")] if getattr(s, "SIG_REVIEW_EMAIL", "") else []
-        ),
-        # Correo(s) adicional(es) de notificación de éxito (fase de prueba).
-        # En producción la notificación va al correo_principal del enlace.
-        "correo_notificacion": cfg.notificacion_lista(fallback=[]),
+        "correo_emisor": cfg.correo_emisor_valor(),
+        "password_emisor": cfg.password_emisor_valor(),
+        "correo_review": cfg.review_lista(),
+        "correo_notificacion": cfg.notificacion_lista(),
     }
 
 
 def aplicar_emisor_a_settings():
-    """Aplica el correo emisor/password de la DB a settings para que
+    """Aplica el correo emisor/password de la BD a settings para que
     `send_mail` (backend SMTP de Django) use el remitente configurado."""
-    config = _config_basico()
-    settings.EMAIL_HOST_USER = config["correo_emisor"]
-    settings.EMAIL_HOST_PASSWORD = config["password_emisor"]
-    settings.DEFAULT_FROM_EMAIL = config["correo_emisor"]
-
-
-def _config_basico():
-    """Config básica (emisor/password) sin armar listas, para aplicar a settings."""
     from .models import ConfiguracionCorreo
 
     cfg = ConfiguracionCorreo.cargar()
-    return {
-        "correo_emisor": cfg.emisor(fallback=settings.EMAIL_HOST_USER),
-        "password_emisor": cfg.emisor_password(fallback=settings.EMAIL_HOST_PASSWORD),
-    }
+    settings.EMAIL_HOST_USER = cfg.correo_emisor_valor()
+    settings.EMAIL_HOST_PASSWORD = cfg.password_emisor_valor()
+    settings.DEFAULT_FROM_EMAIL = cfg.default_from_email_valor() or cfg.correo_emisor_valor()
+    settings.EMAIL_HOST = cfg.smtp_host_valor()
+    settings.EMAIL_PORT = cfg.smtp_port_valor()
+    settings.EMAIL_USE_TLS = cfg.smtp_use_tls_valor()

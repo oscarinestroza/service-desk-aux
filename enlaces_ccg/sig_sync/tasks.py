@@ -148,7 +148,9 @@ def _enviar_correo_creacion(enlace):
         logger.warning("Sin destinatarios de notificación — saltando correo")
         return
 
-    password = enlace.password_sig or getattr(settings, "SIG_DEFAULT_PASSWORD", "")
+    from ..models import ConfiguracionSIG
+    cfg_sig = ConfiguracionSIG.cargar()
+    password = enlace.password_sig or cfg_sig.default_password_valor()
 
     asunto = f"Nuevo usuario SIG creado — {enlace.usuario_sig}"
     mensaje = (
@@ -230,7 +232,9 @@ def _enviar_correo_review(enlace, motivo):
         logger.warning("Sin correos de revisión configurados — saltando correo de revisión")
         return
 
-    password = enlace.password_sig or getattr(settings, "SIG_DEFAULT_PASSWORD", "")
+    from ..models import ConfiguracionSIG
+    cfg_sig = ConfiguracionSIG.cargar()
+    password = enlace.password_sig or cfg_sig.default_password_valor()
 
     asunto = f"[REVISIÓN] Falló creación SIG — {enlace.usuario_sig}"
     mensaje = (

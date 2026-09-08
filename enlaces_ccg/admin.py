@@ -352,14 +352,42 @@ class ConfiguracionCorreoForm(forms.ModelForm):
             ),
         }
 
+    def clean(self):
+        cleaned = super().clean()
+        # Validar que si hay correo_emisor, también haya password
+        emisor = cleaned.get("correo_emisor")
+        password = cleaned.get("password_emisor")
+        if emisor and not password:
+            self.add_error("password_emisor", "Requerido si se define un correo emisor.")
+        # Validar puerto SMTP
+        port = cleaned.get("smtp_port")
+        if port is not None and (port < 1 or port > 65535):
+            self.add_error("smtp_port", "Puerto inválido (1-65535).")
+        return cleaned
+
 
 @admin.register(ConfiguracionCorreo)
 class ConfiguracionCorreoAdmin(admin.ModelAdmin):
     form = ConfiguracionCorreoForm
     list_display = (
-        "correo_emisor", "correo_review", "correo_notificacion",
-        "actualizado_en",
+        "correo_emisor", "smtp_host", "smtp_port", "smtp_use_tls",
+        "correo_review", "correo_notificacion", "actualizado_en",
     )
+    fieldsets = (
+        ("Servidor SMTP", {
+            "fields": ("smtp_host", "smtp_port", "smtp_use_tls"),
+            "description": "Configuración del servidor de correo saliente.",
+        }),
+        ("Cuenta emisora", {
+            "fields": ("correo_emisor", "password_emisor", "default_from_email"),
+            "description": "Credenciales de la cuenta que enviará los correos.",
+        }),
+        ("Destinatarios", {
+            "fields": ("correo_review", "correo_notificacion"),
+            "description": "Listas separadas por punto y coma (;).",
+        }),
+    )
+    readonly_fields = ("actualizado_en", "creado_en")
 
     def has_add_permission(self, request):
         # Permitir solo un registro singleton
@@ -385,13 +413,37 @@ class ConfiguracionSIGForm(forms.ModelForm):
                 render_value=True,
                 attrs={"autocomplete": "new-password"},
             ),
+            "default_password": forms.PasswordInput(
+                render_value=True,
+                attrs={"autocomplete": "new-password"},
+            ),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        # Validar que si hay usuario, también haya password
+        usuario = cleaned.get("usuario")
+        password = cleaned.get("password")
+        if usuario and not password:
+            self.add_error("password", "Requerido si se define un usuario.")
+        return cleaned
 
 
 @admin.register(ConfiguracionSIG)
 class ConfiguracionSIGAdmin(admin.ModelAdmin):
     form = ConfiguracionSIGForm
     list_display = ("url", "usuario", "timeout", "actualizado_en")
+    fieldsets = (
+        ("Conexión SIG", {
+            "fields": ("url", "usuario", "password"),
+            "description": "Credenciales para el login automatizado en el SIG.",
+        }),
+        ("Opciones", {
+            "fields": ("default_password", "timeout"),
+            "description": "Contraseña por defecto para usuarios creados y timeout de Playwright.",
+        }),
+    )
+    readonly_fields = ("actualizado_en", "creado_en")
 
     def has_add_permission(self, request):
         # Permitir solo un registro singleton

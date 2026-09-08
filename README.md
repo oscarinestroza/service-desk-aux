@@ -49,6 +49,9 @@ SIG mediante automatización Playwright.
    Por defecto `.env.example` ya apunta a Postgres y Redis locales (ver paso 5).
    ⚠️ Genera un `SECRET_KEY` nuevo: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`.
 
+   > **Nota:** Las credenciales de **correo (SMTP)** y **SIG** ya **no se configuran en `.env`**.
+   > Se gestionan exclusivamente desde el panel de admin (ver sección "Configuración desde el panel de admin").
+
 5. **Levantar PostgreSQL y Redis (Docker Compose)**
 
    ```bash
@@ -119,6 +122,20 @@ Los permisos de cada grupo se gestionan desde la app (sesión **Grupos y permiso
 o desde el admin (`/admin/enlaces_ccg/permisogrupo/`).
 
 ## Configuración desde el panel de admin
+
+Toda la configuración sensible (correo y SIG) se gestiona **exclusivamente desde el admin**,
+eliminando la duplicidad con variables de entorno.
+
+- **Configuración SIG** (`/admin/enlaces_ccg/configuracionsig/`):
+  - URL base del SIG, usuario y contraseña para el login automatizado (Playwright).
+  - Contraseña por defecto para usuarios creados y timeout de Playwright.
+  - Sin estos datos la sincronización se omite.
+
+- **Configuración de correo** (`/admin/enlaces_ccg/configuracioncorreo/`):
+  - Servidor SMTP (host, puerto, TLS).
+  - Cuenta emisora (correo y contraseña de aplicación).
+  - From por defecto (opcional).
+  - Listas de correos de revisión y notificación (separados por `;`).
 
 - **Configuración SIG**: credenciales del login automatizado (Playwright) para
   sincronizar con el sistema externo SIG. Sin estos datos la sincronización se omite.

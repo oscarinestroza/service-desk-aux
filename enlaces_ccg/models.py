@@ -537,15 +537,58 @@ class ConfiguracionCorreo(models.Model):
     ConfiguracionCorreoAdmin.get_solo o el patrón get_or_create).
     """
 
+    # --- Servidor SMTP ---
+    smtp_host = models.CharField(
+        max_length=200,
+        blank=True,
+        default="smtp.office365.com",
+        help_text="Servidor SMTP (ej. smtp.office365.com).",
+        verbose_name="Servidor SMTP",
+    )
+    smtp_port = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        default=587,
+        help_text="Puerto SMTP (ej. 587 para TLS).",
+        verbose_name="Puerto SMTP",
+    )
+    smtp_use_tls = models.BooleanField(
+        default=True,
+        help_text="Usar TLS (STARTTLS) para la conexión.",
+        verbose_name="Usar TLS",
+    )
+
+    # --- Cuenta emisora ---
+    correo_emisor = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Cuenta SMTP que envía los correos (usuario/remitente).",
+        verbose_name="Correo emisor",
+    )
+    password_emisor = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Contraseña de aplicación de la cuenta emisora.",
+        verbose_name="Contraseña emisor",
+    )
+    default_from_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Dirección From por defecto (opcional, si difiere del emisor).",
+        verbose_name="From por defecto",
+    )
+
+    # --- Destinatarios ---
     correo_review = models.CharField(
         max_length=500,
         blank=True,
         default="",
         help_text=(
             "Correo(s) de revisión para creación manual de usuarios SIG "
-            "cuando falla la automatización. Separe varios correos con ';'."
+            "cuando falla la automatización. Separe varios con ';'."
         ),
-        verbose_name="Correo(s) de revisión (SIG_REVIEW_EMAIL)",
+        verbose_name="Correo(s) de revisión",
     )
     correo_notificacion = models.CharField(
         max_length=500,
@@ -553,23 +596,11 @@ class ConfiguracionCorreo(models.Model):
         default="",
         help_text=(
             "Correo(s) de notificación con credenciales cuando un usuario "
-            "SIG se crea exitosamente. Separe varios correos con ';'."
+            "SIG se crea exitosamente. Separe varios con ';'."
         ),
-        verbose_name="Correo(s) de notificación (SIG_NOTIFY_EMAIL)",
+        verbose_name="Correo(s) de notificación",
     )
-    correo_emisor = models.EmailField(
-        blank=True,
-        default="",
-        help_text="Cuenta SMTP que envía los correos (EMAIL_HOST_USER).",
-        verbose_name="Correo emisor (EMAIL_HOST_USER)",
-    )
-    password_emisor = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Contraseña de aplicación de la cuenta emisora (EMAIL_HOST_PASSWORD).",
-        verbose_name="Contraseña emisor (EMAIL_HOST_PASSWORD)",
-    )
+
     actualizado_en = models.DateTimeField(auto_now=True)
     creado_en = models.DateTimeField(auto_now_add=True)
 
@@ -580,28 +611,37 @@ class ConfiguracionCorreo(models.Model):
     def __str__(self):
         return "Configuración de correo"
 
-    def _aplicar_por_campo(self, campo, fallback):
-        valor = (getattr(self, campo) or "").strip()
-        return valor if valor else fallback
+    # --- Helpers sin fallback a settings ---
+    def smtp_host_valor(self) -> str:
+        return (self.smtp_host or "").strip() or "smtp.office365.com"
 
-    def emisor(self, fallback=None):
-        return self._aplicar_por_campo("correo_emisor", fallback or "")
+    def smtp_port_valor(self) -> int:
+        return self.smtp_port or 587
 
-    def emisor_password(self, fallback=None):
-        return self._aplicar_por_campo("password_emisor", fallback or "")
+    def smtp_use_tls_valor(self) -> bool:
+        return self.smtp_use_tls
 
-    def review_lista(self, fallback=None):
+    def correo_emisor_valor(self) -> str:
+        return (self.correo_emisor or "").strip()
+
+    def password_emisor_valor(self) -> str:
+        return (self.password_emisor or "").strip()
+
+    def default_from_email_valor(self) -> str:
+        return (self.default_from_email or "").strip()
+
+    def review_lista(self) -> list[str]:
         """Lista de correos de revisión (separados por ';')."""
-        return self._separar("correo_review", fallback)
-
-    def notificacion_lista(self, fallback=None):
-        """Lista de correos de notificación (separados por ';')."""
-        return self._separar("correo_notificacion", fallback)
-
-    def _separar(self, campo, fallback):
-        valor = (getattr(self, campo) or "").strip()
+        valor = (self.correo_review or "").strip()
         if not valor:
-            return list(fallback) if fallback else []
+            return []
+        return [c.strip() for c in valor.split(";") if c.strip()]
+
+    def notificacion_lista(self) -> list[str]:
+        """Lista de correos de notificación (separados por ';')."""
+        valor = (self.correo_notificacion or "").strip()
+        if not valor:
+            return []
         return [c.strip() for c in valor.split(";") if c.strip()]
 
     @classmethod
@@ -642,8 +682,8 @@ class PermisoGrupo(models.Model):
 class ConfiguracionSIG(models.Model):
     """Credenciales/parámetros del SIG para sincronización (Playwright).
 
-    Modelo singleton: solo debe existir UN registro (ver
-    ConfiguracionSIGAdmin). Cada valor vacío cae al fallback de settings.
+    Modelo singleton: solo debe existir UN registro (ver ConfiguracionSIGAdmin).
+    La configuración se gestiona exclusivamente desde el admin UI.
     """
 
     url = models.CharField(
@@ -651,27 +691,35 @@ class ConfiguracionSIG(models.Model):
         blank=True,
         default="",
         help_text="URL base del SIG (p. ej. https://sig.gia.mx/webapp/).",
-        verbose_name="URL del SIG (SIG_URL)",
+        verbose_name="URL del SIG",
     )
     usuario = models.CharField(
         max_length=150,
         blank=True,
         default="",
-        help_text="Usuario para el login automatizado del SIG (SIG_USER).",
-        verbose_name="Usuario (SIG_USER)",
+        help_text="Usuario para el login automatizado del SIG.",
+        verbose_name="Usuario",
     )
     password = models.CharField(
         max_length=255,
         blank=True,
         default="",
-        help_text="Contraseña para el login automatizado del SIG (SIG_PASSWORD).",
-        verbose_name="Contraseña (SIG_PASSWORD)",
+        help_text="Contraseña para el login automatizado del SIG.",
+        verbose_name="Contraseña",
+    )
+    default_password = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Contraseña por defecto para usuarios SIG creados.",
+        verbose_name="Contraseña por defecto",
     )
     timeout = models.PositiveIntegerField(
         blank=True,
         null=True,
-        help_text="Tiempo de espera (segundos) para Playwright (SIG_TIMEOUT).",
-        verbose_name="Timeout en segundos (SIG_TIMEOUT)",
+        default=30,
+        help_text="Tiempo de espera (segundos) para Playwright.",
+        verbose_name="Timeout (segundos)",
     )
     actualizado_en = models.DateTimeField(auto_now=True)
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -683,19 +731,21 @@ class ConfiguracionSIG(models.Model):
     def __str__(self):
         return "Configuración SIG"
 
-    def url_valor(self, fallback=None):
-        return (self.url or "").strip() or fallback
+    # --- Helpers sin fallback a settings ---
+    def url_valor(self) -> str:
+        return (self.url or "").strip()
 
-    def usuario_valor(self, fallback=None):
-        return (self.usuario or "").strip() or fallback
+    def usuario_valor(self) -> str:
+        return (self.usuario or "").strip()
 
-    def password_valor(self, fallback=None):
-        return (self.password or "").strip() or fallback
+    def password_valor(self) -> str:
+        return (self.password or "").strip()
 
-    def timeout_valor(self, fallback=None):
-        if self.timeout:
-            return self.timeout
-        return fallback
+    def default_password_valor(self) -> str:
+        return (self.default_password or "").strip()
+
+    def timeout_valor(self) -> int:
+        return self.timeout or 30
 
     @classmethod
     def cargar(cls):
