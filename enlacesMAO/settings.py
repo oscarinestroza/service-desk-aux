@@ -35,6 +35,16 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# Detrás del proxy de Coolify (Traefik termina TLS): marca la petición como
+# segura y permite el check CSRF del login/admin con esquema https.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+    .split(",")
+    if o.strip()
+]
+
 # Auth redirects
 LOGIN_URL = "/login/"
 LOGOUT_URL = "/logout/"
