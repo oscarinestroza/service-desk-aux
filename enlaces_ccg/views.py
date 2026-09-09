@@ -474,81 +474,72 @@ def lista_instituciones(request):
     )
 
 
-@requiere(CAP_DIRECTORIO)
-def lista_enlaces(request):
-    """Muestra todos los enlaces autorizados del CCG con buscador."""
-    vista = request.GET.get("vista", "activos")
-    if vista not in ("activos", "inactivos", "todos"):
-        vista = "activos"
-    busqueda = request.GET.get("q", "").strip()
-    col = request.GET.get("col", "todas").strip()
-    edificio_id = request.GET.get("edificio", "")
-    niveles = request.GET.getlist("niveles")
+# ---------------------------------------------------------------------------
+# Helper: filtrado común de enlaces (lista global y captura de correos)
+# ---------------------------------------------------------------------------
+def _filtrar_enlaces(params, institucion=None):
+    """
+    Devuelve queryset de EnlaceAutorizado filtrado según parámetros.
+    params: request.GET (QueryDict)
+    institucion: Instancia Institucion (None para lista global)
+    """
+    if institucion:
+        # Perfil institución: filtro por vista_enlaces (venlaces)
+        qs = institucion.enlaces.all()
+        vista = params.get("venlaces", "activos")
+        if vista == "activos":
+            qs = qs.filter(estado="ACTIVO")
+        elif vista == "inactivos":
+            qs = qs.filter(estado="INACTIVO")
+        # "todos" = sin filtro de estado
+        return qs.order_by("primer_apellido", "segundo_apellido", "nombres")
 
-    # Opciones de columna para el buscador (clave → etiqueta)
-    COLUMNAS_BUSQUEDA = [
-        ("todas", "Todas las columnas"),
-        ("nombre", "Nombre"),
-        ("institucion", "Institución"),
-        ("siglas", "Siglas de institución"),
-        ("correo", "Correo (principal o secundario)"),
-        ("telefono", "Teléfono (principal o secundario)"),
-        ("nivel", "Nivel de referencia"),
-    ]
-    # Validar columna elegida
-    if col not in dict(COLUMNAS_BUSQUEDA):
-        col = "todas"
-
-    enlaces = EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
+    # Lista global
+    qs = EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
         "institucion__edificio"
     )
 
+    vista = params.get("vista", "activos")
     if vista == "activos":
-        enlaces = enlaces.filter(estado="ACTIVO").exclude(
+        qs = qs.filter(estado="ACTIVO").exclude(
             institucion__nombre__icontains="OPERADORA CC"
         )
     elif vista == "inactivos":
-        enlaces = enlaces.filter(estado="INACTIVO")
-    # vista == "todos" -> no filtrar por estado (incluye OPERADORA CC)
+        qs = qs.filter(estado="INACTIVO")
+    # vista == "todos" -> sin filtro de estado
+
+    busqueda = params.get("q", "").strip()
+    col = params.get("col", "todas").strip()
+    edificio_id = params.get("edificio", "")
+    niveles = params.getlist("niveles")
 
     if edificio_id.isdigit():
-        enlaces = enlaces.filter(institucion__edificio__id=edificio_id)
+        qs = qs.filter(institucion__edificio__id=edificio_id)
         if niveles:
-            # Filtro por nivel. `contains` (jsonb @>) no lo soporta SQLite
-            # (solo PostgreSQL), así que se evalúa del lado Python sobre la
-            # lista JSON del modelo, portable entre ambos backends.
             inst_ids = [
                 ie.institucion_id
                 for ie in InstitucionEdificio.objects.filter(edificio_id=int(edificio_id))
                 if any(n in (ie.nivel or []) for n in niveles)
             ]
-            enlaces = enlaces.filter(institucion_id__in=inst_ids)
+            qs = qs.filter(institucion_id__in=inst_ids)
 
     if busqueda:
-        if col == "nombre":
-            enlaces = enlaces.filter(
-                Q(nombres__icontains=busqueda)
-                | Q(primer_apellido__icontains=busqueda)
-                | Q(segundo_apellido__icontains=busqueda)
-            )
-        elif col == "institucion":
-            enlaces = enlaces.filter(institucion__nombre__icontains=busqueda)
-        elif col == "siglas":
-            enlaces = enlaces.filter(institucion__siglas__icontains=busqueda)
-        elif col == "correo":
-            enlaces = enlaces.filter(
-                Q(correo_principal__icontains=busqueda)
-                | Q(correo_secundario__icontains=busqueda)
-            )
-        elif col == "telefono":
-            enlaces = enlaces.filter(
-                Q(telefono_principal__icontains=busqueda)
-                | Q(telefono_secundario__icontains=busqueda)
-            )
-        elif col == "nivel":
-            enlaces = enlaces.filter(nivel_referencia__icontains=busqueda)
-        else:  # "todas"
-            enlaces = enlaces.filter(
+        COLUMNAS_BUSQUEDA = {
+            "todas": None,
+            "nombre": ["nombres", "primer_apellido", "segundo_apellido"],
+            "institucion": ["institucion__nombre"],
+            "siglas": ["institucion__siglas"],
+            "correo": ["correo_principal", "correo_secundario"],
+            "telefono": ["telefono_principal", "telefono_secundario"],
+            "nivel": ["nivel_referencia"],
+        }
+        if col in COLUMNAS_BUSQUEDA and COLUMNAS_BUSQUEDA[col]:
+            q_objects = Q()
+            for campo in COLUMNAS_BUSQUEDA[col]:
+                q_objects |= Q(**{f"{campo}__icontains": busqueda})
+            qs = qs.filter(q_objects)
+        elif col == "todas":
+            qs = qs.filter(
                 Q(nombres__icontains=busqueda)
                 | Q(primer_apellido__icontains=busqueda)
                 | Q(segundo_apellido__icontains=busqueda)
@@ -562,30 +553,97 @@ def lista_enlaces(request):
                 | Q(institucion__siglas__icontains=busqueda)
             )
 
-    enlaces = enlaces.order_by(
-        "institucion__nombre",
-        "primer_apellido",
-        "segundo_apellido",
-        "nombres",
-    )
+    return qs.order_by("institucion__nombre", "primer_apellido", "segundo_apellido", "nombres")
+
+
+@requiere(CAP_DIRECTORIO)
+def lista_enlaces(request):
+    """Muestra todos los enlaces autorizados del CCG con buscador."""
+    # Validación de parámetros para el template
+    vista = request.GET.get("vista", "activos")
+    if vista not in ("activos", "inactivos", "todos"):
+        vista = "activos"
+    col = request.GET.get("col", "todas").strip()
+    COLUMNAS_BUSQUEDA = [
+        ("todas", "Todas las columnas"),
+        ("nombre", "Nombre"),
+        ("institucion", "Institución"),
+        ("siglas", "Siglas de institución"),
+        ("correo", "Correo (principal o secundario)"),
+        ("telefono", "Teléfono (principal o secundario)"),
+        ("nivel", "Nivel de referencia"),
+    ]
+    if col not in dict(COLUMNAS_BUSQUEDA):
+        col = "todas"
+
+    # Usar helper de filtrado compartido
+    enlaces = _filtrar_enlaces(request.GET, institucion=None)
+
     edificios = Edificio.objects.order_by("nombre")
-    qs_niveles = "".join("&niveles={}".format(quote(n)) for n in niveles)
+    qs_niveles = "".join("&niveles={}".format(quote(n)) for n in request.GET.getlist("niveles"))
     return render(
         request,
         "enlaces_ccg/lista_enlaces.html",
         {
             "enlaces": enlaces,
             "vista": vista,
-            "busqueda": busqueda,
+            "busqueda": request.GET.get("q", "").strip(),
             "col": col,
             "columnas_busqueda": COLUMNAS_BUSQUEDA,
             "edificios": edificios,
-            "edificio_id": edificio_id,
-            "niveles": niveles,
+            "edificio_id": request.GET.get("edificio", ""),
+            "niveles": request.GET.getlist("niveles"),
             "qs_niveles": qs_niveles,
             "NIVEL_CHOICES": Institucion.NIVEL_CHOICES,
         },
     )
+
+
+@requiere(CAP_DIRECTORIO)
+def copiar_correos_enlaces(request):
+    """Devuelve JSON con correos primarios y secundarios de los enlaces filtrados.
+
+    Parámetros GET (mismos que lista_enlaces o perfil_institucion):
+    - institucion=<pk> (opcional): si se proporciona, filtra por esa institución
+    - Los demás parámetros (vista, q, col, edificio, niveles, venlaces)
+      se pasan al helper _filtrar_enlaces.
+
+    Respuesta JSON:
+    {
+        "ok": true,
+        "correos": ["a@b.com", "c@d.com", ...],
+        "total": 42,
+        "formato": "semicolon"
+    }
+    """
+    institucion_pk = request.GET.get("institucion")
+    institucion = None
+    if institucion_pk and institucion_pk.isdigit():
+        institucion = get_object_or_404(Institucion, pk=institucion_pk)
+
+    qs = _filtrar_enlaces(request.GET, institucion=institucion)
+
+    # Extraer correos (principal + secundario) sin sorted(), solo deduplicar
+    correos = []
+    vistos = set()
+    for e in qs:
+        if e.correo_principal:
+            c = e.correo_principal.strip().lower()
+            if c not in vistos:
+                vistos.add(c)
+                correos.append(c)
+        if e.correo_secundario:
+            c = e.correo_secundario.strip().lower()
+            if c not in vistos:
+                vistos.add(c)
+                correos.append(c)
+
+    return JsonResponse({
+        "ok": True,
+        "correos": correos,
+        "total": len(correos),
+        "formato": "semicolon"
+    })
 
 
 @requiere(CAP_DIRECTORIO)

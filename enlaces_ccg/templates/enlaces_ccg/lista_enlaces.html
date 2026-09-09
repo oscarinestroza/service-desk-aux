@@ -13,6 +13,13 @@
 </button>
 {% endif %}
 
+<!-- Botón Capturar Correos (CCO) -->
+<button type="button" class="btn btn-primary btn-sm" id="btnCapturarCorreos"
+        data-url="{% url 'enlaces_ccg:copiar_correos_enlaces' %}"
+        title="Capturar correos primarios y secundarios de la lista filtrada (formato CCO)">
+    <i class="fas fa-copy me-1"></i> Capturar Correos
+</button>
+
 <!-- Dropdown Descargar Excel -->
 <div class="dropdown dropdown-export">
     <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button"
@@ -289,4 +296,86 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Capturar Correos (CCO) - Clipboard API + fallback
+document.getElementById('btnCapturarCorreos')?.addEventListener('click', async function () {
+    const btn = this;
+    // Construir URL con los MISMOS parámetros GET actuales (respeta filtros activos)
+    const params = new URLSearchParams(window.location.search);
+    const url = btn.dataset.url + (params.toString() ? '?' + params.toString() : '');
+
+    try {
+        const resp = await fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Error');
+
+        // Formato CCO: correos separados por "; "
+        const texto = data.correos.join('; ');
+
+        // Clipboard API (moderno, requiere HTTPS o localhost)
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(texto);
+            showToast(`${data.total} correos capturados (formato CCO)`);
+            return;
+        }
+
+        // Fallback legacy (HTTP sin HTTPS)
+        fallbackCopiar(texto, data.total);
+
+    } catch (e) {
+        console.error(e);
+        alert('Error al capturar correos: ' + e.message);
+    }
+});
+
+function fallbackCopiar(texto, total) {
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast(`${total} correos capturados (fallback)`);
+    } catch (e) {
+        console.error(e);
+        alert('No se pudo copiar automáticamente. Seleccione y copie manualmente.');
+    }
+    document.body.removeChild(ta);
+}
+
+function showToast(msg) {
+    // Toast simple usando Bootstrap 5
+    const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        c.style.zIndex = '1080';
+        document.body.appendChild(c);
+        return c;
+    })();
+
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-success border-0';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${msg}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+    `;
+    container.appendChild(toast);
+    const bs = new bootstrap.Toast(toast, { delay: 3000 });
+    bs.show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+</script>
 {% endblock %}
