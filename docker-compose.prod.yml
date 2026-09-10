@@ -16,7 +16,7 @@ services:
     container_name: enlacesmao_web
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "7070:7070"
     env_file:
       - .env
     environment:
