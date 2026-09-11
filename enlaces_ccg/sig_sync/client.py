@@ -13,7 +13,6 @@ Selectors basados en el HTML del SIG:
   - Catálogo: /webapp/admin/Seguridad/Usuario
 """
 
-import hashlib
 import logging
 import re
 import time
@@ -72,11 +71,6 @@ DEFAULT_SIG_VALUES = {
     "estatus_activo": "1",       # Activo
     "estatus_inactivo": "2",     # Inactivo
 }
-
-
-def _sha256(text):
-    """SHA-256 de un string (requerido por el SIG para passwords)."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def config_sig():
@@ -640,7 +634,7 @@ class SIGClient:
         # ---- Campos de texto ----
         self._safe_send_keys(SEL["usuario"], enlace.usuario_sig)
         pwd = enlace.password_sig or self._password_default
-        self._safe_send_keys(SEL["password"], _sha256(pwd))
+        self._safe_send_keys(SEL["password"], pwd)
         self._safe_send_keys(SEL["nombre"], enlace.nombres)
         self._safe_send_keys(SEL["apellido_paterno"], enlace.primer_apellido)
         self._safe_send_keys(SEL["apellido_materno"], enlace.segundo_apellido or "")

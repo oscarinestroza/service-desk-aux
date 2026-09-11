@@ -119,11 +119,12 @@ def _adjuntos_carpeta_nuevos_enlaces():
 def _enviar_correo_creacion(enlace):
     """Envía correo de notificación con credenciales del nuevo usuario SIG.
 
-    - En PRUEBA (settings.DEBUG=True): el correo va SOLO a los correos
-      configurados en ConfiguracionCorreo.correo_notificacion (nunca al
-      correo_principal del enlace, porque ya se les notifica manualmente).
-    - En PRODUCCIÓN (settings.DEBUG=False): se envía al correo_principal
-      del enlace creado, añadiendo los correos configurados como adicionales.
+    - Si settings.MAIL_NOTIFICAR_USUARIO es false: el correo va SOLO a los
+      correos configurados en ConfiguracionCorreo.correo_notificacion (nunca
+      al correo_principal del enlace). Útil durante pruebas sin depender de
+      DEBUG (así no se exponen secretos en páginas de error).
+    - Si es true (default): se envía al correo_principal del enlace creado,
+      añadiendo los correos configurados como adicionales.
 
     Se evitan destinatarios duplicados.
     """
@@ -132,7 +133,7 @@ def _enviar_correo_creacion(enlace):
 
     extras = obtener_config_correo()["correo_notificacion"]
 
-    if getattr(settings, "DEBUG", False):
+    if not getattr(settings, "MAIL_NOTIFICAR_USUARIO", True):
         # Fase de prueba: solo a los correos configurados
         destinatarios = [c for c in extras if c]
     else:

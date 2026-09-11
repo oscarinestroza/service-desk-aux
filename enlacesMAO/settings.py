@@ -31,6 +31,16 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-change-me")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("1", "true", "yes")
 
+# Controla el envío del correo de notificación al correo_principal del enlace.
+# true (default): se envía al usuario del enlace + correos_notificacion.
+# false: solo a los correos_notificacion configurados (útil durante pruebas).
+# Desacoplado de DEBUG para no exponer secretos en páginas de error.
+MAIL_NOTIFICAR_USUARIO = os.environ.get("MAIL_NOTIFICAR_USUARIO", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if h.strip()
