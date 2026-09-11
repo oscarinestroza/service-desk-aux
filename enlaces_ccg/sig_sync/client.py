@@ -118,6 +118,8 @@ class SIGClient:
         self.page = None
         self._headless = headless
         self._sweetalert_confirmado = False
+        self._sweetalert_error = False
+        self._sweetalert_texto = ""
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -480,26 +482,82 @@ class SIGClient:
             return False
 
     def _handle_sweetalert(self):
-        """Confirma el popup de SweetAlert2 si aparece.
+        """Espera un popup SweetAlert2 y lo clasifica como éxito o fallo.
 
-        El criterio de éxito de una creación en el SIG es la aparición de
-        este popup: aun cuando falle la extracción del ID o cualquier paso
-        posterior, el usuario queda creado en el SIG con solo aparecer la
-        confirmación.
+        Criterio: si el popup tiene título "Advertencia" o icono de
+        error/advertencia (.swal2-warning/.swal2-error), se trata como un
+        fallo (el SIG rechazó la operación). Cualquier otro popup se
+        considera éxito.
+
+        Resultado en:
+            self._sweetalert_confirmado: True si fue éxito.
+            self._sweetalert_error: True si fue fallo (advertencia/error).
+            self._sweetalert_texto: texto del popup (para mensajes de error).
 
         Returns:
-            True si apareció un popup (confirmado), False si no apareció.
+            True si apareció un popup (éxito o fallo), False si no apareció.
         """
+        self._sweetalert_confirmado = False
+        self._sweetalert_error = False
+        self._sweetalert_texto = ""
         try:
-            confirm_btn = self.page.locator(
+            popup = self.page.locator(".swal2-popup")
+            popup.wait_for(state="visible", timeout=8000)
+
+            # Leer texto del popup (título + cuerpo)
+            titulo = ""
+            cuerpo = ""
+            try:
+                titulo_el = popup.locator(".swal2-title")
+                if titulo_el.count():
+                    titulo = (titulo_el.first.inner_text() or "").strip()
+            except Exception:
+                pass
+            try:
+                cuerpo_el = popup.locator(
+                    ".swal2-html-container, .swal2-content"
+                )
+                if cuerpo_el.count():
+                    cuerpo = (cuerpo_el.first.inner_text() or "").strip()
+            except Exception:
+                pass
+            texto = f"{titulo}: {cuerpo}" if titulo and cuerpo else titulo or cuerpo
+
+            # Detectar error / advertencia
+            error = False
+            try:
+                if popup.locator(
+                    ".swal2-icon.swal2-error, .swal2-icon.swal2-warning"
+                ).count():
+                    error = True
+            except Exception:
+                pass
+            if not error and titulo.lower() == "advertencia":
+                error = True
+
+            # Cerrar el popup
+            confirm_btn = popup.locator(
                 ".swal2-confirm, .swal2-actions button:first-child"
             ).first
-            confirm_btn.wait_for(state="visible", timeout=8000)
-            confirm_btn.click()
+            confirm_btn.click(timeout=5000)
             time.sleep(1)
+
+            self._sweetalert_texto = texto or (
+                "Advertencia del SIG" if error else ""
+            )
+            if error:
+                self._sweetalert_error = True
+                self._sweetalert_confirmado = False
+                self._screenshot("sweetalert_error")
+            else:
+                self._sweetalert_confirmado = True
+                self._sweetalert_error = False
             return True
         except Exception:
             logger.info("No apareció SweetAlert2 popup")
+            self._sweetalert_confirmado = False
+            self._sweetalert_error = False
+            self._sweetalert_texto = ""
             return False
 
     def logout(self):
@@ -905,7 +963,13 @@ class SIGClient:
 
             if accion == "crear":
                 sig_id = self.crear_usuario(enlace)
-                if self._sweetalert_confirmado:
+                if self._sweetalert_error:
+                    result["exitoso"] = False
+                    result["mensaje"] = (
+                        self._sweetalert_texto
+                        or "El SIG no creó el usuario (advertencia del SIG)"
+                    )
+                elif self._sweetalert_confirmado:
                     result["exitoso"] = True
                     result["usuario_sig_id"] = sig_id or ""
                     result["mensaje"] = (
@@ -918,13 +982,27 @@ class SIGClient:
 
             elif accion == "reactivar":
                 self.reactivar_usuario(enlace.usuario_sig)
-                result["exitoso"] = True
-                result["mensaje"] = "Usuario reactivado exitosamente"
+                if self._sweetalert_error:
+                    result["exitoso"] = False
+                    result["mensaje"] = (
+                        self._sweetalert_texto
+                        or "El SIG no reactivó el usuario (advertencia del SIG)"
+                    )
+                else:
+                    result["exitoso"] = True
+                    result["mensaje"] = "Usuario reactivado exitosamente"
 
             elif accion == "deshabilitar":
                 self.deshabilitar_usuario(enlace.usuario_sig)
-                result["exitoso"] = True
-                result["mensaje"] = "Usuario deshabilitado exitosamente"
+                if self._sweetalert_error:
+                    result["exitoso"] = False
+                    result["mensaje"] = (
+                        self._sweetalert_texto
+                        or "El SIG no deshabilitó el usuario (advertencia del SIG)"
+                    )
+                else:
+                    result["exitoso"] = True
+                    result["mensaje"] = "Usuario deshabilitado exitosamente"
 
             else:
                 result["mensaje"] = f"Acción desconocida: {accion}"

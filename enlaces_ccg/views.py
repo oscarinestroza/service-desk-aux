@@ -506,6 +506,11 @@ def _filtrar_enlaces(params, institucion=None):
         )
     elif vista == "inactivos":
         qs = qs.filter(estado="INACTIVO")
+    elif vista == "pendientes":
+        # Activos pendientes de sincronizar con el SIG
+        qs = qs.filter(estado="ACTIVO", sincronizado=False).exclude(
+            institucion__nombre__icontains="OPERADORA CC"
+        )
     # vista == "todos" -> sin filtro de estado
 
     busqueda = params.get("q", "").strip()
@@ -561,7 +566,7 @@ def lista_enlaces(request):
     """Muestra todos los enlaces autorizados del CCG con buscador."""
     # Validación de parámetros para el template
     vista = request.GET.get("vista", "activos")
-    if vista not in ("activos", "inactivos", "todos"):
+    if vista not in ("activos", "inactivos", "todos", "pendientes"):
         vista = "activos"
     col = request.GET.get("col", "todas").strip()
     COLUMNAS_BUSQUEDA = [
@@ -921,6 +926,7 @@ def detalle_enlace_json(request, pk):
         "edificio_id": primer_edificio_id,
         "edificio": edificios_nombre,
         "edificio_siglas": edificios_siglas,
+        "sincronizado": enlace.sincronizado,
         "comentarios": enlace.comentarios or "",
         "fecha_alta": enlace.fecha_alta.isoformat() if enlace.fecha_alta else "",
         "oficio_alta": enlace.oficio_alta or "",
@@ -974,6 +980,7 @@ def editar_enlace(request, pk):
         "nombre_sig": data.get("nombre_sig", "").strip(),
         "pin_sig": data.get("pin_sig", "").strip(),
         "nivel_referencia": data.get("nivel_referencia", "").strip(),
+        "sincronizado": data.get("sincronizado") == "1",
         "estado": data.get("estado", enlace.estado),
         "comentarios": data.get("comentarios", "").strip(),
         "oficio_alta": data.get("oficio_alta", "").strip(),
@@ -1278,6 +1285,7 @@ def enlaces_activos_institucion_json(request, pk):
             "telefono": e.telefono_principal or "",
             "estado": e.estado,
             "estado_display": e.get_estado_display(),
+            "sincronizado": e.sincronizado,
         })
     ed_niveles = list(
         InstitucionEdificio.objects.filter(institucion=inst).select_related("edificio")
@@ -1643,6 +1651,9 @@ def importar_enlaces(request):
                             "estado": _normalizar_estado(_val("estado")),
                             "nivel_referencia": _val("nivel_referencia")[:150],
                             "usuario_sig": usuario_sig,
+                            # La importación marca sincronizado por defecto (aunque
+                            # no venga en el Excel): los datos ya existen en el SIG.
+                            "sincronizado": True,
                             "password_sig": _val("password_sig")[:128],
                             "nombre_sig": _val("nombre_sig")[:100],
                             "pin_sig": _val("pin_sig")[:10],

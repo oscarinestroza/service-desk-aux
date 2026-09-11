@@ -205,6 +205,7 @@ class EnlaceAutorizadoAdmin(admin.ModelAdmin):
         "segundo_apellido",
         "institucion",
         "estado",
+        "sincronizado",
         "correo_principal",
         "usuario_sig",
     )

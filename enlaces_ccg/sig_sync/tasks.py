@@ -358,6 +358,10 @@ def crear_enlace_sig(enlace_id):
             log.usuario_sig_id = result.get("usuario_sig_id", "")
             log.save(update_fields=["estado", "mensaje", "usuario_sig_id"])
             logger.info("Enlace %s creado en SIG", enlace_id)
+            # Marcar enlace como sincronizado sin re-disparar el signal
+            enlace._sig_sync_desactivado = True
+            enlace.sincronizado = True
+            enlace.save(update_fields=["sincronizado", "actualizado_en"])
             _enviar_correo_creacion(enlace)
         else:
             log.estado = "error"
@@ -409,6 +413,11 @@ def deshabilitar_enlace_sig(enlace_id):
         log.mensaje = str(e)
         log.save(update_fields=["estado", "mensaje"])
         logger.exception("Error deshabilitando enlace %s", enlace_id)
+        # Si falló la deshabilitación en el SIG, el estado quedó inconsistente:
+        # desmarcar sincronizado para que se note y se pueda reintentar.
+        enlace._sig_sync_desactivado = True
+        enlace.sincronizado = False
+        enlace.save(update_fields=["sincronizado", "actualizado_en"])
 
 
 @shared_task
@@ -447,6 +456,11 @@ def reactivar_enlace_sig(enlace_id):
         log.mensaje = str(e)
         log.save(update_fields=["estado", "mensaje"])
         logger.exception("Error reactivando enlace %s", enlace_id)
+        # Si falló la reactivación en el SIG, el estado quedó inconsistente:
+        # desmarcar sincronizado para que se note y se pueda reintentar.
+        enlace._sig_sync_desactivado = True
+        enlace.sincronizado = False
+        enlace.save(update_fields=["sincronizado", "actualizado_en"])
 
 
 @shared_task

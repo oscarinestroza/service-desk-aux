@@ -67,7 +67,11 @@
             margin: 0;
             flex: 1 1 auto;
             overflow-y: auto;
+            scrollbar-width: none;
             min-height: 0;
+        }
+        .app-sidebar .sidebar-nav::-webkit-scrollbar {
+            display: none;
         }
         .app-sidebar .sidebar-nav .nav-section {
             padding: 0.7rem 1.25rem 0.3rem;
@@ -713,6 +717,7 @@
                     <form id="formEditarEnlace">
                         <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
                         <input type="hidden" id="edEnlaceId" value="">
+                        <input type="hidden" name="sincronizado" id="edSincronizado" value="0">
 
                         <div class="ccg-editor-head">
                             <div class="row g-3 align-items-end">
@@ -894,6 +899,12 @@
                                 </button>
                             </form>
                         </div>
+                    </div>
+                    <div id="edSincronizadoWrap" class="mt-3 form-check">
+                        <input class="form-check-input" type="checkbox" id="edSincronizadoCheck">
+                        <label class="form-check-label fw-semibold" for="edSincronizadoCheck">
+                            <i class="fas fa-link me-1"></i>Sincronizado con el SIG
+                        </label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1295,6 +1306,10 @@ let contactoContenido = `
             if (contrasenaSigWrap) {
                 contrasenaSigWrap.style.display = modoCreacion ? '' : 'none';
             }
+            const sincWrap = document.getElementById('edSincronizadoWrap');
+            if (sincWrap) {
+                sincWrap.style.display = modoCreacion ? 'none' : '';
+            }
             if (!modoCreacion) {
                 document.getElementById('edPasswordSig').value = '';
             }
@@ -1325,6 +1340,9 @@ let contactoContenido = `
             document.getElementById('edEnlaceId').value = '';
             document.getElementById('edEstado').value = 'ACTIVO';
             document.getElementById('edNombreSig').value = '';
+            document.getElementById('edSincronizado').value = '0';
+            const sincCheck = document.getElementById('edSincronizadoCheck');
+            if (sincCheck) sincCheck.checked = false;
             document.getElementById('edInstitucionId').value = '';
             document.getElementById('edInstitucionBusca').value = '';
             document.getElementById('edInstitucionDropdown').style.display = 'none';
@@ -1375,6 +1393,9 @@ let contactoContenido = `
                     document.getElementById('edInstitucionId').value = d.institucion_id || '';
                     document.getElementById('edInstitucionBusca').value = d.institucion + (d.siglas ? ' (' + d.siglas + ')' : '');
                     document.getElementById('edEdificio').value = d.edificio ? (d.edificio + (d.edificio_siglas ? ' (' + d.edificio_siglas + ')' : '')) : '';
+                    document.getElementById('edSincronizado').value = d.sincronizado ? '1' : '0';
+                    const sincCheck = document.getElementById('edSincronizadoCheck');
+                    if (sincCheck) sincCheck.checked = !!d.sincronizado;
                     actualizarNombrePreview();
                     setModo();
                     modalEditar.show();
@@ -1451,6 +1472,11 @@ let contactoContenido = `
             if (!e.target.closest('#edInstitucionBusca') && !e.target.closest('#edInstitucionDropdown')) {
                 document.getElementById('edInstitucionDropdown').style.display = 'none';
             }
+        });
+
+        // Sincronizado: sincronizar checkbox ↔ input hidden
+        document.getElementById('edSincronizadoCheck')?.addEventListener('change', function () {
+            document.getElementById('edSincronizado').value = this.checked ? '1' : '0';
         });
 
         // Guardar (crear o editar)
@@ -1800,7 +1826,7 @@ let contactoContenido = `
                         return;
                     }
                     body.innerHTML = d.enlaces.map(e => `
-                        <tr>
+                        <tr class="${e.sincronizado ? '' : 'table-warning'}">
                             <td class="cell-name fw-semibold">${escapeHtmlUnsafe(e.nombre)}</td>
                             <td>${escapeHtmlUnsafe(e.correo)}</td>
                             <td>${escapeHtmlUnsafe(e.telefono)}</td>

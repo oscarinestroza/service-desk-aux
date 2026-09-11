@@ -103,11 +103,11 @@
                 <input type="text" name="q" class="form-control form-control-sm"
                        placeholder="Buscar..."
                        value="{{ busqueda|default:'' }}">
-{% if vista == 'todos' %}<input type="hidden" name="vista" value="todos">{% endif %}
+{% if vista != 'activos' %}<input type="hidden" name="vista" value="{{ vista }}">{% endif %}
                 {% if edificio_id %}<input type="hidden" name="edificio" value="{{ edificio_id }}">{% endif %}
                 {% for n in niveles %}<input type="hidden" name="niveles" value="{{ n }}">{% endfor %}
                 {% if busqueda %}
-                <a href="?{% if vista == 'todos' %}vista=todos&{% endif %}{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}{{ qs_niveles }}" class="btn btn-outline-secondary btn-sm">
+                <a href="?{% if vista != 'activos' %}vista={{ vista }}&{% endif %}{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}{{ qs_niveles }}" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-times"></i>
                 </a>
                 {% endif %}
@@ -169,6 +169,10 @@
         <a class="nav-link {% if vista == 'todos' %}active{% endif %}"
            href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=todos{% if busqueda %}&q={{ busqueda }}{% endif %}{% if col != 'todas' %}&col={{ col }}{% endif %}{{ qs_niveles }}">Mostrar todos</a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'pendientes' %}active{% endif %}"
+           href="?{% if edificio_id %}edificio={{ edificio_id }}&{% endif %}vista=pendientes{% if busqueda %}&q={{ busqueda }}{% endif %}{% if col != 'todas' %}&col={{ col }}{% endif %}{{ qs_niveles }}">Pendientes de Sincronizar</a>
+    </li>
 </ul>
 
 {% if enlaces %}
@@ -188,7 +192,7 @@
         </thead>
         <tbody>
             {% for enlace in enlaces %}
-            <tr>
+            <tr{% if not enlace.sincronizado %} class="table-warning"{% endif %}>
                 <td class="ps-3 ccg-actions">
                     <button class="btn btn-outline-info btn-sm btn-ver-enlace"
                             data-pk="{{ enlace.pk }}" title="Ver detalles">
@@ -268,13 +272,15 @@
             No hay enlaces registrados.
         {% elif vista == 'inactivos' %}
             No hay enlaces inactivos.
+        {% elif vista == 'pendientes' %}
+            No hay enlaces activos pendientes de sincronizar. ¡Felicitaciones!
         {% else %}
             No hay enlaces activos.
         {% endif %}
     </h4>
     <div class="mt-2">
         {% if busqueda %}
-            <a href="?{% if vista == 'todos' %}vista=todos&{% endif %}" class="btn btn-outline-secondary btn-sm">
+            <a href="?{% if vista != 'activos' %}vista={{ vista }}&{% endif %}" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-times me-1"></i> Limpiar búsqueda
             </a>
         {% else %}

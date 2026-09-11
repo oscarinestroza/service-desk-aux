@@ -294,6 +294,12 @@ class EnlaceAutorizado(models.Model):
         default="",
         help_text="PIN de acceso al SIG",
     )
+    sincronizado = models.BooleanField(
+        default=False,
+        help_text="Indica si el usuario fue creado/sincronizado en el SIG "
+                  "(se marca automáticamente al crear con éxito, o manualmente).",
+        verbose_name="Sincronizado con SIG",
+    )
 
     # ---- Estado ----
     estado = models.CharField(
@@ -367,6 +373,25 @@ class EnlaceAutorizado(models.Model):
     # ---- Timestamps ----
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        """Validaciones adicionales del modelo (ejecutadas por full_clean)."""
+        super().clean()
+        if self.usuario_sig:
+            qs = EnlaceAutorizado.objects.filter(
+                usuario_sig__iexact=self.usuario_sig.strip()
+            )
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                from django.core.exceptions import ValidationError
+
+                raise ValidationError({
+                    "usuario_sig": (
+                        f"Ya existe un enlace con el usuario SIG "
+                        f"'{self.usuario_sig}'. El usuario SIG no puede duplicarse."
+                    )
+                })
 
     def save(self, *args, **kwargs):
         # Nombre SIG = unión de nombres + apellidos (separado por espacios)

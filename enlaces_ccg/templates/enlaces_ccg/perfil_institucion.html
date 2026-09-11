@@ -199,7 +199,7 @@
         </thead>
         <tbody>
             {% for enlace in enlaces %}
-            <tr>
+            <tr{% if not enlace.sincronizado %} class="table-warning"{% endif %}>
                 <td class="ps-3 ccg-actions">
                     <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
                             data-pk="{{ enlace.pk }}" title="Ver detalles">
