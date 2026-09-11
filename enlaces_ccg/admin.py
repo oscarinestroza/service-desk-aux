@@ -9,12 +9,12 @@ from django.contrib import admin, messages
 from django import forms
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
-from django.utils.html import format_html
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 from .models import (
-    Adjunto, ConfiguracionCorreo, ConfiguracionSIG, Documento, DocumentoCarpeta,
+    Adjunto, ComunicadoCC, ConfiguracionCorreo, ConfiguracionSIG, Documento,
+    DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
     Institucion,
@@ -130,13 +130,13 @@ def _generar_excel_enlaces(enlaces, titulo, subtitulo, archivo_prefijo):
 # ---------------------------------------------------------------------------
 @admin.register(Edificio)
 class EdificioAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "siglas", "tiene_imagen", "creado_en")
+    list_display = ("nombre", "siglas", "creado_en")
     search_fields = ("nombre", "siglas")
     readonly_fields = ("creado_en",)
 
     fieldsets = (
         (None, {
-            "fields": ("nombre", "siglas", "descripcion", "imagen"),
+            "fields": ("nombre", "siglas", "descripcion"),
         }),
         ("Metadata", {
             "classes": ("collapse",),
@@ -144,11 +144,16 @@ class EdificioAdmin(admin.ModelAdmin):
         }),
     )
 
-    @admin.display(description="Imagen")
-    def tiene_imagen(self, obj):
-        if obj.imagen:
-            return format_html('<img src="{}" style="max-height:40px;border-radius:4px;" />', obj.imagen.url)
-        return "—"
+
+# ---------------------------------------------------------------------------
+# ComunicadoCC
+# ---------------------------------------------------------------------------
+@admin.register(ComunicadoCC)
+class ComunicadoCCAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "institucion", "cargo", "correo", "actualizado_en")
+    search_fields = ("nombre", "cargo", "correo", "institucion__nombre")
+    list_select_related = ("institucion",)
+    autocomplete_fields = ("institucion",)
 
 
 # ---------------------------------------------------------------------------

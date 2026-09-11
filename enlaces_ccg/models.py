@@ -30,12 +30,6 @@ class Edificio(models.Model):
         default="",
         help_text="Descripción opcional del edificio",
     )
-    imagen = models.ImageField(
-        upload_to="edificios/",
-        blank=True,
-        null=True,
-        help_text="Foto o imagen del edificio",
-    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -918,3 +912,43 @@ class Documento(models.Model):
         if nombre.endswith((".mp4", ".avi", ".mov")):
             return "fas fa-file-video"
         return "fas fa-file"
+
+
+# ---------------------------------------------------------------------------
+class ComunicadoCC(models.Model):
+    """Persona de contacto para los comunicados del Centro Cívico Gubernamental."""
+
+    nombre = models.CharField(
+        max_length=200,
+        help_text="Nombre completo de la persona",
+    )
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="comunicados_cc",
+        help_text="Institución a la que pertenece",
+    )
+    cargo = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Cargo dentro de la institución",
+    )
+    correo = models.EmailField(
+        blank=True,
+        null=True,
+        default="",
+        help_text="Correo institucional de contacto",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Comunicado CC"
+        verbose_name_plural = "Comunicados CC"
+
+    def __str__(self):
+        return self.nombre

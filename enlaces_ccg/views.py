@@ -15,7 +15,7 @@ from datetime import datetime
 from django.contrib import auth, messages
 from django.contrib.auth.decorators import login_required
 from django.db import models
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from urllib.parse import quote
@@ -25,8 +25,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 from .models import (
-    Adjunto, Documento, DocumentoCarpeta, Edificio, EnlaceAutorizado,
-    Institucion, InstitucionEdificio, Seccion,
+    Adjunto, ComunicadoCC, Documento, DocumentoCarpeta, Edificio,
+    EnlaceAutorizado, Institucion, InstitucionEdificio, Seccion,
 )
 from .roles import (
     CAP_ADMIN,
@@ -249,7 +249,12 @@ def _fila_simple(enlace):
 def lista_edificios(request):
     """Muestra todos los edificios del CCG."""
     edificios = Edificio.objects.annotate(
-        num_instituciones=models.Count("instituciones")
+        num_instituciones=models.Count("instituciones", distinct=True),
+        num_enlaces_activos=models.Count(
+            "instituciones__enlaces",
+            filter=models.Q(instituciones__enlaces__estado="ACTIVO"),
+            distinct=True,
+        ),
     ).order_by("nombre")
 
     return render(
@@ -257,6 +262,97 @@ def lista_edificios(request):
         "enlaces_ccg/lista_edificios.html",
         {"edificios": edificios},
     )
+
+
+@requiere(CAP_DIRECTORIO)
+def comunicados_cc(request):
+    """Vista de Comunicados CC: personas de contacto para comunicados."""
+    comunicados = ComunicadoCC.objects.select_related("institucion").order_by(
+        F("institucion__nombre").desc(nulls_last=True), "nombre"
+    )
+    instituciones = Institucion.objects.order_by("nombre")
+    return render(
+        request,
+        "enlaces_ccg/comunicados_cc.html",
+        {"comunicados": comunicados, "instituciones": instituciones},
+    )
+
+
+@requiere(CAP_EDITAR)
+@require_POST
+def crear_comunicado_cc(request):
+    """Crea un nuevo comunicado/contacto desde el modal."""
+    nombre = request.POST.get("nombre", "").strip()
+    institucion_id = request.POST.get("institucion")
+    cargo = request.POST.get("cargo", "").strip()
+    correo = request.POST.get("correo", "").strip()
+
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "El nombre es obligatorio."}, status=400)
+
+    institucion = None
+    if institucion_id and institucion_id.isdigit():
+        institucion = Institucion.objects.filter(pk=int(institucion_id)).first()
+
+    comunicado = ComunicadoCC.objects.create(
+        nombre=nombre,
+        institucion=institucion,
+        cargo=cargo,
+        correo=correo or None,
+    )
+    return JsonResponse({"ok": True, "id": comunicado.pk})
+
+
+@requiere(CAP_EDITAR)
+@require_POST
+def editar_comunicado_cc(request, pk):
+    """Actualiza un comunicado/contacto desde el modal."""
+    comunicado = get_object_or_404(ComunicadoCC, pk=pk)
+    nombre = request.POST.get("nombre", "").strip()
+    institucion_id = request.POST.get("institucion")
+    cargo = request.POST.get("cargo", "").strip()
+    correo = request.POST.get("correo", "").strip()
+
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "El nombre es obligatorio."}, status=400)
+
+    institucion = None
+    if institucion_id and institucion_id.isdigit():
+        institucion = Institucion.objects.filter(pk=int(institucion_id)).first()
+
+    comunicado.nombre = nombre
+    comunicado.institucion = institucion
+    comunicado.cargo = cargo
+    comunicado.correo = correo or None
+    comunicado.save()
+    return JsonResponse({"ok": True, "id": comunicado.pk})
+
+
+@requiere(CAP_EDITAR)
+@require_POST
+def eliminar_comunicado_cc(request, pk):
+    """Elimina un comunicado/contacto."""
+    comunicado = get_object_or_404(ComunicadoCC, pk=pk)
+    comunicado.delete()
+    return JsonResponse({"ok": True})
+
+
+@requiere(CAP_DIRECTORIO)
+def copiar_correos_comunicados(request):
+    """Devuelve JSON con los correos de los comunicados (formato CCO)."""
+    correos = []
+    vistos = set()
+    for c in ComunicadoCC.objects.exclude(correo__isnull=True).exclude(correo=""):
+        correo = c.correo.strip().lower()
+        if correo and correo not in vistos:
+            vistos.add(correo)
+            correos.append(correo)
+    return JsonResponse({
+        "ok": True,
+        "correos": correos,
+        "total": len(correos),
+        "formato": "semicolon",
+    })
 
 
 @requiere(CAP_TICKETS)
@@ -659,7 +755,14 @@ def detalle_edificio(request, pk):
     if vista not in ("activas", "inactivas", "todas"):
         vista = "activas"
 
-    qs = edificio.instituciones.prefetch_related("instituciones_edificios__edificio").order_by("nombre")
+    qs = edificio.instituciones.prefetch_related("instituciones_edificios__edificio").annotate(
+        num_enlaces_activos=Count(
+            "enlaces",
+            filter=Q(enlaces__estado="ACTIVO"),
+            distinct=True,
+        ),
+        num_enlaces_total=Count("enlaces", distinct=True),
+    ).order_by("nombre")
     if vista == "activas":
         qs = qs.filter(estado="ACTIVO")
     elif vista == "inactivas":

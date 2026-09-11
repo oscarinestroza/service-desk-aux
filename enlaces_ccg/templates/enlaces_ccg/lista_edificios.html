@@ -25,31 +25,44 @@
 <div class="row g-4">
     {% for edificio in edificios %}
     <div class="col-md-4">
-        <div class="card h-100 border-0 shadow-sm overflow-hidden">
-            {% if edificio.imagen %}
-            <div style="height:180px;overflow:hidden;">
-                <img src="{{ edificio.imagen.url }}" alt="{{ edificio.nombre }}"
-                     style="width:100%;height:100%;object-fit:cover;">
-            </div>
-            {% else %}
-            <div class="d-flex align-items-center justify-content-center bg-primary bg-opacity-10" style="height:180px;">
-                <i class="fas fa-building fa-4x text-primary opacity-25"></i>
-            </div>
-            {% endif %}
-            <div class="card-body">
-                <h5 class="card-title mb-1">
-                    {{ edificio.nombre }}
-                    {% if edificio.siglas %}
-                        <span class="text-muted fs-6">({{ edificio.siglas }})</span>
-                    {% endif %}
-                </h5>
-                {% if edificio.descripcion %}
-                    <p class="card-text text-muted small">{{ edificio.descripcion }}</p>
-                {% endif %}
-                <span class="badge bg-info">
-                    <i class="fas fa-landmark me-1"></i>
-                    {{ edificio.num_instituciones }} institucion{{ edificio.num_instituciones|pluralize }}
-                </span>
+        <div class="card h-100 border-0 shadow-sm overflow-hidden ccg-edificio-card">
+            <div class="card-body d-flex flex-column">
+                <div class="ccg-edificio-header mb-2">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-building fa-2x text-primary"></i>
+                    </div>
+                    <div>
+                        <h5 class="card-title mb-0">
+                            {{ edificio.nombre }}
+                            {% if edificio.siglas %}
+                                <span class="text-muted fs-6">({{ edificio.siglas }})</span>
+                            {% endif %}
+                        </h5>
+                        {% if edificio.descripcion %}
+                            <p class="card-text text-muted small mb-0">{{ edificio.descripcion }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="ccg-edificio-stats mt-3">
+                    <div class="ccg-stat">
+                        <div class="ccg-stat-icon bg-info bg-opacity-10">
+                            <i class="fas fa-landmark text-info"></i>
+                        </div>
+                        <div class="ccg-stat-data">
+                            <div class="ccg-stat-num">{{ edificio.num_instituciones }}</div>
+                            <div class="ccg-stat-label">Instituciones</div>
+                        </div>
+                    </div>
+                    <div class="ccg-stat">
+                        <div class="ccg-stat-icon bg-success bg-opacity-10">
+                            <i class="fas fa-id-card text-success"></i>
+                        </div>
+                        <div class="ccg-stat-data">
+                            <div class="ccg-stat-num">{{ edificio.num_enlaces_activos }}</div>
+                            <div class="ccg-stat-label">Enlaces activos</div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="card-footer bg-transparent border-top-0 d-flex gap-2">
                 <a href="{% url 'enlaces_ccg:detalle_edificio' edificio.pk %}"

@@ -199,6 +199,31 @@ urlpatterns = [
         name="documentos",
     ),
     path(
+        "comunicados/",
+        views.comunicados_cc,
+        name="comunicados_cc",
+    ),
+    path(
+        "comunicados/crear/",
+        views.crear_comunicado_cc,
+        name="crear_comunicado_cc",
+    ),
+    path(
+        "comunicados/<int:pk>/editar/",
+        views.editar_comunicado_cc,
+        name="editar_comunicado_cc",
+    ),
+    path(
+        "comunicados/<int:pk>/eliminar/",
+        views.eliminar_comunicado_cc,
+        name="eliminar_comunicado_cc",
+    ),
+    path(
+        "comunicados/correos/",
+        views.copiar_correos_comunicados,
+        name="copiar_correos_comunicados",
+    ),
+    path(
         "documentos/crear/",
         views.crear_carpeta,
         name="crear_carpeta",
