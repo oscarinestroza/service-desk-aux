@@ -190,10 +190,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# WhiteNoise sirve los estáticos en producción (con compresión y caché)
+# WhiteNoise sirve los estáticos en producción (con compresión y caché).
+# No se usa ManifestStaticFilesStorage porque jazzmin referencia un directorio
+# ('vendor/bootswatch'), lo que dispara ValueError al renderizar el admin.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 
 
