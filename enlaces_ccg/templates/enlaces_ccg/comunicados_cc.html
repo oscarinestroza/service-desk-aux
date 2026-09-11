@@ -1,0 +1,275 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Comunicados CC — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item">
+    <a href="{% url 'enlaces_ccg:lista_edificios' %}">Edificios</a>
+</li>
+<li class="breadcrumb-item active" aria-current="page">Comunicados CC</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if puede_editar %}
+<button type="button" data-crear-comunicado class="btn btn-success btn-sm">
+    <i class="fas fa-plus me-1"></i> Agregar nuevo
+</button>
+{% endif %}
+
+<!-- Botón Capturar Correos (CCO) -->
+<button type="button" class="btn btn-primary btn-sm" id="btnCapturarCorreos"
+        data-url="{% url 'enlaces_ccg:copiar_correos_comunicados' %}"
+        title="Capturar los correos de los comunicados (formato CCO)">
+    <i class="fas fa-copy me-1"></i> Capturar Correos
+</button>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-bullhorn me-2 text-primary"></i>Comunicados CC
+    </h1>
+    <span class="badge bg-primary">{{ comunicados|length }}</span>
+</div>
+
+{% if comunicados %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Nombre</th>
+                <th>Institución</th>
+                <th>Cargo</th>
+                <th>Correo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for com in comunicados %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    {% if puede_editar %}
+                    <button class="btn btn-outline-primary btn-sm me-1" title="Editar"
+                            data-editar-comunicado data-pk="{{ com.pk }}"
+                            data-nombre="{{ com.nombre }}"
+                            data-institucion="{{ com.institucion_id|default:'' }}"
+                            data-cargo="{{ com.cargo }}"
+                            data-correo="{{ com.correo|default:'' }}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" title="Eliminar"
+                            data-eliminar-comunicado data-pk="{{ com.pk }}" data-nombre="{{ com.nombre }}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="cell-name">{{ com.nombre }}</div>
+                </td>
+                <td>
+                    {% if com.institucion %}
+                    <a href="{% url 'enlaces_ccg:perfil_institucion' com.institucion.pk %}" class="cell-link">
+                        {{ com.institucion.siglas|default:com.institucion.nombre }}
+                    </a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>{{ com.cargo|default:"—" }}</td>
+                <td>
+                    {% if com.correo %}
+                    <a href="mailto:{{ com.correo }}" class="cell-link">{{ com.correo }}</a>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-bullhorn fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">No hay comunicados registrados</h4>
+    <p class="text-muted">Agrega los contactos a quienes se enviarán los comunicados del CC.</p>
+    {% if puede_editar %}
+    <button type="button" data-crear-comunicado class="btn btn-success btn-sm">
+        <i class="fas fa-plus me-1"></i> Agregar primero
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Modal Agregar/Editar comunicado -->
+<div class="modal fade" id="modalComunicado" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formComunicado">
+                <input type="hidden" name="pk" id="comPk">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="comModalTitle">Agregar comunicado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="comNombre">Nombre</label>
+                        <input type="text" class="form-control" id="comNombre" name="nombre" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="comInstitucion">Institución</label>
+                        <select class="form-select" id="comInstitucion" name="institucion">
+                            <option value="">— Sin institución —</option>
+                            {% for inst in instituciones %}
+                            <option value="{{ inst.pk }}">{{ inst.siglas|default:inst.nombre }} — {{ inst.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="comCargo">Cargo</label>
+                        <input type="text" class="form-control" id="comCargo" name="cargo">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="comCorreo">Correo</label>
+                        <input type="email" class="form-control" id="comCorreo" name="correo">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+const modalComunicado = new bootstrap.Modal(document.getElementById('modalComunicado'));
+
+// ── Abrir modal en modo crear ──
+document.addEventListener('click', function(e) {
+    if (e.target.closest('[data-crear-comunicado]')) {
+        document.getElementById('formComunicado').reset();
+        document.getElementById('comPk').value = '';
+        document.getElementById('comModalTitle').textContent = 'Agregar comunicado';
+        modalComunicado.show();
+        return;
+    }
+    // ── Abrir modal en modo editar ──
+    const btnEdit = e.target.closest('[data-editar-comunicado]');
+    if (btnEdit) {
+        document.getElementById('comPk').value = btnEdit.dataset.pk;
+        document.getElementById('comNombre').value = btnEdit.dataset.nombre || '';
+        document.getElementById('comCargo').value = btnEdit.dataset.cargo || '';
+        document.getElementById('comCorreo').value = btnEdit.dataset.correo || '';
+        const select = document.getElementById('comInstitucion');
+        select.value = btnEdit.dataset.institucion || '';
+        document.getElementById('comModalTitle').textContent = 'Editar comunicado';
+        modalComunicado.show();
+        return;
+    }
+});
+
+// ── Guardar (crear o editar) ──
+document.getElementById('formComunicado').addEventListener('submit', function(ev) {
+    ev.preventDefault();
+    const pk = document.getElementById('comPk').value;
+    const url = pk
+        ? `/comunicados/${pk}/editar/`
+        : '/comunicados/crear/';
+    const body = new URLSearchParams(new FormData(this)).toString();
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+    })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) location.reload();
+            else alert(d.error || 'Error al guardar');
+        })
+        .catch(() => alert('Error al guardar. Intente de nuevo.'));
+});
+
+// ── Eliminar ──
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-eliminar-comunicado]');
+    if (!btn) return;
+    if (!confirm(`¿Eliminar el comunicado "${btn.dataset.nombre}"?`)) return;
+    fetch(`/comunicados/${btn.dataset.pk}/eliminar/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+        .then(r => r.json())
+        .then(d => { if (d.ok) location.reload(); })
+        .catch(() => alert('Error al eliminar.'));
+});
+
+// ── Capturar Correos (CCO) ──
+document.getElementById('btnCapturarCorreos')?.addEventListener('click', async function () {
+    const btn = this;
+    try {
+        const resp = await fetch(btn.dataset.url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Error');
+        const texto = data.correos.join('; ');
+
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(texto);
+            showToast(`${data.total} correos capturados (formato CCO)`);
+            return;
+        }
+        fallbackCopiar(texto, data.total);
+    } catch (e) {
+        console.error(e);
+        alert('Error al capturar correos: ' + e.message);
+    }
+});
+
+function fallbackCopiar(texto, total) {
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast(`${total} correos capturados (fallback)`);
+    } catch (e) {
+        alert('No se pudo copiar automáticamente. Copie manualmente.');
+    }
+    document.body.removeChild(ta);
+}
+
+function showToast(msg) {
+    const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        c.style.zIndex = '1080';
+        document.body.appendChild(c);
+        return c;
+    })();
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-success border-0';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${msg}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+    `;
+    container.appendChild(toast);
+    const bs = new bootstrap.Toast(toast, { delay: 3000 });
+    bs.show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+</script>
+{% endblock %}
