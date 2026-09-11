@@ -113,6 +113,9 @@ class SIGClient:
         self.username = username or cfg.usuario_valor()
         self.password = password or cfg.password_valor()
         self.timeout = timeout or cfg.timeout_valor()
+        # Leer la contraseña por defecto aquí (hilo síncrono del worker) para
+        # no tocar la BD dentro del contexto async de Playwright.
+        self._password_default = cfg.default_password_valor()
         if self.base_url:
             self.base_url = self.base_url.rstrip("/")
         self.playwright = None
@@ -636,9 +639,7 @@ class SIGClient:
 
         # ---- Campos de texto ----
         self._safe_send_keys(SEL["usuario"], enlace.usuario_sig)
-        from ..models import ConfiguracionSIG
-        cfg_sig = ConfiguracionSIG.cargar()
-        pwd = enlace.password_sig or cfg_sig.default_password_valor()
+        pwd = enlace.password_sig or self._password_default
         self._safe_send_keys(SEL["password"], _sha256(pwd))
         self._safe_send_keys(SEL["nombre"], enlace.nombres)
         self._safe_send_keys(SEL["apellido_paterno"], enlace.primer_apellido)
