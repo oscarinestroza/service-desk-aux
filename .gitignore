@@ -15,8 +15,6 @@ build/
 *.log
 *.pot
 *.pyc
-db.sqlite3
-db.sqlite3-journal
 media/
 staticfiles/
 collected_static/
@@ -63,8 +61,6 @@ docker-compose.override.yml
 *.kubeconfig
 
 # Misc
-*.sqlite
-*.sqlite3
 *.db
 *.log*
 *.pid

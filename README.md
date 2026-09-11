@@ -88,25 +88,18 @@ SIG mediante automatización Playwright.
 
    Visita `http://127.0.0.1:8000/`
 
-## Migrar datos de SQLite a PostgreSQL
+## Migrar/exportar datos entre Postgres
 
-Si ya tenías datos en SQLite y quieres llevarlos a Postgres (con `.env` apuntando
-a SQLite primero y luego a Postgres):
+Para exportar datos de una BD Postgres y cargarlos en otra (p. ej. dev a prod):
 
 ```bash
-# 1) Con SQLite como default, exporta los datos
-python manage.py dumpdata --natural-foreign --natural-primary -o datos.json
-python manage.py dumpdata --natural-foreign --natural-primary --exclude contenttypes --exclude auth.permission -o datos_sin_ct.json
+# 1) Exporta (excluye contenttypes y auth.permission para evitar conflictos)
+python manage.py dumpdata --natural-foreign --natural-primary --exclude contenttypes --exclude auth.permission -o datos.json
 
-# 2) Cambia .env a Postgres (ver .env.example) y aplica migraciones
+# 2) En la BD destino aplica migraciones y carga
 python manage.py migrate
-
-# 3) Carga los datos
-python manage.py loaddata datos_sin_ct.json
+python manage.py loaddata datos.json
 ```
-
-Se recomienda excluir `contenttypes` y `auth.permission` para evitar
-conflictos de tipos de contenido.
 
 ## Roles y permisos
 
@@ -157,7 +150,7 @@ docker-compose.yml    Infraestructura local (PostgreSQL + Redis)
 
 ## Notas de seguridad
 
-- `db.sqlite3`, `.env`, `media/` y archivos de secretos están ignorados por git.
+- `.env`, `media/` y archivos de secretos están ignorados por git.
 - No subas credenciales reales. Usa `.env.example` como plantilla.
 - `docker-compose.yml` usa credenciales de desarrollo; para producción usa
   secretos gestionados por tu proveedor (p. ej. Coolify).

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -103,20 +104,24 @@ WSGI_APPLICATION = 'enlacesMAO.wsgi.application'
 def _config_postgres_por_env():
     """Configura Postgres desde variables de entorno (DB_* o DATABASE_URL).
 
-    Si no hay DB_NAME ni DATABASE_URL, devuelve None para usar SQLite (dev).
+    Postgres es obligatorio (producción y desarrollo usan contenedores). Si
+    faltan las variables se lanza ImproperlyConfigured para fallar rápido en
+    lugar de caer silenciosamente a SQLite.
     """
     from urllib.parse import urlparse
 
     name = os.environ.get("DB_NAME", "").strip()
     url = os.environ.get("DATABASE_URL", "").strip()
     if not name and not url:
-        return None
+        raise ImproperlyConfigured(
+            "Base de datos no configurada. Define DATABASE_URL "
+            "(o DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT) apuntando a Postgres."
+        )
 
     if url:
         parsed = urlparse(url)
-        engine = "django.db.backends.postgresql"
         return {
-            "ENGINE": engine,
+            "ENGINE": "django.db.backends.postgresql",
             "NAME": name or parsed.path.lstrip("/"),
             "USER": os.environ.get("DB_USER", "") or parsed.username or "",
             "PASSWORD": os.environ.get("DB_PASSWORD", "") or parsed.password or "",
@@ -138,16 +143,7 @@ def _config_postgres_por_env():
     }
 
 
-_pg = _config_postgres_por_env()
-if _pg:
-    DATABASES = {"default": _pg}
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+DATABASES = {"default": _config_postgres_por_env()}
 
 
 # Password validation
