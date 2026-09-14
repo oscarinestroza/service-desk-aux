@@ -116,6 +116,99 @@ def _adjuntos_carpeta_nuevos_enlaces():
     return adjuntos
 
 
+def _plantilla_correo_mao(
+    cuerpo_dinamico,
+    titulo_encabezado="NOTIFICACIÓN DE SERVICIO",
+    introduccion=(
+        "Buen día Estimado Usuario,<br><br>"
+        "Por este medio compartimos la información indicada por el servicio:"
+    ),
+    despedida="Saludos cordiales,",
+    mostrar_privacidad=False,
+):
+    """Devuelve un correo HTML con el formato corporativo MAO.
+
+    Réplica en Python de GenerarPlantillaCorreo (VBA) usado en la apertura de
+    tickets: tarjeta principal al 100% de ancho, encabezado azul corporativo,
+    texto de introducción, cuerpo dinámico en caja gris clara con acento azul,
+    firma SOPORTE MAO y aviso de privacidad opcional.
+
+    `cuerpo_dinamico` debe llegar ya construido/escapado por el llamador
+    (misma convención que `_plantilla_email_html`).
+    """
+    html = (
+        "<table border='0' cellpadding='0' cellspacing='0' width='100%' "
+        "style='width: 100%; font-family: Calibri, Arial, sans-serif; border: "
+        "1px solid #dcdcdc; border-radius: 6px; overflow: hidden; "
+        "background-color: #ffffff; text-align: left;'>"
+        # Encabezado azul
+        "<tr><td style='background-color: #1A365D; color: #ffffff; padding: "
+        "18px 24px; text-align: left;'>"
+        "<h2 style='margin: 0; font-family: Calibri, Arial, sans-serif; "
+        "font-size: 16pt; font-weight: bold; letter-spacing: 0.5px; "
+        "color: #ffffff; text-transform: uppercase;'>"
+        f"{escape(titulo_encabezado)}</h2></td></tr>"
+        # Texto estático de introducción (Calibri 11pt)
+        "<tr><td style='padding: 20px 24px 10px 24px; color: #333333; "
+        "font-family: Calibri, Arial, sans-serif; font-size: 11pt; "
+        "line-height: 1.5;'>"
+        f"<font face='Calibri' size='3' style='font-size: 11pt; color: "
+        f"#333333;'>{introduccion}</font></td></tr>"
+        # Cuerpo dinámico (caja gris clara con borde izquierdo azul)
+        "<tr><td style='padding: 10px 24px 20px 24px;'>"
+        "<table border='0' cellpadding='0' cellspacing='0' width='100%' "
+        "style='width: 100%; background-color: #F7FAFC; border-left: 4px "
+        "solid #2B6CB0; border-radius: 4px;'>"
+        "<tr><td style='padding: 16px; color: #2D3748; font-family: Calibri, "
+        "Arial, sans-serif; font-size: 11pt; line-height: 1.5;'>"
+        f"<font face='Calibri' size='3' style='font-size: 11pt; color: "
+        f"#2D3748;'>{cuerpo_dinamico}</font></td></tr></table></td></tr>"
+        # Pie de página y firma (Calibri 11pt)
+        "<tr><td style='padding: 10px 24px 20px 24px; color: #4A5568; "
+        "font-family: Calibri, Arial, sans-serif; font-size: 11pt; "
+        "line-height: 1.5; border-top: 1px solid #EDF2F7;'>"
+        f"<font face='Calibri' size='3' style='font-size: 11pt; color: "
+        f"#4A5568;'>{despedida}<br><strong style='color: #1A365D; "
+        f"font-size: 11pt;'>SOPORTE MAO</strong></font></td></tr>"
+    )
+
+    # Aviso de privacidad / disclaimer (Calibri 9pt)
+    if mostrar_privacidad:
+        html += (
+            "<tr><td style='padding: 15px 24px; background-color: #F8FAFC; "
+            "border-top: 1px solid #E2E8F0; color: #718096; font-family: "
+            "Calibri, Arial, sans-serif; font-size: 9pt; line-height: 1.4; "
+            "text-align: justify;'>"
+            "<font face='Calibri' size='1' style='font-size: 9pt; color: "
+            "#718096;'><strong>Aviso de Confidencialidad:</strong> Este mensaje "
+            "y sus anexos contienen información confidencial destinada "
+            "exclusivamente a su destinatario. Si usted ha recibido este correo "
+            "por error, se le notifica que cualquier revisión, divulgación, "
+            "copia o distribución del mismo está estrictamente prohibida. Por "
+            "favor, notifique inmediatamente al remitente y elimine este mensaje "
+            "de su sistema.</font></td></tr>"
+        )
+
+    html += "</table>"
+
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="es">\n'
+        '<head><meta charset="utf-8"></head>\n'
+        '<body style="margin:0;padding:0;background-color:#f4f4f5;'
+        'font-family:Calibri,Arial,sans-serif;">\n'
+        '<table role="presentation" width="100%" cellpadding="0" '
+        'cellspacing="0" border="0" style="background-color:#f4f4f5;'
+        'padding:24px 0;">\n'
+        "<tr><td align='left'>\n"
+        f"{html}\n"
+        "</td></tr>\n"
+        "</table>\n"
+        "</body>\n"
+        "</html>"
+    )
+
+
 def _enviar_correo_creacion(enlace):
     """Envía correo de notificación con credenciales del nuevo usuario SIG.
 
@@ -168,34 +261,38 @@ def _enviar_correo_creacion(enlace):
         f"Este correo fue generado automáticamente por el sistema de Enlaces CCG."
     )
 
-    mensaje_html = _plantilla_email_html(
-        titulo="Nuevo usuario SIG creado",
-        header_bg="#16a34a",
-        intro=(
+    url_fila = (
+        "<strong>URL:</strong> "
+        '<a href="https://sig.gia.mx/webapp/" style="color:#2B6CB0;">'
+        "https://sig.gia.mx/webapp/</a><br>"
+        "<strong>Empresa:</strong> Centro Cívico Gubernamental<br><br>"
+    )
+    filas = [
+        ("Usuario", escape(enlace.usuario_sig)),
+        ("Contraseña", f"<strong>{escape(password)}</strong>"),
+    ]
+    if enlace.pin_sig and enlace.pin_sig != "1":
+        filas.append(("PIN", escape(enlace.pin_sig)))
+
+    cuerpo_dinamico = url_fila + "<br>".join(
+        f"<strong>{escape(k)}:</strong> {v}" for k, v in filas
+    )
+
+    mensaje_html = _plantilla_correo_mao(
+        cuerpo_dinamico=cuerpo_dinamico,
+        titulo_encabezado="NUEVO USUARIO SIG CREADO",
+        introduccion=(
             f"Buen día <strong>{escape(enlace.nombre_completo)}</strong>,<br><br>"
             f"Por este medio compartimos sus credenciales para seguimiento de "
             f"solicitudes en la MAO (Plataforma SIG):"
         ),
-        secciones=[
-            {
-                "titulo": "Credenciales de acceso",
-                "filas": [
-                    ("URL", '<a href="https://sig.gia.mx/webapp/" style="color:#16a34a;">https://sig.gia.mx/webapp/</a>'),
-                    ("Usuario", escape(enlace.usuario_sig)),
-                    ("Contraseña", f"<strong>{escape(password)}</strong>"),
-                ],
-            },
-            {
-                "texto": "Favor su apoyo confirmando si pudo acceder correctamente.",
-            },
-            {
-                "texto": "De igual manera, le compartimos la presentación utilizada "
-                         "en la última capacitación para su referencia.",
-            },
-            {
-                "texto": "Cualquier duda o consulta estamos a la orden.",
-            },
-        ],
+        despedida=(
+            "Favor su apoyo confirmando si pudo acceder correctamente.<br><br>"
+            "De igual manera, le compartimos la presentación utilizada en la "
+            "última capacitación para su referencia.<br>"
+            "Cualquier duda o consulta estamos a la orden.<br><br>"
+            "Saludos cordiales,"
+        ),
     )
 
     try:
