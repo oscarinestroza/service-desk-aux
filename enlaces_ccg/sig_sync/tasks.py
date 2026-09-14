@@ -380,7 +380,7 @@ def _enviar_correo_review(enlace, motivo):
                     "filas": [
                         ("URL", '<a href="https://sig.gia.mx/webapp/" style="color:#dc2626;">https://sig.gia.mx/webapp/</a>'),
                         ("Usuario", escape(enlace.usuario_sig)),
-                        ("Contraseña", f"<strong>{escape(password)}</strong>"),
+("Contraseña", escape(password)),
                         ("PIN", escape(enlace.pin_sig or "—")),
                     ],
                 },
