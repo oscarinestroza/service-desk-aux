@@ -47,41 +47,6 @@
     .ccg-termino-detalle { font-size: .82rem; color: #64748b; white-space: pre-line; }
 </style>
 
-<div class="card border-0 shadow-sm mb-3">
-    <div class="card-header bg-white py-2">
-        <strong><i class="fas fa-route me-1"></i>Proceso de atención</strong>
-    </div>
-    <div class="card-body py-3">
-        <ol class="ccg-timeline mb-0">
-            {% for fase in ticket.fases_proceso %}
-            <li class="ccg-termino ccg-termino-{{ fase.estado }}">
-                <span class="ccg-termino-marca
-                           {% if fase.estado == 'completado' %}bg-success text-white
-                           {% elif fase.estado == 'activo' %}bg-primary text-white
-                           {% else %}bg-white border text-secondary{% endif %}">
-                    {% if fase.estado == 'completado' %}<i class="fas fa-check"></i>
-                    {% elif fase.estado == 'activo' %}<i class="fas fa-spinner fa-spin"></i>
-                    {% else %}<i class="fas fa-minus"></i>{% endif %}
-                </span>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="ccg-termino-nombre">{{ fase.nombre }}</span>
-                    {% if fase.estado == 'completado' %}
-                    <span class="badge bg-success-subtle text-success border border-success-subtle">Completado</span>
-                    {% elif fase.estado == 'activo' %}
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">En curso</span>
-                    {% else %}
-                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Pendiente</span>
-                    {% endif %}
-                </div>
-                <div class="ccg-termino-detalle">
-                    {{ fase.detalle }}{% if fase.estado == 'pendiente' and fase.clave == 'completado' %} — el ticket podrá completarse cuando se registren las actividades{% endif %}
-                </div>
-            </li>
-            {% endfor %}
-        </ol>
-    </div>
-</div>
-
 <div class="row g-3">
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm">
@@ -141,6 +106,41 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-3">
+    <div class="card-header bg-white py-2">
+        <strong><i class="fas fa-route me-1"></i>Proceso de atención</strong>
+    </div>
+    <div class="card-body py-3">
+        <ol class="ccg-timeline mb-0">
+            {% for fase in ticket.fases_proceso %}
+            <li class="ccg-termino ccg-termino-{{ fase.estado }}">
+                <span class="ccg-termino-marca
+                           {% if fase.estado == 'completado' %}bg-success text-white
+                           {% elif fase.estado == 'activo' %}bg-primary text-white
+                           {% else %}bg-white border text-secondary{% endif %}">
+                    {% if fase.estado == 'completado' %}<i class="fas fa-check"></i>
+                    {% elif fase.estado == 'activo' %}<i class="fas fa-spinner fa-spin"></i>
+                    {% else %}<i class="fas fa-minus"></i>{% endif %}
+                </span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="ccg-termino-nombre">{{ fase.nombre }}</span>
+                    {% if fase.estado == 'completado' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Completado</span>
+                    {% elif fase.estado == 'activo' %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">En curso</span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Pendiente</span>
+                    {% endif %}
+                </div>
+                <div class="ccg-termino-detalle">
+                    {{ fase.detalle }}{% if fase.estado == 'pendiente' and fase.clave == 'completado' %} — el ticket podrá completarse cuando se registren las actividades{% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
     </div>
 </div>
 {% endblock %}
