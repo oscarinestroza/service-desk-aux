@@ -17,11 +17,14 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import openpyxl
 from celery import shared_task
 from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from ..models import ConfiguracionTickets
@@ -307,3 +310,364 @@ def descargar_excel_tickets_task(modo=MODO_RAPIDA, desde=None, report_url=None):
     )
     logger.info("Tarea descargar_excel_tickets_task terminada: %s", resultado)
     return resultado
+
+
+# ---------------------------------------------------------------------------
+# Fase 2: parser del Excel y sincronización a base de datos
+# ---------------------------------------------------------------------------
+MODO_SYNC_PARCIAL = "parcial"
+MODO_SYNC_COMPLETO = "completo"
+MODO_SYNC_VALORES = (MODO_SYNC_PARCIAL, MODO_SYNC_COMPLETO)
+
+LOCK_CLAVE = "enlacesccg:tickets:lock"
+LOCK_TTL = int(os.environ.get("TICKETS_LOCK_TTL", "600"))
+
+# Mapeo de encabezados del Excel -> campo del modelo Ticket
+_MAPA_CAMPOS_TICKETS = {
+    "ID Solicitud servicio": "ticket_id",
+    "foliosolicitudservicio": "numero",
+    "solicitud_tipo": "solicitud_tipo",
+    "solicitud_fecha": "fecha",
+    "cerro_fecha": "fecha_cierre",
+    "solicitud_descripcion": "descripcion",
+}
+
+
+def _parsear_fecha(valor):
+    """Convierte fechas del Excel (str o datetime) a datetime aware o None."""
+    if valor is None or str(valor).strip() in ("", "None"):
+        return None
+    if isinstance(valor, datetime):
+        fecha = valor
+    else:
+        texto = str(valor).strip()
+        fecha = None
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y",
+        ):
+            try:
+                fecha = datetime.strptime(texto, fmt)
+                break
+            except ValueError:
+                continue
+    if fecha is None:
+        return None
+    if timezone.is_naive(fecha):
+        fecha = timezone.make_aware(fecha)
+    return fecha
+
+
+def _valor_crudo(valor) -> str:
+    if valor is None:
+        return ""
+    if isinstance(valor, datetime):
+        return valor.strftime("%Y-%m-%d %H:%M:%S")
+    return str(valor)
+
+
+def parsear_excel_tickets(ruta, hoja=None):
+    """Lee el Excel del SIG y devuelve (datos, errores).
+
+    - Mapea por encabezados (patrón _MAPA_CAMPOS de enlaces).
+    - Dedupe por ticket_id dejando la ÚLTIMA fila de cada id.
+    - Cada dict trae además 'raw_data' (snapshot de todas las columnas).
+    """
+    from ..models import ConfiguracionTickets
+
+    if hoja is None:
+        hoja = ConfiguracionTickets.cargar().hoja_valor()
+
+    wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+    ws = wb[hoja] if hoja else wb[wb.sheetnames[0]]
+
+    it = ws.iter_rows(values_only=True)
+    encabezados = [str(h or "").strip() for h in next(it, ())]
+    mapa_col = {}
+    for i, nombre in enumerate(encabezados):
+        campo = _MAPA_CAMPOS_TICKETS.get(nombre)
+        if campo:
+            mapa_col[campo] = i
+
+    por_id = {}
+    errores = 0
+    for fila in it:
+        fila = {encabezados[i]: fila[i] for i in range(min(len(encabezados), len(fila)))}
+        tid = str(fila.get("ID Solicitud servicio") or "").strip()
+        if not tid:
+            errores += 1
+            continue
+        por_id[tid] = {
+            "ticket_id": tid,
+            "numero": str(fila.get("foliosolicitudservicio") or "").strip(),
+            "solicitud_tipo": str(fila.get("solicitud_tipo") or "").strip(),
+            "fecha": _parsear_fecha(fila.get("solicitud_fecha")),
+            "fecha_cierre": _parsear_fecha(fila.get("cerro_fecha")),
+            "descripcion": str(fila.get("solicitud_descripcion") or "").strip(),
+            "raw_data": {k: _valor_crudo(v) for k, v in fila.items()},
+        }
+
+    return list(por_id.values()), errores
+
+
+def _calcular_numero_display(datos):
+    """Asigna numero_display: número base + sufijo -N a los duplicados.
+
+    En el mismo set, la primera aparición (orden ticket_id) conserva el
+    número; las siguientes reciben -2, -3... Los vacíos usan el ticket_id.
+    """
+    for d in datos:
+        d["numero_display"] = d["numero"] or d["ticket_id"]
+
+    con_numero = [d for d in datos if d["numero"]]
+    con_numero.sort(key=lambda d: (d["numero"], d["ticket_id"]))
+    anterior = None
+    n_consecutivo = 2
+    for d in con_numero:
+        if d["numero"] == anterior:
+            d["numero_display"] = f"{d['numero']}-{n_consecutivo}"
+            n_consecutivo += 1
+        else:
+            anterior = d["numero"]
+            n_consecutivo = 2
+
+
+def _chunks(secuencia, n=2500):
+    """Parte una lista en bloques (evita explotar el límite de parámetros IN)."""
+    for i in range(0, len(secuencia), n):
+        yield secuencia[i:i + n]
+
+
+def aplicar_tickets(datos, modo, ahora=None):
+    """Guarda los tickets en BD (transaccional). Devuelve conteos.
+
+    - PARCIAL:   insert/update; NO toca los ausentes del Excel.
+    - COMPLETO:  insert/update de todas las filas + archivado=True a los
+                 ausentes (nunca borra registros).
+
+    Optimización: los existentes se cargan en una sola consulta (por bloques)
+    y solo se reescriben las filas que realmente cambiaron (evita el
+    re-update masivo en cada descarga completa de ~150 mil registros).
+    """
+    from ..models import Ticket
+
+    if modo not in MODO_SYNC_VALORES:
+        modo = MODO_SYNC_PARCIAL
+    if ahora is None:
+        ahora = timezone.now()
+
+    creados = actualizados = 0
+    with transaction.atomic():
+        datos = list(datos)
+        presentes = [d["ticket_id"] for d in datos]
+        db_ids = set(Ticket.objects.values_list("ticket_id", flat=True))
+
+        existentes = {}
+        for chunk in _chunks(list(db_ids & set(presentes))):
+            for t in Ticket.objects.filter(ticket_id__in=list(chunk)):
+                existentes[t.ticket_id] = t
+
+        for d in datos:
+            estatus = (
+                Ticket.ESTATUS_CERRADO if d.get("fecha_cierre")
+                else Ticket.ESTATUS_ABIERTO
+            )
+            defaults = {
+                "numero": d.get("numero") or "",
+                "numero_display": d.get("numero_display") or d["ticket_id"],
+                "solicitud_tipo": d.get("solicitud_tipo") or "",
+                "fecha": d.get("fecha"),
+                "fecha_cierre": d.get("fecha_cierre"),
+                "estatus": estatus,
+                "descripcion": d.get("descripcion") or "",
+                "raw_data": d.get("raw_data") or {},
+                "ultima_sync": ahora,
+            }
+            if modo == MODO_SYNC_COMPLETO:
+                # Al existir de nuevo en el histórico se des-archiva
+                defaults["archivado"] = False
+
+            t = existentes.get(d["ticket_id"])
+            if t is None:
+                Ticket.objects.create(ticket_id=d["ticket_id"], **defaults)
+                creados += 1
+                continue
+
+            sin_cambios = (
+                t.numero == defaults["numero"]
+                and t.numero_display == defaults["numero_display"]
+                and t.solicitud_tipo == defaults["solicitud_tipo"]
+                and t.fecha == defaults["fecha"]
+                and t.fecha_cierre == defaults["fecha_cierre"]
+                and t.estatus == estatus
+                and t.descripcion == defaults["descripcion"]
+                and t.raw_data == defaults["raw_data"]
+                and (modo != MODO_SYNC_COMPLETO or not t.archivado)
+            )
+            if sin_cambios:
+                continue
+            for campo, valor in defaults.items():
+                setattr(t, campo, valor)
+            t.save(update_fields=list(defaults.keys()))
+            actualizados += 1
+
+        archivados = 0
+        if modo == MODO_SYNC_COMPLETO and datos:
+            ausentes = sorted(db_ids - set(presentes))
+            for chunk in _chunks(ausentes):
+                archivados += Ticket.objects.filter(
+                    ticket_id__in=list(chunk), archivado=False
+                ).update(archivado=True)
+
+    return {
+        "creados": creados,
+        "actualizados": actualizados,
+        "archivados": archivados,
+    }
+
+
+def _registrar_resultado(modo, estado, mensaje, conteos=None):
+    """Escribe TicketLog y actualiza la info de ConfiguracionTickets."""
+    from ..models import ConfiguracionTickets, Ticket, TicketLog
+
+    conteos = conteos or {}
+    cfg = ConfiguracionTickets.cargar()
+    TicketLog.objects.create(
+        modo=modo,
+        estado=estado,
+        mensaje=mensaje,
+        creados=conteos.get("creados", 0),
+        actualizados=conteos.get("actualizados", 0),
+        archivados=conteos.get("archivados", 0),
+        errores=conteos.get("errores", 0),
+    )
+    cfg.ultima_sincronizacion = timezone.now()
+    cfg.ultimo_modo = modo
+    cfg.ultimo_estado = estado
+    cfg.ultimo_mensaje = mensaje
+    cfg.total_tickets = Ticket.objects.count()
+    cfg.save(
+        update_fields=[
+            "ultima_sincronizacion", "ultimo_modo", "ultimo_estado",
+            "ultimo_mensaje", "total_tickets",
+        ]
+    )
+
+
+def sincronizar_tickets(modo=None, desde=None):
+    """Descarga el Excel según el modo y lo aplica a la BD.
+
+    Devuelve dict con conteos. El Excel descargado se elimina tras
+    importarse para no acumular decenas de MB en media/.
+    """
+    from ..models import ConfiguracionTickets, TicketLog
+
+    cfg = ConfiguracionTickets.cargar()
+    if modo is None:
+        modo = cfg.modo_default_valor()
+    if modo not in MODO_SYNC_VALORES:
+        modo = MODO_SYNC_PARCIAL
+    modo_descarga = MODO_COMPLETA if modo == MODO_SYNC_COMPLETO else MODO_RAPIDA
+
+    resultado = descargar_excel_tickets(modo=modo_descarga, desde=desde)
+    ruta = resultado["path"]
+    try:
+        datos, errores_parse = parsear_excel_tickets(ruta, cfg.hoja_valor())
+        _calcular_numero_display(datos)
+        conteos = aplicar_tickets(datos, modo)
+    finally:
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+
+    conteos["errores"] = errores_parse
+    conteos["modo"] = modo
+    conteos["filas"] = len(datos)
+    mensaje = (
+        f"{modo}: {len(datos)} filas, {conteos['creados']} creados, "
+        f"{conteos['actualizados']} actualizados, {conteos['archivados']} archivados."
+        + (f" {errores_parse} filas con error." if errores_parse else "")
+    )
+    _registrar_resultado(modo, TicketLog.ESTADO_OK, mensaje, conteos)
+    return conteos
+
+
+def _adquirir_lock():
+    """Lock Redis (set nx ex). False = ya ocupado; None = sin Redis (procede)."""
+    import redis  # noqa: PLC0415
+
+    try:
+        r = redis.from_url(settings.CELERY_BROKER_URL)
+        ok = r.set(LOCK_CLAVE, "1", nx=True, ex=LOCK_TTL)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Redis no disponible para lock; se procede sin lock: %s", e)
+        return None
+    return r if ok else False
+
+
+def _liberar_lock(redis_client):
+    if redis_client:
+        try:
+            redis_client.delete(LOCK_CLAVE)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@shared_task(queue="programadas")
+def sincronizar_tickets_task(modo=None, desde=None):
+    """Tarea para 'Sincronizar ahora' (botón). Respeta el lock Redis."""
+    lock = _adquirir_lock()
+    if lock is False:
+        logger.info("Sincronización omitida: ya hay una corrida en curso")
+        return {"sincronizado": False, "motivo": "lock"}
+    try:
+        resultado = sincronizar_tickets(modo=modo, desde=desde)
+        return {"sincronizado": True, **resultado}
+    finally:
+        _liberar_lock(lock)
+
+
+@shared_task(queue="programadas")
+def tick_sync_tickets_task():
+    """Tick de 60 s: decide modo y sincroniza si toca.
+
+    - Deshabilitado -> no corre.
+    - Hora en descarga_completa_horas -> completo.
+    - Si no, parcial cuando pasó intervalo_minutos desde el último sync.
+    """
+    from ..models import ConfiguracionTickets, TicketLog
+
+    cfg = ConfiguracionTickets.cargar()
+    if not cfg.habilitado:
+        return {"sincronizado": False, "motivo": "deshabilitado"}
+
+    ahora = timezone.now()
+    horas = cfg.descarga_completa_horas or []
+    es_hora_completa = (
+        isinstance(horas, list) and ahora.strftime("%H:%M") in horas
+    )
+    if es_hora_completa:
+        modo = MODO_SYNC_COMPLETO
+    else:
+        ultima = cfg.ultima_sincronizacion
+        intervalo = cfg.intervalo_minutos or 5
+        if ultima and (ahora - ultima) < timedelta(minutes=intervalo):
+            return {"sincronizado": False, "motivo": "intervalo"}
+        modo = MODO_SYNC_PARCIAL
+
+    lock = _adquirir_lock()
+    if lock is False:
+        return {"sincronizado": False, "motivo": "lock"}
+    try:
+        resultado = sincronizar_tickets(modo=modo)
+        return {"sincronizado": True, **resultado}
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Tick de sincronización de tickets falló (%s)", modo)
+        _registrar_resultado(modo, TicketLog.ESTADO_ERROR, str(e))
+        return {"sincronizado": False, "motivo": "error", "error": str(e)}
+    finally:
+        _liberar_lock(lock)

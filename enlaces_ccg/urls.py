@@ -144,6 +144,21 @@ urlpatterns = [
         name="seguimiento_tickets",
     ),
     path(
+        "tickets/sincronizar/",
+        views.sincronizar_tickets_ahora,
+        name="ticket_sincronizar",
+    ),
+    path(
+        "tickets/detalle/<int:pk>/",
+        views.ticket_detalle,
+        name="ticket_detalle",
+    ),
+    path(
+        "tickets/<str:numero>/",
+        views.ticket_por_numero,
+        name="ticket_por_numero",
+    ),
+    path(
         "dashboard/",
         views.dashboard,
         name="dashboard",

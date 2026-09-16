@@ -774,13 +774,21 @@ class ConfiguracionSIG(models.Model):
 
 
 class ConfiguracionTickets(models.Model):
-    """Parámetros del reporte de tickets del SIG (descarga del Excel).
+    """Parámetros del reporte de tickets del SIG (descarga y sincronización).
 
     Modelo singleton: solo debe existir UN registro (ver ConfiguracionTicketsAdmin).
     La cuenta SIG del worker de tickets NO vive aquí: se lee del entorno
     (SIG_TICKETS_URL / SIG_TICKETS_USUARIO / SIG_TICKETS_PASSWORD).
     """
 
+    MODO_PARCIAL = "parcial"
+    MODO_COMPLETO = "completo"
+    MODO_CHOICES = (
+        (MODO_PARCIAL, "Parcial (rápida)"),
+        (MODO_COMPLETO, "Completo (histórico)"),
+    )
+
+    # --- Descarga (F1) ---
     url_reporte = models.CharField(
         max_length=500,
         blank=True,
@@ -805,6 +813,56 @@ class ConfiguracionTickets(models.Model):
         ),
         verbose_name="Fecha desde (completa)",
     )
+
+    # --- Sincronización (F2) ---
+    habilitado = models.BooleanField(
+        default=True,
+        help_text="Si desmarcado, el tick automático no descarga ni sincroniza.",
+        verbose_name="Sincronización habilitada",
+    )
+    modo_default = models.CharField(
+        max_length=10,
+        choices=MODO_CHOICES,
+        default=MODO_PARCIAL,
+        help_text="Modo usado por el tick y por 'Sincronizar ahora' sin indicar modo.",
+        verbose_name="Modo por defecto",
+    )
+    intervalo_minutos = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Cadencia mínima (minutos) entre sincronizaciones parciales.",
+        verbose_name="Intervalo parcial (minutos)",
+    )
+    descarga_completa_horas = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Horas del día para la descarga completa, ej. [\"07:00\", \"19:00\"].",
+        verbose_name="Horas de descarga completa",
+    )
+
+    # --- Última sincronización (información) ---
+    ultima_sincronizacion = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name="Última sincronización",
+    )
+    ultimo_modo = models.CharField(
+        max_length=10, blank=True, default="", editable=False
+    )
+    ultimo_estado = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        editable=False,
+        verbose_name="Último estado",
+    )
+    ultimo_mensaje = models.TextField(
+        blank=True, default="", editable=False, verbose_name="Último mensaje"
+    )
+    total_tickets = models.PositiveIntegerField(
+        default=0, editable=False, verbose_name="Total de tickets"
+    )
+
     actualizado_en = models.DateTimeField(auto_now=True)
     creado_en = models.DateTimeField(auto_now_add=True)
 
@@ -824,11 +882,130 @@ class ConfiguracionTickets(models.Model):
     def fecha_desde_valor(self) -> str:
         return (self.fecha_desde_completa or "01/01/2020").strip()
 
+    def modo_default_valor(self) -> str:
+        return self.modo_default or self.MODO_PARCIAL
+
     @classmethod
     def cargar(cls):
         """Devuelve el registro singleton de configuración o uno vacío."""
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class Ticket(models.Model):
+    """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
+
+    Estatus: se deriva en cada sincronización de la columna `cerro_fecha`
+    (ABIERTO si no tiene fecha de cierre, CERRADO si la tiene). En F4 las
+    acciones de cierre lo cambian localmente aunque el SIG no lo sepa aún.
+    """
+
+    ESTATUS_ABIERTO = "ABIERTO"
+    ESTATUS_CERRADO = "CERRADO"
+    ESTATUS_CHOICES = (
+        (ESTATUS_ABIERTO, "Abierto"),
+        (ESTATUS_CERRADO, "Cerrado"),
+    )
+
+    ticket_id = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Clave única del SIG: columna 'ID Solicitud servicio'.",
+        verbose_name="ID de solicitud",
+    )
+    numero = models.CharField(
+        max_length=60,
+        blank=True,
+        default="",
+        help_text="Número visible en el SIG (ej. SS20-0459), sin sufijo.",
+        verbose_name="Número",
+    )
+    numero_display = models.CharField(
+        max_length=60,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Número visible con sufijo -N para duplicados (SS20-0459-2).",
+        verbose_name="Número visible",
+    )
+    solicitud_tipo = models.CharField(
+        max_length=100, blank=True, default="", verbose_name="Tipo de solicitud"
+    )
+    fecha = models.DateTimeField(
+        null=True, blank=True, db_index=True, verbose_name="Fecha"
+    )
+    fecha_cierre = models.DateTimeField(
+        null=True, blank=True, verbose_name="Fecha de cierre"
+    )
+    estatus = models.CharField(
+        max_length=8,
+        choices=ESTATUS_CHOICES,
+        default=ESTATUS_ABIERTO,
+        db_index=True,
+        verbose_name="Estatus",
+    )
+    descripcion = models.TextField(
+        blank=True, default="", verbose_name="Descripción / asunto"
+    )
+    archivado = models.BooleanField(
+        default=False, db_index=True, verbose_name="Archivado"
+    )
+    ultima_sync = models.DateTimeField(
+        null=True, blank=True, verbose_name="Última sincronización"
+    )
+    raw_data = models.JSONField(
+        default=dict, blank=True, verbose_name="Datos crudos del SIG"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ticket"
+        verbose_name_plural = "Tickets"
+        ordering = ("-fecha", "ticket_id")
+        indexes = [
+            models.Index(fields=("estatus", "fecha"), name="tick_estatus_fecha"),
+            models.Index(fields=("numero", "ticket_id"), name="tick_numero_id"),
+        ]
+
+    def __str__(self):
+        return self.numero_display or self.ticket_id
+
+
+class TicketLog(models.Model):
+    """Bitácora de cada corrida de sincronización de tickets."""
+
+    MODO_PARCIAL = "parcial"
+    MODO_COMPLETO = "completo"
+    ESTADO_OK = "OK"
+    ESTADO_ERROR = "ERROR"
+    ESTADO_SALTADO = "SALTADO"
+
+    modo = models.CharField(
+        max_length=10,
+        choices=ConfiguracionTickets.MODO_CHOICES,
+        default=MODO_PARCIAL,
+        verbose_name="Modo",
+    )
+    estado = models.CharField(
+        max_length=10, blank=True, default="", verbose_name="Estado"
+    )
+    mensaje = models.TextField(blank=True, default="", verbose_name="Mensaje")
+    creados = models.PositiveIntegerField(default=0, verbose_name="Creados")
+    actualizados = models.PositiveIntegerField(
+        default=0, verbose_name="Actualizados"
+    )
+    archivados = models.PositiveIntegerField(default=0, verbose_name="Archivados")
+    errores = models.PositiveIntegerField(default=0, verbose_name="Errores")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha")
+
+    class Meta:
+        verbose_name = "Bitácora de tickets"
+        verbose_name_plural = "Bitácora de tickets"
+        ordering = ("-creado_en",)
+
+    def __str__(self):
+        return f"TicketLog #{self.pk} [{self.modo} {self.estado}]"
 
 
 # ---------------------------------------------------------------------------

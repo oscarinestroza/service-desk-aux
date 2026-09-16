@@ -21,6 +21,8 @@ from .models import (
     InstitucionEdificio,
     Seccion,
     SyncLog,
+    Ticket,
+    TicketLog,
 )
 
 
@@ -468,7 +470,10 @@ class ConfiguracionSIGAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracionTickets)
 class ConfiguracionTicketsAdmin(admin.ModelAdmin):
-    list_display = ("url_reporte", "hoja_excel", "fecha_desde_completa", "actualizado_en")
+    list_display = (
+        "habilitado", "modo_default", "intervalo_minutos", "url_reporte",
+        "total_tickets", "ultima_sincronizacion",
+    )
     fieldsets = (
         ("Reporte de tickets del SIG", {
             "fields": ("url_reporte", "hoja_excel"),
@@ -484,8 +489,28 @@ class ConfiguracionTicketsAdmin(admin.ModelAdmin):
                 "tiempo en el SIG; 'hasta' = hoy). La descarga rápida no usa filtros."
             ),
         }),
+        ("Sincronización automática", {
+            "fields": (
+                "habilitado", "modo_default", "intervalo_minutos",
+                "descarga_completa_horas",
+            ),
+            "description": (
+                "El tick de Celery sincroniza parcial (rápida) cada "
+                "intervalo_minutos y completa en las horas indicadas."
+            ),
+        }),
+        ("Última sincronización", {
+            "fields": (
+                "ultima_sincronizacion", "ultimo_modo", "ultimo_estado",
+                "ultimo_mensaje", "total_tickets",
+            ),
+            "description": "Información de la última corrida (solo lectura).",
+        }),
     )
-    readonly_fields = ("actualizado_en", "creado_en")
+    readonly_fields = (
+        "ultima_sincronizacion", "ultimo_modo", "ultimo_estado",
+        "ultimo_mensaje", "total_tickets", "actualizado_en", "creado_en",
+    )
 
     def has_add_permission(self, request):
         # Permitir solo un registro singleton
@@ -500,6 +525,42 @@ class ConfiguracionTicketsAdmin(admin.ModelAdmin):
         return super().changeform_view(
             request, str(obj.pk), form_url, extra_context
         )
+
+
+@admin.register(Ticket)
+class TicketAdmin(admin.ModelAdmin):
+    list_display = (
+        "numero_display", "fecha", "estatus", "solicitud_tipo",
+        "archivado", "ultima_sync",
+    )
+    list_filter = ("estatus", "archivado", "solicitud_tipo")
+    search_fields = ("numero_display", "numero", "ticket_id", "descripcion")
+    ordering = ("-fecha",)
+    readonly_fields = (
+        "numero", "ticket_id", "fecha", "fecha_cierre", "estatus",
+        "solicitud_tipo", "archivado", "ultima_sync", "numero_display",
+        "descripcion", "raw_data", "creado_en", "actualizado_en",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(TicketLog)
+class TicketLogAdmin(admin.ModelAdmin):
+    list_display = ("creado_en", "modo", "estado", "creados", "actualizados", "archivados", "errores")
+    list_filter = ("modo", "estado")
+    readonly_fields = ("creado_en",)
+    date_hierarchy = "creado_en"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 # ---------------------------------------------------------------------------

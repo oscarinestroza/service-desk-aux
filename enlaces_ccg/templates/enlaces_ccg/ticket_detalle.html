@@ -1,0 +1,81 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Ticket {{ ticket.numero_display }} — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:seguimiento_tickets' %}">Seguimiento de tickets</a></li>
+<li class="breadcrumb-item active" aria-current="page">{{ ticket.numero_display }}</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-ticket-alt me-2 text-primary"></i>Ticket {{ ticket.numero_display }}
+    </h1>
+    <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-file-alt me-1"></i>Información general</strong>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5 text-muted">ID de solicitud</dt>
+                    <dd class="col-7">{{ ticket.ticket_id }}</dd>
+                    <dt class="col-5 text-muted">Número</dt>
+                    <dd class="col-7">{{ ticket.numero }}</dd>
+                    <dt class="col-5 text-muted">Número visible</dt>
+                    <dd class="col-7">{{ ticket.numero_display }}</dd>
+                    <dt class="col-5 text-muted">Estatus</dt>
+                    <dd class="col-7">
+                        {% if ticket.estatus == 'CERRADO' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-5 text-muted">Fecha</dt>
+                    <dd class="col-7">{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                    <dt class="col-5 text-muted">Fecha de cierre</dt>
+                    <dd class="col-7">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                    <dt class="col-5 text-muted">Tipo de solicitud</dt>
+                    <dd class="col-7">{{ ticket.solicitud_tipo|default:"—" }}</dd>
+                    <dt class="col-5 text-muted">Archivado</dt>
+                    <dd class="col-7">{{ ticket.archivado|yesno:"Sí,No" }}</dd>
+                    <dt class="col-5 text-muted">Última sync</dt>
+                    <dd class="col-7">{% if ticket.ultima_sync %}{{ ticket.ultima_sync|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                </dl>
+                <hr class="my-2">
+                <strong class="small">Descripción</strong>
+                <p class="mb-0 mt-1">{{ ticket.descripcion|default:"—" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-table me-1"></i>Datos crudos del SIG</strong>
+            </div>
+            <div class="card-body">
+                <div class="ccg-table-wrap">
+                    <table class="table table-sm table-striped mb-0">
+                        <tbody>
+                            {% for clave, valor in ticket.raw_data.items %}
+                            <tr>
+                                <td class="text-muted" style="width:38%">{{ clave }}</td>
+                                <td>{{ valor|default:"—" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

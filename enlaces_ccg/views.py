@@ -10,13 +10,14 @@ Rutas:
 
 import json
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib import auth, messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import models
 from django.db.models import Count, F, Q
-from django.http import JsonResponse, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from urllib.parse import quote
 from django.views.decorators.http import require_POST
@@ -25,8 +26,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 from .models import (
-    Adjunto, ComunicadoCC, Documento, DocumentoCarpeta, Edificio,
-    EnlaceAutorizado, Institucion, InstitucionEdificio, Seccion,
+    Adjunto, ComunicadoCC, ConfiguracionTickets, Documento, DocumentoCarpeta,
+    Edificio,
+    EnlaceAutorizado,
+    Institucion, InstitucionEdificio, Seccion, Ticket,
 )
 from .roles import (
     CAP_ADMIN,
@@ -357,8 +360,115 @@ def copiar_correos_comunicados(request):
 
 @requiere(CAP_TICKETS)
 def seguimiento_tickets(request):
-    """Vista de Seguimiento de tickets (en construcción)."""
-    return render(request, "enlaces_ccg/seguimiento_tickets.html")
+    """Lista paginada de tickets con filtros (servidor-side).
+
+    Rendimiento: consulta con índices, sin raw_data en la tabla, paginación
+    de 50 registros y badge con total_tickets sin contar por petición.
+    """
+    cfg = ConfiguracionTickets.cargar()
+    # Paginado servidor-side: SQL LIMIT/OFFSET; cada página trae solo 50 filas
+    # (incluye raw_data para las columnas de contexto, sin consultas extra).
+    qs = Ticket.objects.all()
+
+    estatus = request.GET.get("estatus", "").strip()
+    if estatus in (Ticket.ESTATUS_ABIERTO, Ticket.ESTATUS_CERRADO):
+        qs = qs.filter(estatus=estatus)
+
+    incluir_archivados = request.GET.get("incluir", "") == "1"
+    if not incluir_archivados:
+        qs = qs.filter(archivado=False)
+
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(
+            Q(numero_display__icontains=q)
+            | Q(numero__icontains=q)
+            | Q(ticket_id__icontains=q)
+            | Q(descripcion__icontains=q)
+        )
+
+    desde = request.GET.get("desde", "").strip()
+    hasta = request.GET.get("hasta", "").strip()
+    if desde:
+        try:
+            qs = qs.filter(fecha__gte=datetime.strptime(desde, "%Y-%m-%d"))
+        except ValueError:
+            desde = ""
+    if hasta:
+        try:
+            qs = qs.filter(
+                fecha__lt=datetime.strptime(hasta, "%Y-%m-%d") + timedelta(days=1)
+            )
+        except ValueError:
+            hasta = ""
+
+    paginator = Paginator(qs, 50)
+    try:
+        pagina = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        pagina = 1
+    page_obj = paginator.get_page(pagina)
+
+    filtros = "&".join(
+        f"{k}={quote(v)}"
+        for k, v in request.GET.items()
+        if k != "page" and v.strip() != ""
+    )
+
+    return render(
+        request,
+        "enlaces_ccg/seguimiento_tickets.html",
+        {
+            "page_obj": page_obj,
+            "filtros": filtros,
+            "estatus": estatus,
+            "q": q,
+            "desde": desde,
+            "hasta": hasta,
+            "incluir_archivados": incluir_archivados,
+            "total_tickets": cfg.total_tickets,
+            "ultima_sincronizacion": cfg.ultima_sincronizacion,
+            "cfg": cfg,
+        },
+    )
+
+
+@requiere(CAP_TICKETS)
+def ticket_detalle(request, pk):
+    """Detalle canónico por PK (único, sin ambigüedad)."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    return render(request, "enlaces_ccg/ticket_detalle.html", {"ticket": ticket})
+
+
+@requiere(CAP_TICKETS)
+def ticket_por_numero(request, numero):
+    """Detalle por número visible; acepta el sufijo -N de duplicados."""
+    ticket = (
+        Ticket.objects.filter(numero_display=numero).first()
+        or Ticket.objects.filter(numero=numero).first()
+    )
+    if ticket is None:
+        raise Http404(f"No existe el ticket {numero}")
+    return render(request, "enlaces_ccg/ticket_detalle.html", {"ticket": ticket})
+
+
+@login_required
+@require_POST
+@requiere(CAP_EDITAR)
+def sincronizar_tickets_ahora(request):
+    """Encola una sincronización de tickets en segundo plano (cola programadas)."""
+    from .sig_sync.tickets import MODO_SYNC_COMPLETO, MODO_SYNC_PARCIAL, sincronizar_tickets_task
+
+    modo = request.POST.get("modo", "").strip()
+    if modo not in (MODO_SYNC_COMPLETO, MODO_SYNC_PARCIAL):
+        modo = None
+    sincronizar_tickets_task.delay(modo=modo)
+    messages.success(
+        request,
+        "Sincronización de tickets encolada en segundo plano. "
+        "Se reflejará al terminar en 'Última sincronización'.",
+    )
+    return redirect("enlaces_ccg:seguimiento_tickets")
 
 
 @requiere(CAP_TICKETS)

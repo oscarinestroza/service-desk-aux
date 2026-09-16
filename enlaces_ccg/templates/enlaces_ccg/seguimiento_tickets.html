@@ -7,17 +7,149 @@
 {% endblock %}
 
 {% block contenido %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <h1 class="h3 mb-0">
         <i class="fas fa-ticket-alt me-2 text-primary"></i>Seguimiento de Tickets
     </h1>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+            <i class="fas fa-clipboard-list me-1"></i>{{ total_tickets }} tickets
+        </span>
+        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" title="Última sincronización">
+            <i class="fas fa-sync-alt me-1"></i>
+            {% if ultima_sincronizacion %}Última: {{ ultima_sincronizacion|timesince }} atrás
+            {% else %}Sin sincronizar{% endif %}
+        </span>
+        {% if puede_editar %}
+        <form method="post" action="{% url 'enlaces_ccg:ticket_sincronizar' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-sync me-1"></i>Sincronizar ahora
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Buscar</label>
+                <input type="text" name="q" class="form-control form-control-sm"
+                       placeholder="Número, ID o descripción" value="{{ q }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Estatus</label>
+                <select name="estatus" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
+                    <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Desde</label>
+                <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Hasta</label>
+                <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
+            </div>
+            <div class="col-md-3 d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-primary" type="submit">
+                    <i class="fas fa-search me-1"></i>Filtrar
+                </button>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" name="incluir" value="1"
+                           id="incluirArchivados" {% if incluir_archivados %}checked{% endif %}>
+                    <label class="form-check-label small" for="incluirArchivados">Incluir archivados</label>
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
 
 <div class="card border-0 shadow-sm">
-    <div class="card-body text-center text-muted py-5">
-        <i class="fas fa-ticket-alt fa-3x mb-3 text-secondary"></i>
-        <h5 class="text-secondary">Módulo de seguimiento de tickets</h5>
-        <p class="mb-0">Esta vista está en construcción. Pronto podrás gestionar el seguimiento de tickets.</p>
+    <div class="card-body p-0">
+        <div class="ccg-table-wrap">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="row-num">#</th>
+                        <th class="cell-name">Número</th>
+                        <th>Fecha</th>
+                        <th>Estatus</th>
+                        <th>Tipo</th>
+                        <th>Descripción</th>
+                        <th>Contexto</th>
+                        <th class="text-center">Archivado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in page_obj.object_list %}
+                    <tr>
+                        <td class="row-num text-muted">{{ forloop.counter0|add:page_obj.start_index }}</td>
+                        <td class="cell-name">
+                            <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
+                            {% if t.numero and t.numero != t.numero_display %}
+                            <span class="text-muted small">({{ t.numero }})</span>{% endif %}
+                        </td>
+                        <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                        <td>
+                            {% if t.estatus == 'CERRADO' %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
+                            {% else %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ t.solicitud_tipo|default:"—" }}</td>
+                        <td class="cell-sub">{{ t.descripcion|default:"—"|truncatechars:80 }}</td>
+                        <td class="cell-sub text-muted">
+                            {% with c=t.raw_data %}
+                            {{ c.servicio|default:"" }}{% if c.subservicio %} · {{ c.subservicio }}{% endif %}
+                            {% if c.falla_descripcion %} · {{ c.falla_descripcion|truncatechars:40 }}{% endif %}
+                            {% if c.nivel %} · Nv. {{ c.nivel }}{% endif %}
+                            {% if c.unidad %} · {{ c.unidad }}{% endif %}
+                            {% if c.area %} · {{ c.area }}{% endif %}
+                            {% if c.grupo %} · {{ c.grupo }}{% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="text-center">
+                            {% if t.archivado %}<i class="fas fa-inbox text-muted" title="Archivado"></i>
+                            {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-5">
+                            <i class="fas fa-ticket-alt fa-2x mb-2 d-block"></i>
+                            No hay tickets que coincidan con los filtros.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between align-items-center py-2">
+        <span class="small text-muted">
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
+        </span>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page=1">Primera</a></li>
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a></li>
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

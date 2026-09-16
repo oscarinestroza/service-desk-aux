@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
@@ -352,5 +353,12 @@ CELERY_IMPORTS = (
     "enlaces_ccg.sig_sync.tickets",
 )
 
-# Base actions_path para el beat (no usamos programme por ahora, pero habilitado)
-# CELERY_BEAT_SCHEDULE puede definirse aquí si se necesitan tareas periódicas.
+# Tick de sincronización de tickets: corre cada 60 s; la propia tarea revisa
+# ConfiguracionTickets (habilitado, intervalo_minutos, descarga_completa_horas)
+# y decide si toca descargar/sincronizar (parcial o completa). Sin reiniciar.
+CELERY_BEAT_SCHEDULE = {
+    "tick-sync-tickets": {
+        "task": "enlaces_ccg.sig_sync.tickets.tick_sync_tickets_task",
+        "schedule": timedelta(seconds=60),
+    },
+}
