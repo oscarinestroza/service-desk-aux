@@ -311,6 +311,70 @@ class VistaTicketsTests(TestCase):
         self.assertIs(datos["sincronizando"], False)
 
 
+class FasesProcesoTests(TestCase):
+    def _crear(self, tid, numero, cierro="", actividades="", servicio="Elevadores"):
+        ruta = _excel_tmp([
+            _fila(tid, numero, cierro=cierro, servicio=servicio),
+        ])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+        t = Ticket.objects.get(ticket_id=str(tid))
+        if actividades:
+            rd = dict(t.raw_data)
+            rd["Actividades"] = actividades
+            t.raw_data = rd
+            t.save(update_fields=["raw_data"])
+        return Ticket.objects.get(pk=t.pk)
+
+    def _estado(self, fases, clave):
+        return next(f["estado"] for f in fases if f["clave"] == clave)
+
+    def test_abierto_proceso_activo(self):
+        t = self._crear(1, "SS26-0600")
+        fases = t.fases_proceso()
+        self.assertEqual(self._estado(fases, "creado"), "completado")
+        self.assertEqual(self._estado(fases, "canalizado"), "completado")
+        self.assertEqual(self._estado(fases, "proceso"), "activo")
+        self.assertEqual(self._estado(fases, "finalizado"), "pendiente")
+        self.assertEqual(self._estado(fases, "completado"), "pendiente")
+
+    def test_cerrado_finalizado(self):
+        t = self._crear(1, "SS26-0601", cierro="2026-09-02 12:00:00")
+        fases = t.fases_proceso()
+        self.assertEqual(self._estado(fases, "proceso"), "completado")
+        self.assertEqual(self._estado(fases, "finalizado"), "completado")
+        self.assertEqual(self._estado(fases, "completado"), "pendiente")
+
+    def test_actividades_marca_completado(self):
+        t = self._crear(1, "SS26-0602", cierro="2026-09-02 12:00:00",
+                        actividades="Cambio de lámpara")
+        fases = t.fases_proceso()
+        self.assertEqual(self._estado(fases, "completado"), "completado")
+
+    def test_sin_servicio_canalizado_pendiente(self):
+        t = self._crear(1, "SS26-0603", servicio="")
+        fases = t.fases_proceso()
+        self.assertEqual(self._estado(fases, "canalizado"), "pendiente")
+
+    def test_abierta_con_solo_actividades_marca_completado(self):
+        t = self._crear(1, "SS26-0604", actividades="Atención inicial")
+        fases = t.fases_proceso()
+        self.assertEqual(self._estado(fases, "completado"), "completado")
+        self.assertEqual(self._estado(fases, "finalizado"), "pendiente")
+
+    def test_stepper_renderiza_en_detalle(self):
+        t = self._crear(1, "SS26-0605")
+        respuesta = self.client.get(reverse("enlaces_ccg:ticket_detalle", args=[t.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertIn("Proceso de atención", html)
+        self.assertIn("Ticket creado", html)
+        self.assertIn("Canalizado con el servicio", html)
+        self.assertIn("En proceso de atención", html)
+        self.assertIn("ccg-fase-activo", html)
+
+
 class ProximaSincronizacionTests(TestCase):
     def setUp(self):
         self.cfg = ConfiguracionTickets.cargar()

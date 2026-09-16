@@ -1018,6 +1018,36 @@ class Ticket(models.Model):
     def __str__(self):
         return self.numero_display or self.ticket_id
 
+    def fases_proceso(self):
+        """Fases del proceso de atención para el stepper del detalle."""
+        r = self.raw_data or {}
+        servicio = str(r.get("servicio") or "").strip()
+        actividades = str(r.get("Actividades") or "").strip()
+        cerrado = self.estatus == self.ESTATUS_CERRADO
+        return [
+            {"clave": "creado", "nombre": "Ticket creado", "estado": "completado"},
+            {
+                "clave": "canalizado",
+                "nombre": "Canalizado con el servicio",
+                "estado": "completado" if servicio else "pendiente",
+            },
+            {
+                "clave": "proceso",
+                "nombre": "En proceso de atención",
+                "estado": "completado" if cerrado else "activo",
+            },
+            {
+                "clave": "finalizado",
+                "nombre": "Finalizado",
+                "estado": "completado" if cerrado else "pendiente",
+            },
+            {
+                "clave": "completado",
+                "nombre": "Completado",
+                "estado": "completado" if actividades else "pendiente",
+            },
+        ]
+
 
 class TicketLog(models.Model):
     """Bitácora de cada corrida de sincronización de tickets."""

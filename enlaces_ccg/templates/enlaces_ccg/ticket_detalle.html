@@ -17,6 +17,50 @@
     </a>
 </div>
 
+<style>
+    .ccg-fases { gap: 0; }
+    .ccg-fase { flex: 1 1 0; position: relative; padding-top: 6px; }
+    .ccg-fase .ccg-fase-ico {
+        width: 32px; height: 32px; font-size: 14px;
+        position: relative; z-index: 1;
+    }
+    .ccg-fase::before {
+        content: ""; position: absolute;
+        top: 21px; left: 0; right: calc(50% + 20px);
+        height: 3px; background: var(--fase-linea, #e2e8f0);
+    }
+    .ccg-fase:first-child::before { display: none; }
+    .ccg-fase.ccg-fase-completado { --fase-linea: #198754; }
+    .ccg-fase.ccg-fase-activo { --fase-linea: #0d6efd; }
+    .ccg-fase.ccg-fase-pendiente { --fase-linea: #e2e8f0; }
+    .ccg-fase .ccg-fase-nombre { color: #64748b; font-weight: 500; }
+    .ccg-fase.ccg-fase-completado .ccg-fase-nombre { color: #198754; }
+    .ccg-fase.ccg-fase-activo .ccg-fase-nombre { color: #0d6efd; font-weight: 700; }
+</style>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white py-2">
+        <strong><i class="fas fa-route me-1"></i>Proceso de atención</strong>
+    </div>
+    <div class="card-body py-3">
+        <div class="ccg-fases d-flex">
+            {% for fase in ticket.fases_proceso %}
+            <div class="ccg-fase ccg-fase-{{ fase.estado }} d-flex flex-column align-items-center text-center px-1">
+                <span class="ccg-fase-ico d-flex align-items-center justify-content-center rounded-circle text-white
+                             {% if fase.estado == 'completado' %}bg-success
+                             {% elif fase.estado == 'activo' %}bg-primary
+                             {% else %}bg-secondary{% endif %}">
+                    {% if fase.estado == 'completado' %}<i class="fas fa-check"></i>
+                    {% elif fase.estado == 'activo' %}<i class="fas fa-circle-notch fa-spin"></i>
+                    {% else %}<i class="fas fa-minus"></i>{% endif %}
+                </span>
+                <span class="ccg-fase-nombre small mt-1">{{ fase.nombre }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm">
