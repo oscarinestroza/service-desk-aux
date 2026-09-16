@@ -69,73 +69,36 @@
     </div>
 </div>
 
+<style>
+    /* Barra de scroll horizontal en la PARTE SUPERIOR: se voltea el contenedor
+       externo y se contre-voltea el interno (el contenido queda derecho y la
+       barra sube). */
+    .ccg-scroll-top { transform: scaleY(-1); }
+    .ccg-scroll-top > .ccg-table-wrap { transform: scaleY(-1); }
+    .ccg-ticket-actions .btn { line-height: 1; }
+</style>
+
 <div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
-        <div class="ccg-table-wrap">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="row-num">#</th>
-                        <th class="cell-name">Número</th>
-                        <th>Fecha</th>
-                        <th>Estatus</th>
-                        <th>Tipo</th>
-                        <th>Descripción</th>
-                        <th>Contexto</th>
-                        <th class="text-center">Archivado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in page_obj.object_list %}
-                    <tr>
-                        <td class="row-num text-muted">{{ forloop.counter0|add:page_obj.start_index }}</td>
-                        <td class="cell-name">
-                            <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
-                            {% if t.numero and t.numero != t.numero_display %}
-                            <span class="text-muted small">({{ t.numero }})</span>{% endif %}
-                        </td>
-                        <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
-                        <td>
-                            {% if t.estatus == 'CERRADO' %}
-                            <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
-                            {% else %}
-                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ t.solicitud_tipo|default:"—" }}</td>
-                        <td class="cell-sub">{{ t.descripcion|default:"—"|truncatechars:80 }}</td>
-                        <td class="cell-sub text-muted">
-                            {% with c=t.raw_data %}
-                            {{ c.servicio|default:"" }}{% if c.subservicio %} · {{ c.subservicio }}{% endif %}
-                            {% if c.falla_descripcion %} · {{ c.falla_descripcion|truncatechars:40 }}{% endif %}
-                            {% if c.nivel %} · Nv. {{ c.nivel }}{% endif %}
-                            {% if c.unidad %} · {{ c.unidad }}{% endif %}
-                            {% if c.area %} · {{ c.area }}{% endif %}
-                            {% if c.grupo %} · {{ c.grupo }}{% endif %}
-                            {% endwith %}
-                        </td>
-                        <td class="text-center">
-                            {% if t.archivado %}<i class="fas fa-inbox text-muted" title="Archivado"></i>
-                            {% else %}<span class="text-muted">—</span>{% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="text-center text-muted py-5">
-                            <i class="fas fa-ticket-alt fa-2x mb-2 d-block"></i>
-                            No hay tickets que coincidan con los filtros.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <div class="flex-grow-1" style="min-width: 260px; max-width: 460px;">
+            <span class="small text-muted">
+                Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
+            </span>
+            {% if sync_proxima_ts %}
+            <div class="d-flex align-items-center gap-2 mt-1"
+                 data-inicio="{{ sync_inicio_ts }}" data-fin="{{ sync_proxima_ts }}">
+                <div class="progress flex-grow-1" style="height: 6px;">
+                    <div id="barraSync" class="progress-bar bg-info" role="progressbar" style="width: 0%;"></div>
+                </div>
+                <span id="textoSync" class="small text-muted text-nowrap">Próxima actualización…</span>
+            </div>
+            {% else %}
+            <div class="small text-muted mt-1">
+                <i class="fas fa-pause-circle me-1"></i>Sincronización automática deshabilitada
+            </div>
+            {% endif %}
         </div>
-    </div>
-    {% if page_obj.paginator.num_pages > 1 %}
-    <div class="card-footer d-flex justify-content-between align-items-center py-2">
-        <span class="small text-muted">
-            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
-        </span>
+        {% if page_obj.paginator.num_pages > 1 %}
         <nav>
             <ul class="pagination pagination-sm mb-0">
                 {% if page_obj.has_previous %}
@@ -149,7 +112,207 @@
                 {% endif %}
             </ul>
         </nav>
+        {% endif %}
     </div>
-    {% endif %}
+    <div class="card-body p-0">
+        <div class="ccg-scroll-top">
+            <div class="ccg-table-wrap">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center">Acciones</th>
+                            <th class="cell-name">Ticket</th>
+                            <th>Solicitante</th>
+                            <th>Falla</th>
+                            <th>Responsable de atención</th>
+                            <th>Fecha de solicitud</th>
+                            <th>Estatus</th>
+                            <th>Edificio</th>
+                            <th>Nivel</th>
+                            <th>Unidad Funcional</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in page_obj.object_list %}
+                        {% with c=t.raw_data %}
+                        <tr>
+                            <td class="text-center ccg-ticket-actions">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-ver-ticket"
+                                        data-pk="{{ t.pk }}"
+                                        data-url="{% url 'enlaces_ccg:ticket_json' t.pk %}"
+                                        title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                            <td class="cell-name">
+                                <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
+                            </td>
+                            <td>{{ c.solicitud_solicitante|default:"—" }}</td>
+                            <td>{{ c.falla_descripcion|default:"—" }}</td>
+                            <td>{{ c.Responsable_atencion|default:"—" }}</td>
+                            <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                            <td>
+                                {% if t.estatus == 'CERRADO' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ c.nivel|default:"—" }}</td>
+                            <td>{{ c.grupo|default:"—" }}</td>
+                            <td>{{ c.unidad|default:"—" }}</td>
+                        </tr>
+                        {% endwith %}
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-5">
+                                <i class="fas fa-ticket-alt fa-2x mb-2 d-block"></i>
+                                No hay tickets que coincidan con los filtros.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
+
+<div class="modal fade" id="modalTicket" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-ticket-alt me-2 text-primary"></i>Detalle del ticket
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalTicketContenido"></div>
+            <div class="modal-footer">
+                <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                    <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
+                </a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // --- Barra de progreso de la próxima sincronización ---
+    var barra = document.getElementById('barraSync');
+    var texto = document.getElementById('textoSync');
+    if (barra && texto) {
+        var cont = barra.closest('[data-fin]');
+        var inicio = parseInt(cont.dataset.inicio, 10) * 1000;
+        var fin = parseInt(cont.dataset.fin, 10) * 1000;
+        var GRACIA = 30000;   // 30 s de gracia antes de considerar la actualización
+        var ESPERA = 60000;   // 1 min mostrando "Actualizado al minuto"
+        var objetivo = fin + GRACIA;
+        var recargado = false;
+
+        var formatear = function (seg) {
+            var h = Math.floor(seg / 3600);
+            var m = Math.floor((seg % 3600) / 60);
+            var s = seg % 60;
+            var partes = [];
+            if (h) partes.push(h + ' h');
+            if (m || h) partes.push(m + ' min');
+            partes.push(s + ' s');
+            return partes.join(' ');
+        };
+
+        var actualizarBarra = function () {
+            var ahora = Date.now();
+            var total = Math.max(1, objetivo - inicio);
+            var pct = Math.min(100, Math.max(0, ((ahora - inicio) / total) * 100));
+            barra.style.width = pct.toFixed(1) + '%';
+
+            // Fase 1: cuenta regresiva (con los 30 s de gracia incluidos)
+            if (ahora < objetivo) {
+                barra.classList.remove('progress-bar-striped', 'progress-bar-animated');
+                texto.textContent = 'Próxima actualización inicia en ' +
+                    formatear(Math.ceil((objetivo - ahora) / 1000));
+                return;
+            }
+
+            // Fase 2: durante 1 minuto tras el inicio, se muestra actualizado
+            var transcurrido = ahora - objetivo;
+            if (transcurrido < ESPERA) {
+                barra.style.width = '100%';
+                barra.classList.add('progress-bar-striped', 'progress-bar-animated');
+                texto.textContent = 'Actualizado al minuto';
+                return;
+            }
+
+            // Fase 3: pasado el minuto, se refresca para recontar
+            if (!recargado) {
+                recargado = true;
+                texto.textContent = 'Reiniciando conteo…';
+                location.reload();
+            }
+        };
+        actualizarBarra();
+        setInterval(actualizarBarra, 1000);
+    }
+
+    // --- Modal de acciones ---
+    var modalEl = document.getElementById('modalTicket');
+    if (!modalEl) return;
+    var modal = new bootstrap.Modal(modalEl);
+    var cuerpo = document.getElementById('modalTicketContenido');
+    var enlace = document.getElementById('modalTicketEnlace');
+
+    var esc = function (v) {
+        return (v === null || v === undefined ? '' : String(v)).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+
+    var render = function (d) {
+        var badge = d.estatus === 'CERRADO'
+            ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>'
+            : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>';
+        var filas = Object.keys(d.raw_data || {}).map(function (k) {
+            return '<tr><td class="text-muted" style="width: 38%">' + esc(k) + '</td><td>' +
+                esc(d.raw_data[k] === '' ? '—' : d.raw_data[k]) + '</td></tr>';
+        }).join('');
+        return '' +
+            '<div class="d-flex justify-content-between align-items-center mb-3">' +
+            '<h5 class="mb-0">Ticket ' + esc(d.numero) + '</h5>' + badge + '</div>' +
+            '<dl class="row small mb-3">' +
+            '<dt class="col-5 text-muted">ID de solicitud</dt><dd class="col-7">' + esc(d.ticket_id) + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de solicitud</dt><dd class="col-7">' + esc(d.fecha || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de cierre</dt><dd class="col-7">' + esc(d.fecha_cierre || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Tipo de solicitud</dt><dd class="col-7">' + esc(d.solicitud_tipo || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Descripción</dt><dd class="col-7">' + esc(d.descripcion || '—') + '</dd>' +
+            '</dl><hr>' +
+            '<h6 class="small text-muted">Datos del SIG</h6>' +
+            '<div style="max-height: 300px; overflow: auto;">' +
+            '<table class="table table-sm table-striped mb-0"><tbody>' + filas + '</tbody></table></div>';
+    };
+
+    document.querySelectorAll('.btn-ver-ticket').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            cuerpo.innerHTML = '<div class="text-center py-4">' +
+                '<div class="spinner-border text-primary" role="status"></div></div>';
+            modal.show();
+            fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (d) {
+                    cuerpo.innerHTML = render(d);
+                    enlace.href = d.url_detalle;
+                })
+                .catch(function () {
+                    cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
+                        'No se pudieron cargar los datos del ticket.</div>';
+                });
+        });
+    });
+})();
+</script>
 {% endblock %}

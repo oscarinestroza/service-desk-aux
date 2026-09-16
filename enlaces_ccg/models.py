@@ -5,7 +5,10 @@ Relación jerárquica:
     Edificio ↔ Institución (M2M through InstitucionEdificio) → EnlaceAutorizado
 """
 
+from datetime import datetime, time, timedelta
+
 from django.db import models
+from django.utils import timezone
 
 
 # ---------------------------------------------------------------------------
@@ -884,6 +887,50 @@ class ConfiguracionTickets(models.Model):
 
     def modo_default_valor(self) -> str:
         return self.modo_default or self.MODO_PARCIAL
+
+    @staticmethod
+    def _siguiente_hora(horas, ahora):
+        """Próxima ocurrencia (datetime) de una hora "HH:MM" del día (hora local)."""
+        tz = timezone.get_current_timezone()
+        fecha_local = timezone.localtime(ahora).date()
+        candidatas = []
+        if not isinstance(horas, list):
+            return candidatas
+        for hora in horas:
+            try:
+                hh, mm = (int(x) for x in str(hora).split(":")[:2])
+                candidata = timezone.make_aware(
+                    datetime.combine(fecha_local, time(hh, mm)), tz
+                )
+            except (ValueError, TypeError):
+                continue
+            if candidata <= ahora:
+                candidata += timedelta(days=1)
+            candidatas.append(candidata)
+        return candidatas
+
+    def proxima_sincronizacion(self, ahora=None):
+        """Momento previsto de la próxima sincronización automática (o None).
+
+        Refleja la lógica de tick_sync_tickets_task: descarga completa cuando
+        coincida una hora de descarga_completa_horas; si no, parcial cada
+        intervalo_minutos desde la última sincronización.
+        """
+        if not self.habilitado:
+            return None
+        if ahora is None:
+            ahora = timezone.now()
+        candidatas = []
+        if self.ultima_sincronizacion:
+            candidatas.append(
+                self.ultima_sincronizacion
+                + timedelta(minutes=self.intervalo_minutos or 5)
+            )
+        else:
+            candidatas.append(ahora)
+        candidatas.extend(self._siguiente_hora(self.descarga_completa_horas, ahora))
+        futuras = [c for c in candidatas if c > ahora]
+        return min(futuras) if futuras else ahora
 
     @classmethod
     def cargar(cls):

@@ -20,6 +20,7 @@ from django.db.models import Count, F, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from urllib.parse import quote
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from openpyxl import load_workbook
 from openpyxl import Workbook
@@ -415,6 +416,15 @@ def seguimiento_tickets(request):
         if k != "page" and v.strip() != ""
     )
 
+    proxima = cfg.proxima_sincronizacion()
+    if proxima:
+        inicio = cfg.ultima_sincronizacion or (
+            proxima - timedelta(minutes=cfg.intervalo_minutos or 5)
+        )
+        inicio_ts, proxima_ts = int(inicio.timestamp()), int(proxima.timestamp())
+    else:
+        inicio_ts = proxima_ts = 0
+
     return render(
         request,
         "enlaces_ccg/seguimiento_tickets.html",
@@ -428,6 +438,9 @@ def seguimiento_tickets(request):
             "incluir_archivados": incluir_archivados,
             "total_tickets": cfg.total_tickets,
             "ultima_sincronizacion": cfg.ultima_sincronizacion,
+            "proxima_sincronizacion": proxima,
+            "sync_inicio_ts": inicio_ts,
+            "sync_proxima_ts": proxima_ts,
             "cfg": cfg,
         },
     )
@@ -438,6 +451,33 @@ def ticket_detalle(request, pk):
     """Detalle canónico por PK (único, sin ambigüedad)."""
     ticket = get_object_or_404(Ticket, pk=pk)
     return render(request, "enlaces_ccg/ticket_detalle.html", {"ticket": ticket})
+
+
+@requiere(CAP_TICKETS)
+def ticket_json(request, pk):
+    """Datos del ticket para el modal de acciones (JSON)."""
+    t = get_object_or_404(Ticket, pk=pk)
+    return JsonResponse(
+        {
+            "pk": t.pk,
+            "numero": t.numero_display,
+            "numero_base": t.numero,
+            "ticket_id": t.ticket_id,
+            "estatus": t.estatus,
+            "fecha": t.fecha.strftime("%d/%m/%Y %H:%M") if t.fecha else "",
+            "fecha_cierre": (
+                t.fecha_cierre.strftime("%d/%m/%Y %H:%M") if t.fecha_cierre else ""
+            ),
+            "solicitud_tipo": t.solicitud_tipo,
+            "descripcion": t.descripcion,
+            "archivado": t.archivado,
+            "ultima_sync": (
+                t.ultima_sync.strftime("%d/%m/%Y %H:%M") if t.ultima_sync else ""
+            ),
+            "raw_data": t.raw_data,
+            "url_detalle": reverse("enlaces_ccg:ticket_detalle", args=[t.pk]),
+        }
+    )
 
 
 @requiere(CAP_TICKETS)
@@ -456,16 +496,13 @@ def ticket_por_numero(request, numero):
 @require_POST
 @requiere(CAP_EDITAR)
 def sincronizar_tickets_ahora(request):
-    """Encola una sincronización de tickets en segundo plano (cola programadas)."""
-    from .sig_sync.tickets import MODO_SYNC_COMPLETO, MODO_SYNC_PARCIAL, sincronizar_tickets_task
+    """Encola una DESCARGA RÁPIDA (parcial) de tickets en segundo plano."""
+    from .sig_sync.tickets import MODO_SYNC_PARCIAL, sincronizar_tickets_task
 
-    modo = request.POST.get("modo", "").strip()
-    if modo not in (MODO_SYNC_COMPLETO, MODO_SYNC_PARCIAL):
-        modo = None
-    sincronizar_tickets_task.delay(modo=modo)
+    sincronizar_tickets_task.delay(modo=MODO_SYNC_PARCIAL)
     messages.success(
         request,
-        "Sincronización de tickets encolada en segundo plano. "
+        "Descarga rápida de tickets encolada en segundo plano. "
         "Se reflejará al terminar en 'Última sincronización'.",
     )
     return redirect("enlaces_ccg:seguimiento_tickets")

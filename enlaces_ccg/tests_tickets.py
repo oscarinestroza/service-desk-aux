@@ -1,7 +1,7 @@
 """Pruebas del parser/importador del módulo de tickets (Fase 2)."""
 
 import tempfile
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from unittest import mock
 
-from .models import Ticket
+from .models import ConfiguracionTickets, Ticket
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
     MODO_SYNC_PARCIAL,
@@ -250,7 +250,7 @@ class VistaTicketsTests(TestCase):
         )
         self.assertEqual(respuesta.status_code, 404)
 
-    def test_sincronizar_post_encola_y_redirige(self):
+    def test_sincronizar_post_encola_descarga_rapida(self):
         with mock.patch(
             "enlaces_ccg.sig_sync.tickets.sincronizar_tickets_task"
         ) as tarea:
@@ -259,8 +259,91 @@ class VistaTicketsTests(TestCase):
             )
             self.assertEqual(respuesta.status_code, 302)
             self.assertEqual(respuesta.url, reverse("enlaces_ccg:seguimiento_tickets"))
-            tarea.delay.assert_called_once_with(modo="completo")
+            tarea.delay.assert_called_once_with(modo="parcial")
+
+    def test_filtro_estatus_abiertos_lista(self):
+        respuesta = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"estatus": "ABIERTO"}
+        )
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertIn(">SS26-0501<", html)
+        self.assertIn(">SS26-0500-2<", html)
+
+    def test_columna_responsable_y_barra_sync(self):
+        respuesta = self.client.get(reverse("enlaces_ccg:seguimiento_tickets"))
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertIn("Responsable de atención", html)
+        self.assertIn('id="barraSync"', html)
+        self.assertIn('id="modalTicket"', html)
+        self.assertIn("btn-ver-ticket", html)
+
+    def test_ticket_json(self):
+        t = Ticket.objects.get(ticket_id="1")
+        respuesta = self.client.get(
+            reverse("enlaces_ccg:ticket_json", args=[t.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertEqual(datos["numero"], "SS26-0500")
+        self.assertEqual(datos["estatus"], "CERRADO")
+        self.assertIn("raw_data", datos)
+        self.assertEqual(
+            datos["url_detalle"],
+            reverse("enlaces_ccg:ticket_detalle", args=[t.pk]),
+        )
 
     def test_sincronizar_requiere_post(self):
         respuesta = self.client.get(reverse("enlaces_ccg:ticket_sincronizar"))
         self.assertEqual(respuesta.status_code, 405)
+
+
+class ProximaSincronizacionTests(TestCase):
+    def setUp(self):
+        self.cfg = ConfiguracionTickets.cargar()
+        self.cfg.intervalo_minutos = 5
+        self.cfg.descarga_completa_horas = []
+        self.cfg.habilitado = True
+
+    def test_deshabilitado_devuelve_none(self):
+        self.cfg.habilitado = False
+        self.assertIsNone(self.cfg.proxima_sincronizacion())
+
+    def test_sin_ultima_es_inmediata(self):
+        self.cfg.ultima_sincronizacion = None
+        ahora = timezone.now()
+        proxima = self.cfg.proxima_sincronizacion(ahora=ahora)
+        self.assertEqual(proxima, ahora)
+
+    def test_parcial_usa_intervalo(self):
+        ahora = timezone.now()
+        self.cfg.ultima_sincronizacion = ahora - timedelta(minutes=2)
+        proxima = self.cfg.proxima_sincronizacion(ahora=ahora)
+        self.assertEqual(
+            proxima, self.cfg.ultima_sincronizacion + timedelta(minutes=5)
+        )
+
+    def test_hora_completa_adelanta_la_proxima(self):
+        ahora = timezone.localtime(timezone.now()).replace(
+            minute=0, second=0, microsecond=0
+        )
+        self.cfg.ultima_sincronizacion = ahora
+        self.cfg.intervalo_minutos = 120
+        self.cfg.descarga_completa_horas = [
+            (ahora + timedelta(hours=1)).strftime("%H:%M")
+        ]
+        proxima = self.cfg.proxima_sincronizacion(ahora=ahora)
+        self.assertEqual(proxima, ahora + timedelta(hours=1))
+
+    def test_hora_ya_pasada_va_al_dia_siguiente(self):
+        ahora = timezone.localtime(timezone.now()).replace(
+            minute=30, second=0, microsecond=0
+        )
+        self.cfg.ultima_sincronizacion = ahora
+        self.cfg.intervalo_minutos = 1800
+        self.cfg.descarga_completa_horas = ["00:00"]
+        proxima = self.cfg.proxima_sincronizacion(ahora=ahora)
+        manana = timezone.make_aware(
+            datetime.combine((ahora + timedelta(days=1)).date(), time(0, 0)),
+            timezone.get_current_timezone(),
+        )
+        self.assertEqual(proxima, manana)
