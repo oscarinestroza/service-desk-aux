@@ -1019,32 +1019,48 @@ class Ticket(models.Model):
         return self.numero_display or self.ticket_id
 
     def fases_proceso(self):
-        """Fases del proceso de atención para el stepper del detalle."""
+        """Fases del proceso de atención (timeline del detalle)."""
         r = self.raw_data or {}
         servicio = str(r.get("servicio") or "").strip()
         actividades = str(r.get("Actividades") or "").strip()
         cerrado = self.estatus == self.ESTATUS_CERRADO
+        detalle_cierre = (
+            self.fecha_cierre.strftime("%d/%m/%Y %H:%M") if self.fecha_cierre else ""
+        )
         return [
-            {"clave": "creado", "nombre": "Ticket creado", "estado": "completado"},
+            {
+                "clave": "creado",
+                "nombre": "Ticket creado",
+                "estado": "completado",
+                "detalle": f"Solicitud {self.ticket_id}",
+            },
             {
                 "clave": "canalizado",
                 "nombre": "Canalizado con el servicio",
                 "estado": "completado" if servicio else "pendiente",
+                "detalle": servicio or "Sin servicio asignado",
             },
             {
                 "clave": "proceso",
                 "nombre": "En proceso de atención",
                 "estado": "completado" if cerrado else "activo",
+                "detalle": "Atención terminada" if cerrado else "Trabajo en curso",
             },
             {
                 "clave": "finalizado",
                 "nombre": "Finalizado",
                 "estado": "completado" if cerrado else "pendiente",
+                "detalle": (
+                    f"Cerrado el {detalle_cierre}" if cerrado else "Pendiente de cierre"
+                ),
             },
             {
                 "clave": "completado",
                 "nombre": "Completado",
                 "estado": "completado" if actividades else "pendiente",
+                "detalle": (
+                    actividades[:200] if actividades else "Sin actividades registradas"
+                ),
             },
         ]
 

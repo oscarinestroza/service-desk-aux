@@ -18,24 +18,33 @@
 </div>
 
 <style>
-    .ccg-fases { gap: 0; }
-    .ccg-fase { flex: 1 1 0; position: relative; padding-top: 6px; }
-    .ccg-fase .ccg-fase-ico {
-        width: 32px; height: 32px; font-size: 14px;
-        position: relative; z-index: 1;
-    }
-    .ccg-fase::before {
+    .ccg-timeline { list-style: none; margin: 0; padding: 0; }
+    .ccg-termino { position: relative; padding-left: 46px; margin-bottom: 18px; }
+    .ccg-termino:last-child { margin-bottom: 0; }
+    .ccg-termino::before {
         content: ""; position: absolute;
-        top: 21px; left: 0; right: calc(50% + 20px);
-        height: 3px; background: var(--fase-linea, #e2e8f0);
+        left: 15px; top: 0; bottom: -18px; width: 3px;
+        border-radius: 2px; background: var(--termino-rail, #e2e8f0);
     }
-    .ccg-fase:first-child::before { display: none; }
-    .ccg-fase.ccg-fase-completado { --fase-linea: #198754; }
-    .ccg-fase.ccg-fase-activo { --fase-linea: #0d6efd; }
-    .ccg-fase.ccg-fase-pendiente { --fase-linea: #e2e8f0; }
-    .ccg-fase .ccg-fase-nombre { color: #64748b; font-weight: 500; }
-    .ccg-fase.ccg-fase-completado .ccg-fase-nombre { color: #198754; }
-    .ccg-fase.ccg-fase-activo .ccg-fase-nombre { color: #0d6efd; font-weight: 700; }
+    .ccg-termino:last-child::before { bottom: 50%; }
+    .ccg-termino.ccg-termino-completado { --termino-rail: #198754; }
+    .ccg-termino.ccg-termino-activo { --termino-rail: #0d6efd; }
+    .ccg-termino.ccg-termino-pendiente { --termino-rail: #e2e8f0; }
+    .ccg-termino-marca {
+        position: absolute; left: 0; top: 0; z-index: 1;
+        width: 33px; height: 33px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px;
+    }
+    .ccg-termino-activo .ccg-termino-marca {
+        animation: ccg-pulso 1.6s ease-out infinite;
+    }
+    @keyframes ccg-pulso {
+        0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, .35); }
+        100% { box-shadow: 0 0 0 12px rgba(13, 110, 253, 0); }
+    }
+    .ccg-termino-nombre { font-weight: 600; color: #1e293b; }
+    .ccg-termino-detalle { font-size: .82rem; color: #64748b; white-space: pre-line; }
 </style>
 
 <div class="card border-0 shadow-sm mb-3">
@@ -43,21 +52,33 @@
         <strong><i class="fas fa-route me-1"></i>Proceso de atención</strong>
     </div>
     <div class="card-body py-3">
-        <div class="ccg-fases d-flex">
+        <ol class="ccg-timeline mb-0">
             {% for fase in ticket.fases_proceso %}
-            <div class="ccg-fase ccg-fase-{{ fase.estado }} d-flex flex-column align-items-center text-center px-1">
-                <span class="ccg-fase-ico d-flex align-items-center justify-content-center rounded-circle text-white
-                             {% if fase.estado == 'completado' %}bg-success
-                             {% elif fase.estado == 'activo' %}bg-primary
-                             {% else %}bg-secondary{% endif %}">
+            <li class="ccg-termino ccg-termino-{{ fase.estado }}">
+                <span class="ccg-termino-marca
+                           {% if fase.estado == 'completado' %}bg-success text-white
+                           {% elif fase.estado == 'activo' %}bg-primary text-white
+                           {% else %}bg-white border text-secondary{% endif %}">
                     {% if fase.estado == 'completado' %}<i class="fas fa-check"></i>
-                    {% elif fase.estado == 'activo' %}<i class="fas fa-circle-notch fa-spin"></i>
+                    {% elif fase.estado == 'activo' %}<i class="fas fa-spinner fa-spin"></i>
                     {% else %}<i class="fas fa-minus"></i>{% endif %}
                 </span>
-                <span class="ccg-fase-nombre small mt-1">{{ fase.nombre }}</span>
-            </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="ccg-termino-nombre">{{ fase.nombre }}</span>
+                    {% if fase.estado == 'completado' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Completado</span>
+                    {% elif fase.estado == 'activo' %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">En curso</span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Pendiente</span>
+                    {% endif %}
+                </div>
+                <div class="ccg-termino-detalle">
+                    {{ fase.detalle }}{% if fase.estado == 'pendiente' and fase.clave == 'completado' %} — el ticket podrá completarse cuando se registren las actividades{% endif %}
+                </div>
+            </li>
             {% endfor %}
-        </div>
+        </ol>
     </div>
 </div>
 

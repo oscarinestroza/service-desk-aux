@@ -363,7 +363,7 @@ class FasesProcesoTests(TestCase):
         self.assertEqual(self._estado(fases, "completado"), "completado")
         self.assertEqual(self._estado(fases, "finalizado"), "pendiente")
 
-    def test_stepper_renderiza_en_detalle(self):
+    def test_timeline_renderiza_en_detalle(self):
         t = self._crear(1, "SS26-0605")
         respuesta = self.client.get(reverse("enlaces_ccg:ticket_detalle", args=[t.pk]))
         self.assertEqual(respuesta.status_code, 200)
@@ -372,7 +372,10 @@ class FasesProcesoTests(TestCase):
         self.assertIn("Ticket creado", html)
         self.assertIn("Canalizado con el servicio", html)
         self.assertIn("En proceso de atención", html)
-        self.assertIn("ccg-fase-activo", html)
+        self.assertIn("ccg-termino-activo", html)
+        self.assertIn("Solicitud 1", html)
+        self.assertIn("Elevadores", html)
+        self.assertIn("Trabajo en curso", html)
 
 
 class ProximaSincronizacionTests(TestCase):
