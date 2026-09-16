@@ -415,7 +415,7 @@ def _ya_creado_en_sig(enlace_id):
 # ------------------------------------------------------------------
 # Ejecutores (corren dentro del worker thread)
 # ------------------------------------------------------------------
-@shared_task
+@shared_task(queue="no-programadas")
 def crear_enlace_sig(enlace_id):
     """Crea un usuario en el SIG para el enlace dado (tarea Celery)."""
     from django.conf import settings
@@ -474,7 +474,7 @@ def crear_enlace_sig(enlace_id):
         _enviar_correo_review(enlace, str(e))
 
 
-@shared_task
+@shared_task(queue="no-programadas")
 def deshabilitar_enlace_sig(enlace_id):
     """Deshabilita un usuario en el SIG (tarea Celery)."""
     from django.conf import settings
@@ -517,7 +517,7 @@ def deshabilitar_enlace_sig(enlace_id):
         enlace.save(update_fields=["sincronizado", "actualizado_en"])
 
 
-@shared_task
+@shared_task(queue="no-programadas")
 def reactivar_enlace_sig(enlace_id):
     """Reactiva un usuario en el SIG (cambia estatus a Activo) (tarea Celery)."""
     from django.conf import settings
@@ -560,7 +560,7 @@ def reactivar_enlace_sig(enlace_id):
         enlace.save(update_fields=["sincronizado", "actualizado_en"])
 
 
-@shared_task
+@shared_task(queue="no-programadas")
 def actualizar_correo_enlace_sig(enlace_id):
     """Actualiza el correo de un usuario en el SIG (tarea Celery)."""
     from django.conf import settings

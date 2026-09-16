@@ -13,8 +13,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 from .models import (
-    Adjunto, ComunicadoCC, ConfiguracionCorreo, ConfiguracionSIG, Documento,
-    DocumentoCarpeta,
+    Adjunto, ComunicadoCC, ConfiguracionCorreo, ConfiguracionSIG,
+    ConfiguracionTickets, Documento, DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
     Institucion,
@@ -461,6 +461,42 @@ class ConfiguracionSIGAdmin(admin.ModelAdmin):
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         # Garantiza que exista el registro singleton antes de abrir el form
         obj, _ = ConfiguracionSIG.objects.get_or_create(pk=1)
+        return super().changeform_view(
+            request, str(obj.pk), form_url, extra_context
+        )
+
+
+@admin.register(ConfiguracionTickets)
+class ConfiguracionTicketsAdmin(admin.ModelAdmin):
+    list_display = ("url_reporte", "hoja_excel", "fecha_desde_completa", "actualizado_en")
+    fieldsets = (
+        ("Reporte de tickets del SIG", {
+            "fields": ("url_reporte", "hoja_excel"),
+            "description": (
+                "URL del reporte de seguimiento de solicitudes y hoja del Excel "
+                "(vacío = auto-detectar la primera)."
+            ),
+        }),
+        ("Descarga completa", {
+            "fields": ("fecha_desde_completa",),
+            "description": (
+                "Fecha 'desde' usada solo en la descarga completa (filtro de "
+                "tiempo en el SIG; 'hasta' = hoy). La descarga rápida no usa filtros."
+            ),
+        }),
+    )
+    readonly_fields = ("actualizado_en", "creado_en")
+
+    def has_add_permission(self, request):
+        # Permitir solo un registro singleton
+        return not self.model.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        # Garantiza que exista el registro singleton antes de abrir el form
+        obj, _ = ConfiguracionTickets.objects.get_or_create(pk=1)
         return super().changeform_view(
             request, str(obj.pk), form_url, extra_context
         )

@@ -773,6 +773,64 @@ class ConfiguracionSIG(models.Model):
         return obj
 
 
+class ConfiguracionTickets(models.Model):
+    """Parámetros del reporte de tickets del SIG (descarga del Excel).
+
+    Modelo singleton: solo debe existir UN registro (ver ConfiguracionTicketsAdmin).
+    La cuenta SIG del worker de tickets NO vive aquí: se lee del entorno
+    (SIG_TICKETS_URL / SIG_TICKETS_USUARIO / SIG_TICKETS_PASSWORD).
+    """
+
+    url_reporte = models.CharField(
+        max_length=500,
+        blank=True,
+        default="/admin/Solicitud/SeguimientoAtencion",
+        help_text="Ruta del reporte de seguimiento de solicitudes en el SIG.",
+        verbose_name="URL del reporte",
+    )
+    hoja_excel = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Nombre de la hoja del Excel. Vacío = auto-detectar la primera.",
+        verbose_name="Hoja del Excel",
+    )
+    fecha_desde_completa = models.CharField(
+        max_length=20,
+        blank=True,
+        default="01/01/2020",
+        help_text=(
+            "Fecha 'desde' para la descarga completa (dd/mm/aaaa). El SIG asume "
+            "que 'hasta' es hoy. En la descarga rápida no se usa."
+        ),
+        verbose_name="Fecha desde (completa)",
+    )
+    actualizado_en = models.DateTimeField(auto_now=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Configuración de tickets"
+        verbose_name_plural = "Configuración de tickets"
+
+    def __str__(self):
+        return "Configuración de tickets"
+
+    def url_reporte_valor(self) -> str:
+        return (self.url_reporte or "/admin/Solicitud/SeguimientoAtencion").strip()
+
+    def hoja_valor(self) -> str:
+        return (self.hoja_excel or "").strip()
+
+    def fecha_desde_valor(self) -> str:
+        return (self.fecha_desde_completa or "01/01/2020").strip()
+
+    @classmethod
+    def cargar(cls):
+        """Devuelve el registro singleton de configuración o uno vacío."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 # ---------------------------------------------------------------------------
 # Documentos y carpetas (documentos compartidos / adjuntos de correo)
 # ---------------------------------------------------------------------------

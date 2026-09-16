@@ -14,9 +14,8 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Auto-descubre tareas en los apps registrados (task decorador @shared_task).
 app.autodiscover_tasks()
 
-# Las tareas SIG viven en un subpaquete (enlaces_ccg/sig_sync/tasks.py) que el
-# autodiscover no alcanza. Se importan aquí para que se registren al arrancar.
-import enlaces_ccg.sig_sync.tasks  # noqa: E402,F401
+# Las tareas de enlaces_ccg/sig_sync/ se registran en CELERY_IMPORTS (settings.py):
+# Celery las importa al arrancar el worker, ya con Django inicializado.
 
 
 @app.task(bind=True)

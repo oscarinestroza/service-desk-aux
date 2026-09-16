@@ -68,3 +68,9 @@ docker-compose.override.yml
 
 # Project specific (ajusta si tienes otros)
 enlacesMAO/settings_local.py
+# Memoria de planificación local (no se sube a git)
+MEMORIA_TICKETS.txt
+# Capturas de debug de Playwright (SIG)
+sig_debug/
+# Muestra del reporte del SIG (datos, no se sube)
+Sig_Solicitudes_Seguimiento.xlsx

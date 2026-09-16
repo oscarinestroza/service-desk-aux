@@ -21,5 +21,8 @@ RUN playwright install --with-deps chromium
 # Código de la aplicación
 COPY . .
 
-# Las operaciones SIG (Playwright) deben correr serializadas: concurrency=1
-CMD ["celery", "-A", "enlacesMAO", "worker", "--loglevel=info", "--concurrency=1"]
+# Misma imagen para ambos workers. La cola y el Beat se eligen por env vars:
+#   - worker de enlaces (no-programadas): sin config extra (default).
+#   - worker de tickets (programadas):     env CELERY_QUEUES=programadas + CELERY_BEAT=1
+# Las operaciones SIG (Playwright) deben correr serializadas: concurrency=1.
+CMD ["sh", "-c", "exec celery -A enlacesMAO worker -Q ${CELERY_QUEUES:-no-programadas} --loglevel=info --concurrency=1 --pool=solo --prefetch_multiplier=1 ${CELERY_BEAT:+--beat}"]

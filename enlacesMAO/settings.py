@@ -343,5 +343,14 @@ CELERY_WORKER_MAX_TASKS_PER_CHILD = 50
 # Timeout por tarea (creación SIG puede tardar). Configurable en segundos.
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "300"))
 
+# Las tareas SIG viven en subpaquetes (enlaces_ccg/sig_sync/tasks.py y
+# enlaces_ccg/sig_sync/tickets.py) que el autodiscover no alcanza. Se registran
+# vía CELERY_IMPORTS: Celery los importa al arrancar el worker (tras el setup
+# de Django), evitando importar modelos antes de que la app esté lista.
+CELERY_IMPORTS = (
+    "enlaces_ccg.sig_sync.tasks",
+    "enlaces_ccg.sig_sync.tickets",
+)
+
 # Base actions_path para el beat (no usamos programme por ahora, pero habilitado)
 # CELERY_BEAT_SCHEDULE puede definirse aquí si se necesitan tareas periódicas.

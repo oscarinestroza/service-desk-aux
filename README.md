@@ -49,8 +49,11 @@ SIG mediante automatización Playwright.
    Por defecto `.env.example` ya apunta a Postgres y Redis locales (ver paso 5).
    ⚠️ Genera un `SECRET_KEY` nuevo: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`.
 
-   > **Nota:** Las credenciales de **correo (SMTP)** y **SIG** ya **no se configuran en `.env`**.
-   > Se gestionan exclusivamente desde el panel de admin (ver sección "Configuración desde el panel de admin").
+   > **Nota:** Las credenciales de **correo (SMTP)** y la **cuenta SIG de enlaces** ya
+   > **no se configuran en `.env`**: se gestionan desde el panel de admin (ver
+   > "Configuración desde el panel de admin"). **Excepción**: la cuenta SIG del
+   > worker de **tickets** sí vive en el entorno (`SIG_TICKETS_URL/USUARIO/PASSWORD`),
+   > lista en `.env.example`.
 
 5. **Levantar PostgreSQL y Redis (Docker Compose)**
 
@@ -68,17 +71,27 @@ SIG mediante automatización Playwright.
    python manage.py createsuperuser
    ```
 
-7. **Levantar el worker de Celery (tareas SIG en segundo plano)**
+7. **Levantar los workers de Celery (tareas SIG en segundo plano)**
 
-   En una terminal aparte, activa el venv y ejecuta:
+   Hay **dos colas** y dos workers en producción:
+   - `no-programadas`: enlaces (crear/deshabilitar/reactivar/cambiar correo).
+   - `programadas`: tickets (sync del Excel + cierres en lote) y Beat.
+
+   En terminales aparte (activando el venv):
 
    ```bash
-   celery -A enlacesMAO worker --loglevel=info --concurrency=1 --pool=solo
+   # Worker 1 — enlaces (no-programadas). El default si no usas -Q.
+   celery -A enlacesMAO worker -Q no-programadas --loglevel=info --concurrency=1 --pool=solo
+
+   # Worker 2 — tickets (programadas) + Beat para las tareas periódicas.
+   celery -A enlacesMAO worker -Q programadas --loglevel=info --concurrency=1 --pool=solo --beat
    ```
 
    `--concurrency=1` + `--pool=solo` garantiza que las operaciones SIG
    (Playwright) corran serializadas, una a la vez. Es obligatorio en Windows
    (evita `PermissionError: [WinError 5]` con el pool prefork por defecto).
+   En producción (Coolify) ambos comparten la misma imagen `worker.Dockerfile`
+   y la cola + Beat se eligen con env vars (`CELERY_QUEUES`, `CELERY_BEAT`).
 
 8. **Levantar el servidor**
 
