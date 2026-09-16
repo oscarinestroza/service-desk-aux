@@ -87,6 +87,54 @@ def sig_usuario_configurado() -> bool:
     return bool(cfg and cfg.usuario)
 
 
+# ---------------------------------------------------------------------------
+# Clasificación de popups del SIG
+# ---------------------------------------------------------------------------
+# El SIG confirma operaciones exitosas con popups tipo "Registro" (p. ej.
+# "Registro: Usuario agregado") que a veces incluyen icono de advertencia
+# (.swal2-warning) en vez de éxito. El icono por sí solo no es concluyente,
+# por lo que también se inspecciona el título y el cuerpo del popup.
+_EXITO_KEYWORDS = (
+    "agregado", "creado", "guardado", "actualizado", "registrado",
+    "deshabilitado", "cancelado", "reactivado", "activado", "exitoso",
+    "correctamente",
+)
+
+
+def clasificar_sweetalert(titulo, cuerpo, con_error=False, con_advertencia=False):
+    """Clasifica un popup SweetAlert del SIG como éxito o fallo.
+
+    Criterio:
+      - Icono de error (.swal2-error) → fallo.
+      - Título "Advertencia" → fallo.
+      - Icono de advertencia (.swal2-warning) → fallo SOLO si el popup
+        no es un registro informativo ("Registro") ni su texto delata
+        un resultado exitoso (p. ej. "creado", "agregado", "actualizado").
+      - Cualquier otro caso → éxito.
+
+    Args:
+        titulo:      Título del popup (str o None).
+        cuerpo:      Texto del cuerpo del popup (str o None).
+        con_error:   True si el popup contiene ícono .swal2-error.
+        con_advertencia: True si el popup contiene ícono .swal2-warning.
+
+    Returns:
+        True si el popup representa un fallo, False si representa éxito.
+    """
+    if con_error:
+        return True
+    titulo_normal = (titulo or "").strip().lower()
+    texto = f"{titulo or ''} {cuerpo or ''}".lower()
+    if titulo_normal == "advertencia":
+        return True
+    if con_advertencia:
+        es_registro = titulo_normal == "registro"
+        es_exito = any(p in texto for p in _EXITO_KEYWORDS)
+        if not es_registro and not es_exito:
+            return True
+    return False
+
+
 class SIGClientError(Exception):
     pass
 
@@ -523,17 +571,18 @@ class SIGClient:
                 pass
             texto = f"{titulo}: {cuerpo}" if titulo and cuerpo else titulo or cuerpo
 
-            # Detectar error / advertencia
-            error = False
+            # Detectar iconos de error / advertencia en el popup
             try:
-                if popup.locator(
-                    ".swal2-icon.swal2-error, .swal2-icon.swal2-warning"
-                ).count():
-                    error = True
+                con_error = bool(popup.locator(".swal2-icon.swal2-error").count())
             except Exception:
-                pass
-            if not error and titulo.lower() == "advertencia":
-                error = True
+                con_error = False
+            try:
+                con_advertencia = bool(popup.locator(".swal2-icon.swal2-warning").count())
+            except Exception:
+                con_advertencia = False
+            error = clasificar_sweetalert(
+                titulo, cuerpo, con_error=con_error, con_advertencia=con_advertencia
+            )
 
             # Cerrar el popup
             confirm_btn = popup.locator(
