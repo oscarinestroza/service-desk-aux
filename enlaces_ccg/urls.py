@@ -149,6 +149,11 @@ urlpatterns = [
         name="ticket_sincronizar",
     ),
     path(
+        "tickets/sincronizar/estado/",
+        views.sincronizacion_estado,
+        name="ticket_sincronizacion_estado",
+    ),
+    path(
         "tickets/detalle/<int:pk>/",
         views.ticket_detalle,
         name="ticket_detalle",

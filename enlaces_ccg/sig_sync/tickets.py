@@ -617,6 +617,18 @@ def _liberar_lock(redis_client):
             pass
 
 
+def _lock_activo():
+    """True si hay una sincronización en curso (lock Redis). None si sin Redis."""
+    import redis  # noqa: PLC0415
+
+    try:
+        r = redis.from_url(settings.CELERY_BROKER_URL)
+        return bool(r.exists(LOCK_CLAVE))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Redis no disponible para consultar lock: %s", e)
+        return None
+
+
 @shared_task(queue="programadas")
 def sincronizar_tickets_task(modo=None, desde=None):
     """Tarea para 'Sincronizar ahora' (botón). Respeta el lock Redis."""

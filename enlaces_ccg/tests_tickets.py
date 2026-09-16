@@ -296,6 +296,20 @@ class VistaTicketsTests(TestCase):
         respuesta = self.client.get(reverse("enlaces_ccg:ticket_sincronizar"))
         self.assertEqual(respuesta.status_code, 405)
 
+    def test_sincronizacion_estado(self):
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets._lock_activo", return_value=False
+        ):
+            respuesta = self.client.get(
+                reverse("enlaces_ccg:ticket_sincronizacion_estado")
+            )
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertIn("ultima_sincronizacion", datos)
+        self.assertIn("sincronizando", datos)
+        self.assertIn("habilitado", datos)
+        self.assertIs(datos["sincronizando"], False)
+
 
 class ProximaSincronizacionTests(TestCase):
     def setUp(self):

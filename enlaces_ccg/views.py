@@ -441,6 +441,11 @@ def seguimiento_tickets(request):
             "proxima_sincronizacion": proxima,
             "sync_inicio_ts": inicio_ts,
             "sync_proxima_ts": proxima_ts,
+            "ultima_sync_ts": (
+                int(cfg.ultima_sincronizacion.timestamp())
+                if cfg.ultima_sincronizacion
+                else 0
+            ),
             "cfg": cfg,
         },
     )
@@ -506,6 +511,28 @@ def sincronizar_tickets_ahora(request):
         "Se reflejará al terminar en 'Última sincronización'.",
     )
     return redirect("enlaces_ccg:seguimiento_tickets")
+
+
+@requiere(CAP_TICKETS)
+def sincronizacion_estado(request):
+    """Estado de la sincronización en JSON (para la barra de la lista)."""
+    from .sig_sync.tickets import _lock_activo
+
+    cfg = ConfiguracionTickets.cargar()
+    ultima = cfg.ultima_sincronizacion
+    if cfg.habilitado:
+        proxima = cfg.proxima_sincronizacion()
+        proxima_ts = proxima.timestamp() if proxima else None
+    else:
+        proxima_ts = None
+    return JsonResponse(
+        {
+            "ultima_sincronizacion": ultima.timestamp() if ultima else None,
+            "proxima_sincronizacion": proxima_ts,
+            "sincronizando": _lock_activo(),
+            "habilitado": cfg.habilitado,
+        }
+    )
 
 
 @requiere(CAP_TICKETS)
