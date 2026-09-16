@@ -269,11 +269,11 @@
                         formatear(Math.ceil((objetivo - ahora) / 1000));
                     return;
                 }
-                // Se alcanzó la hora: esperar a que entren los nuevos datos.
+                // Se alcanzó la hora: esperar a que el worker termine.
                 estado = 'espera';
                 barra.style.width = '100%';
                 barra.classList.add('progress-bar-striped', 'progress-bar-animated');
-                texto.textContent = 'Procesando actualización…';
+                texto.textContent = 'Actualizando';
                 ultimaVerificacion = 0;
                 verificarSincronizacion();
                 return;
