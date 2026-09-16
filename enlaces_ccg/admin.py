@@ -23,6 +23,7 @@ from .models import (
     SyncLog,
     Ticket,
     TicketLog,
+    TicketRegistro,
 )
 
 
@@ -560,6 +561,18 @@ class TicketLogAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(TicketRegistro)
+class TicketRegistroAdmin(admin.ModelAdmin):
+    list_display = ("creado_en", "ticket", "usuario", "descripcion")
+    list_filter = ("creado_en",)
+    search_fields = ("ticket__numero_display", "ticket__numero", "descripcion")
+    readonly_fields = ("creado_en",)
+    date_hierarchy = "creado_en"
+
+    def has_add_permission(self, request):
         return False
 
 

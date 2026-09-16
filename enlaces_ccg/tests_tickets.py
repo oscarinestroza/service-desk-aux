@@ -312,6 +312,14 @@ class VistaTicketsTests(TestCase):
 
 
 class FasesProcesoTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "prueba_fases", "pf@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+
     def _crear(self, tid, numero, cierro="", actividades="", servicio="Elevadores"):
         ruta = _excel_tmp([
             _fila(tid, numero, cierro=cierro, servicio=servicio),
@@ -338,6 +346,31 @@ class FasesProcesoTests(TestCase):
         self.assertEqual(self._estado(fases, "proceso"), "activo")
         self.assertEqual(self._estado(fases, "finalizado"), "pendiente")
         self.assertEqual(self._estado(fases, "completado"), "pendiente")
+        self.assertEqual(
+            next(f for f in fases if f["clave"] == "creado")["detalle"], "SS26-0600"
+        )
+        self.assertEqual(
+            next(f for f in fases if f["clave"] == "canalizado")["detalle"], "Resp"
+        )
+
+    def test_sin_responsable_canalizado_sin_detalle(self):
+        ruta = _excel_tmp([
+            _fila(1, "SS26-0600", servicio=""),
+        ])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+        t = Ticket.objects.get(ticket_id="1")
+        rd = dict(t.raw_data)
+        rd["Responsable_atencion"] = ""
+        t.raw_data = rd
+        t.save(update_fields=["raw_data"])
+        fases = Ticket.objects.get(pk=t.pk).fases_proceso()
+        self.assertEqual(self._estado(fases, "canalizado"), "pendiente")
+        self.assertEqual(
+            next(f for f in fases if f["clave"] == "canalizado")["detalle"],
+            "Sin responsable de atención",
+        )
 
     def test_cerrado_finalizado(self):
         t = self._crear(1, "SS26-0601", cierro="2026-09-02 12:00:00")
@@ -373,9 +406,71 @@ class FasesProcesoTests(TestCase):
         self.assertIn("Canalizado con el servicio", html)
         self.assertIn("En proceso de atención", html)
         self.assertIn("ccg-termino-activo", html)
-        self.assertIn("Solicitud 1", html)
-        self.assertIn("Elevadores", html)
+        self.assertIn(">SS26-0605<", html)
+        self.assertIn(">Resp<", html)
         self.assertIn("Trabajo en curso", html)
+
+    def test_comentarios_servicio_segun_estado(self):
+        t = self._crear(1, "SS26-0606")
+        rd = dict(t.raw_data)
+        rd["Observaciones"] = "Falla intermitente"
+        t.raw_data = rd
+        t.save(update_fields=["raw_data"])
+        t = Ticket.objects.get(pk=t.pk)
+        co = t.comentarios_servicio()
+        self.assertEqual(co["observaciones"], "Falla intermitente")
+        self.assertIn("proceso de atención", co["sugerencia"])
+
+        rd = dict(t.raw_data)
+        rd["Actividades"] = "Revisión"
+        t.raw_data = rd
+        t.save(update_fields=["raw_data"])
+        co = Ticket.objects.get(pk=t.pk).comentarios_servicio()
+        self.assertIn("actividades registradas", co["sugerencia"])
+
+        t.estatus = Ticket.ESTATUS_CERRADO
+        t.fecha_cierre = timezone.now()
+        t.save(update_fields=["estatus", "fecha_cierre"])
+        co = Ticket.objects.get(pk=t.pk).comentarios_servicio()
+        self.assertIn("cerrada", co["sugerencia"])
+
+    def test_registrar_seguimiento_requiere_casilla(self):
+        t = self._crear(1, "SS26-0607")
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
+            {"descripcion": "Consulté el avance"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(t.registros.count(), 0)
+
+    def test_registrar_seguimiento_requiere_descripcion(self):
+        t = self._crear(1, "SS26-0608")
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
+            {"registrar": "1", "descripcion": "  "},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(t.registros.count(), 0)
+
+    def test_registrar_seguimiento_guarda_y_muestra(self):
+        t = self._crear(1, "SS26-0609")
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
+            {"registrar": "1", "descripcion": "Avancé con la atención"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        registro = t.registros.first()
+        self.assertIsNotNone(registro)
+        self.assertEqual(registro.usuario, self.usuario)
+        self.assertEqual(registro.descripcion, "Avancé con la atención")
+
+        detalle = self.client.get(
+            reverse("enlaces_ccg:ticket_detalle", args=[t.pk])
+        )
+        html = detalle.content.decode("utf-8", "replace")
+        self.assertIn("Avancé con la atención", html)
+        self.assertIn("Registrar seguimiento", html)
+        self.assertIn("Comentarios del servicio", html)
 
 
 class ProximaSincronizacionTests(TestCase):

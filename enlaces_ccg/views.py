@@ -30,7 +30,7 @@ from .models import (
     Adjunto, ComunicadoCC, ConfiguracionTickets, Documento, DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
-    Institucion, InstitucionEdificio, Seccion, Ticket,
+    Institucion, InstitucionEdificio, Seccion, Ticket, TicketRegistro,
 )
 from .roles import (
     CAP_ADMIN,
@@ -455,7 +455,11 @@ def seguimiento_tickets(request):
 def ticket_detalle(request, pk):
     """Detalle canónico por PK (único, sin ambigüedad)."""
     ticket = get_object_or_404(Ticket, pk=pk)
-    return render(request, "enlaces_ccg/ticket_detalle.html", {"ticket": ticket})
+    return render(
+        request,
+        "enlaces_ccg/ticket_detalle.html",
+        {"ticket": ticket, "registros": ticket.registros.all()[:5]},
+    )
 
 
 @requiere(CAP_TICKETS)
@@ -494,7 +498,31 @@ def ticket_por_numero(request, numero):
     )
     if ticket is None:
         raise Http404(f"No existe el ticket {numero}")
-    return render(request, "enlaces_ccg/ticket_detalle.html", {"ticket": ticket})
+    return render(
+        request,
+        "enlaces_ccg/ticket_detalle.html",
+        {"ticket": ticket, "registros": ticket.registros.all()[:5]},
+    )
+
+
+@login_required
+@require_POST
+@requiere(CAP_TICKETS)
+def registrar_seguimiento(request, pk):
+    """Registra una consulta de seguimiento (casilla + descripción)."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    registrar = request.POST.get("registrar") == "1"
+    descripcion = request.POST.get("descripcion", "").strip()
+    if not registrar:
+        messages.warning(request, "Marca la casilla 'Registrar' para guardar la consulta.")
+    elif not descripcion:
+        messages.warning(request, "Escribe una breve descripción de lo sucedido.")
+    else:
+        TicketRegistro.objects.create(
+            ticket=ticket, usuario=request.user, descripcion=descripcion
+        )
+        messages.success(request, "Seguimiento registrado correctamente.")
+    return redirect("enlaces_ccg:ticket_detalle", pk=pk)
 
 
 @login_required

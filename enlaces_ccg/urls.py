@@ -164,6 +164,11 @@ urlpatterns = [
         name="ticket_json",
     ),
     path(
+        "tickets/detalle/<int:pk>/registrar/",
+        views.registrar_seguimiento,
+        name="ticket_registrar",
+    ),
+    path(
         "tickets/<str:numero>/",
         views.ticket_por_numero,
         name="ticket_por_numero",

@@ -146,6 +146,58 @@
                 </ol>
             </div>
         </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-comment-dots me-1"></i>Comentarios del servicio</strong>
+            </div>
+            <div class="card-body py-3">
+                {% with co=ticket.comentarios_servicio %}
+                <dl class="row small mb-2">
+                    <dt class="col-5 text-muted">Observaciones</dt>
+                    <dd class="col-7">{{ co.observaciones|default:"—" }}</dd>
+                    <dt class="col-5 text-muted">Observaciones del usuario</dt>
+                    <dd class="col-7">{{ co.observaciones_usuario|default:"—" }}</dd>
+                </dl>
+                <div class="alert alert-info border-0 py-2 mb-0 small">
+                    <i class="fas fa-lightbulb me-1"></i>
+                    <strong>Sugerencia de respuesta:</strong>
+                    {{ co.sugerencia }}
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-clipboard-check me-1"></i>Registrar seguimiento</strong>
+            </div>
+            <div class="card-body py-3">
+                <form method="post" action="{% url 'enlaces_ccg:ticket_registrar' ticket.pk %}">
+                    {% csrf_token %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="registrar" value="1" id="regCheck">
+                        <label class="form-check-label small" for="regCheck">Registrar</label>
+                    </div>
+                    <textarea name="descripcion" class="form-control form-control-sm mt-2 mb-2" rows="3"
+                              placeholder="Breve descripción de lo que pasó…"></textarea>
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="fas fa-save me-1"></i>Guardar seguimiento
+                    </button>
+                </form>
+                <hr class="my-3">
+                <div class="small text-muted mb-2"><strong>Consultas recientes</strong></div>
+                {% for r in registros %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">{{ r.usuario.get_full_name|default:r.usuario.username }}</span>
+                        <span class="small text-muted">{{ r.creado_en|date:"d/m/Y H:i" }}</span>
+                    </div>
+                    <div class="small">{{ r.descripcion|default:"—" }}</div>
+                </div>
+                {% empty %}
+                <p class="small text-muted mb-0">Aún no hay consultas registradas.</p>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

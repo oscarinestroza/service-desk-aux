@@ -7,6 +7,7 @@ Relación jerárquica:
 
 from datetime import datetime, time, timedelta
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -1022,6 +1023,8 @@ class Ticket(models.Model):
         """Fases del proceso de atención (timeline del detalle)."""
         r = self.raw_data or {}
         servicio = str(r.get("servicio") or "").strip()
+        responsable = str(r.get("Responsable_atencion") or "").strip()
+        numero = self.numero_display or self.numero or self.ticket_id
         actividades = str(r.get("Actividades") or "").strip()
         cerrado = self.estatus == self.ESTATUS_CERRADO
         detalle_cierre = (
@@ -1032,13 +1035,13 @@ class Ticket(models.Model):
                 "clave": "creado",
                 "nombre": "Ticket creado",
                 "estado": "completado",
-                "detalle": f"Solicitud {self.ticket_id}",
+                "detalle": numero,
             },
             {
                 "clave": "canalizado",
                 "nombre": "Canalizado con el servicio",
                 "estado": "completado" if servicio else "pendiente",
-                "detalle": servicio or "Sin servicio asignado",
+                "detalle": responsable or "Sin responsable de atención",
             },
             {
                 "clave": "proceso",
@@ -1063,6 +1066,34 @@ class Ticket(models.Model):
                 ),
             },
         ]
+
+    def comentarios_servicio(self):
+        """Observaciones del SIG y una sugerencia genérica de respuesta."""
+        r = self.raw_data or {}
+        observaciones = str(r.get("Observaciones") or "").strip()
+        observaciones_usuario = str(r.get("ObservacionesUsuario") or "").strip()
+        actividades = str(r.get("Actividades") or "").strip()
+        if self.estatus == self.ESTATUS_CERRADO:
+            sugerencia = (
+                "La solicitud está cerrada. Verifica que los servicios y actividades "
+                "registradas coincidan con la respuesta esperada antes de darla por "
+                "completada."
+            )
+        elif actividades:
+            sugerencia = (
+                "Ya hay actividades registradas. Prepara y envía la respuesta al "
+                "solicitante y gestiona el cierre."
+            )
+        else:
+            sugerencia = (
+                "Solicitud en proceso de atención: registra las actividades realizadas "
+                "para poder cerrar y dar respuesta al solicitante."
+            )
+        return {
+            "observaciones": observaciones,
+            "observaciones_usuario": observaciones_usuario,
+            "sugerencia": sugerencia,
+        }
 
 
 class TicketLog(models.Model):
@@ -1099,6 +1130,42 @@ class TicketLog(models.Model):
 
     def __str__(self):
         return f"TicketLog #{self.pk} [{self.modo} {self.estado}]"
+
+
+class TicketRegistro(models.Model):
+    """Consulta de seguimiento capturada por el operador en el detalle.
+
+    Se crea un registro cada vez que un usuario consulta el estado y marca
+    la casilla "Registrar" con una breve descripción de lo que pasó.
+    """
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="registros",
+        verbose_name="Ticket",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="registros_tickets",
+        verbose_name="Usuario",
+    )
+    descripcion = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name="Descripción de lo sucedido",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha")
+
+    class Meta:
+        verbose_name = "Registro de seguimiento"
+        verbose_name_plural = "Registros de seguimiento"
+        ordering = ("-creado_en",)
+
+    def __str__(self):
+        return f"{self.ticket_id} · {self.creado_en:%d/%m/%Y %H:%M}"
 
 
 # ---------------------------------------------------------------------------
