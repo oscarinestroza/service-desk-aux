@@ -432,7 +432,8 @@ class FasesProcesoTests(TestCase):
         t.fecha_cierre = timezone.now()
         t.save(update_fields=["estatus", "fecha_cierre"])
         co = Ticket.objects.get(pk=t.pk).comentarios_servicio()
-        self.assertIn("cerrada", co["sugerencia"])
+        self.assertIn("finalizado", co["sugerencia"])
+        self.assertIn("Solicitante X", co["sugerencia"])
 
     def test_registrar_seguimiento_requiere_casilla(self):
         t = self._crear(1, "SS26-0607")

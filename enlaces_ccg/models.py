@@ -1068,26 +1068,37 @@ class Ticket(models.Model):
         ]
 
     def comentarios_servicio(self):
-        """Observaciones del SIG y una sugerencia genérica de respuesta."""
+        """Observaciones del SIG y una respuesta sugerida para el enlace.
+
+        La sugerencia es el mensaje que el operador puede enviar al enlace
+        (solicitante) para informarle cómo va su reporte y en qué estado está.
+        """
         r = self.raw_data or {}
         observaciones = str(r.get("Observaciones") or "").strip()
         observaciones_usuario = str(r.get("ObservacionesUsuario") or "").strip()
         actividades = str(r.get("Actividades") or "").strip()
+        solicitante = str(r.get("solicitud_solicitante") or "").strip()
+        servicio = str(r.get("servicio") or "").strip()
+        numero = self.numero_display or self.numero or self.ticket_id
+        saludo = f"Estimado(a) {solicitante}:" if solicitante else "Estimado(a):"
         if self.estatus == self.ESTATUS_CERRADO:
             sugerencia = (
-                "La solicitud está cerrada. Verifica que los servicios y actividades "
-                "registradas coincidan con la respuesta esperada antes de darla por "
-                "completada."
+                f"{saludo} su reporte {numero} ha sido finalizado. "
+                "Agradecemos su paciencia; si el inconveniente persiste puede "
+                "generar un nuevo reporte."
             )
         elif actividades:
             sugerencia = (
-                "Ya hay actividades registradas. Prepara y envía la respuesta al "
-                "solicitante y gestiona el cierre."
+                f"{saludo} su reporte {numero} ya cuenta con actividades registradas "
+                "por el servicio de atención. Estamos gestionando el cierre y le "
+                "notificaremos en cuanto finalice."
             )
         else:
+            servicio_txt = f" con el servicio {servicio}" if servicio else ""
             sugerencia = (
-                "Solicitud en proceso de atención: registra las actividades realizadas "
-                "para poder cerrar y dar respuesta al solicitante."
+                f"{saludo} su reporte {numero} fue recibido y canalizado"
+                f"{servicio_txt}. Se encuentra en proceso de atención; le "
+                "informaremos en cuanto haya avances."
             )
         return {
             "observaciones": observaciones,
