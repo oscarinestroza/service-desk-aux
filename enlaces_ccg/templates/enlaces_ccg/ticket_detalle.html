@@ -181,11 +181,7 @@
             <div class="card-body py-3">
                 <form method="post" action="{% url 'enlaces_ccg:ticket_registrar' ticket.pk %}">
                     {% csrf_token %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="registrar" value="1" id="regCheck">
-                        <label class="form-check-label small" for="regCheck">Registrar</label>
-                    </div>
-                    <textarea name="descripcion" class="form-control form-control-sm mt-2 mb-2" rows="3"
+                    <textarea name="descripcion" class="form-control form-control-sm mb-2" rows="3"
                               placeholder="Breve descripción de lo que pasó…"></textarea>
                     <button type="submit" class="btn btn-sm btn-primary w-100">
                         <i class="fas fa-save me-1"></i>Guardar seguimiento

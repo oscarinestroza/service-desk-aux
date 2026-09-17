@@ -1078,7 +1078,7 @@ class Ticket(models.Model):
         observaciones_usuario = str(r.get("ObservacionesUsuario") or "").strip()
         actividades = str(r.get("Actividades") or "").strip()
         solicitante = str(r.get("solicitud_solicitante") or "").strip()
-        servicio = str(r.get("servicio") or "").strip()
+        responsable = str(r.get("Responsable_atencion") or "").strip()
         numero = self.numero_display or self.numero or self.ticket_id
         saludo = f"Estimado(a) {solicitante}:" if solicitante else "Estimado(a):"
         if self.estatus == self.ESTATUS_CERRADO:
@@ -1094,10 +1094,12 @@ class Ticket(models.Model):
                 "notificaremos en cuanto finalice."
             )
         else:
-            servicio_txt = f" con el servicio {servicio}" if servicio else ""
+            responsable_txt = (
+                f" con el responsable de atención {responsable}" if responsable else ""
+            )
             sugerencia = (
                 f"{saludo} su reporte {numero} fue recibido y canalizado"
-                f"{servicio_txt}. Se encuentra en proceso de atención; le "
+                f"{responsable_txt}. Se encuentra en proceso de atención; le "
                 "informaremos en cuanto haya avances."
             )
         return {

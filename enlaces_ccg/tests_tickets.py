@@ -420,6 +420,7 @@ class FasesProcesoTests(TestCase):
         co = t.comentarios_servicio()
         self.assertEqual(co["observaciones"], "Falla intermitente")
         self.assertIn("proceso de atención", co["sugerencia"])
+        self.assertIn("responsable de atención Resp", co["sugerencia"])
 
         rd = dict(t.raw_data)
         rd["Actividades"] = "Revisión"
@@ -435,20 +436,11 @@ class FasesProcesoTests(TestCase):
         self.assertIn("finalizado", co["sugerencia"])
         self.assertIn("Solicitante X", co["sugerencia"])
 
-    def test_registrar_seguimiento_requiere_casilla(self):
-        t = self._crear(1, "SS26-0607")
-        respuesta = self.client.post(
-            reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
-            {"descripcion": "Consulté el avance"},
-        )
-        self.assertEqual(respuesta.status_code, 302)
-        self.assertEqual(t.registros.count(), 0)
-
     def test_registrar_seguimiento_requiere_descripcion(self):
         t = self._crear(1, "SS26-0608")
         respuesta = self.client.post(
             reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
-            {"registrar": "1", "descripcion": "  "},
+            {"descripcion": "  "},
         )
         self.assertEqual(respuesta.status_code, 302)
         self.assertEqual(t.registros.count(), 0)
@@ -457,7 +449,7 @@ class FasesProcesoTests(TestCase):
         t = self._crear(1, "SS26-0609")
         respuesta = self.client.post(
             reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
-            {"registrar": "1", "descripcion": "Avancé con la atención"},
+            {"descripcion": "Avancé con la atención"},
         )
         self.assertEqual(respuesta.status_code, 302)
         registro = t.registros.first()

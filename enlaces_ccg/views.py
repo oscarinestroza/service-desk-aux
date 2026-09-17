@@ -509,13 +509,10 @@ def ticket_por_numero(request, numero):
 @require_POST
 @requiere(CAP_TICKETS)
 def registrar_seguimiento(request, pk):
-    """Registra una consulta de seguimiento (casilla + descripción)."""
+    """Registra una consulta de seguimiento (solo descripción)."""
     ticket = get_object_or_404(Ticket, pk=pk)
-    registrar = request.POST.get("registrar") == "1"
     descripcion = request.POST.get("descripcion", "").strip()
-    if not registrar:
-        messages.warning(request, "Marca la casilla 'Registrar' para guardar la consulta.")
-    elif not descripcion:
+    if not descripcion:
         messages.warning(request, "Escribe una breve descripción de lo sucedido.")
     else:
         TicketRegistro.objects.create(
