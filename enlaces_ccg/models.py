@@ -974,6 +974,22 @@ class Falla(models.Model):
         return self.descripcion
 
 
+class Nivel(models.Model):
+    """Catálogo de niveles reportados en el SIG (columna `grupo`, ej. Nivel 8)."""
+
+    nombre = models.CharField(max_length=60, unique=True, verbose_name="Nivel")
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Nivel"
+        verbose_name_plural = "Niveles"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Ticket(models.Model):
     """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
 
@@ -1070,10 +1086,12 @@ class Ticket(models.Model):
         related_name="tickets",
         verbose_name="Falla",
     )
-    nivel = models.CharField(
-        max_length=60,
+    nivel = models.ForeignKey(
+        Nivel,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        default="",
+        related_name="tickets",
         verbose_name="Nivel",
         help_text="Nivel del reporte (columna grupo del SIG, ej. Nivel 8).",
     )
@@ -1117,14 +1135,24 @@ class Ticket(models.Model):
         actividades = str(r.get("Actividades") or "").strip()
         cerrado = self.estatus == self.ESTATUS_CERRADO
         detalle_cierre = (
-            self.fecha_cierre.strftime("%d/%m/%Y %H:%M") if self.fecha_cierre else ""
+            timezone.localtime(self.fecha_cierre).strftime("%d/%m/%Y %H:%M")
+            if self.fecha_cierre
+            else ""
         )
+        if self.fecha:
+            fecha_local = timezone.localtime(self.fecha)
+            detalle_creado = (
+                f"Ticket {numero} creado el {fecha_local.strftime('%d/%m/%Y')} "
+                f"a las {fecha_local.strftime('%H:%M')}"
+            )
+        else:
+            detalle_creado = numero
         return [
             {
                 "clave": "creado",
                 "nombre": "Ticket creado",
                 "estado": "completado",
-                "detalle": numero,
+                "detalle": detalle_creado,
             },
             {
                 "clave": "canalizado",

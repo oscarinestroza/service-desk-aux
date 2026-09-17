@@ -455,9 +455,15 @@ def _normalizar_nombre(valor) -> str:
 
 def cargar_caches_vinculos():
     """Carga en memoria los catálogos/directorio para resolver vínculos (F3)."""
-    from ..models import Edificio, EnlaceAutorizado, Falla, Servicio
+    from ..models import Edificio, EnlaceAutorizado, Falla, Nivel, Servicio
 
-    caches = {"edificios": {}, "enlaces": {}, "servicios": {}, "fallas": {}}
+    caches = {
+        "edificios": {},
+        "enlaces": {},
+        "servicios": {},
+        "fallas": {},
+        "niveles": {},
+    }
 
     for ed in Edificio.objects.all():
         caches["edificios"][_normalizar_nombre(ed.nombre)] = ed
@@ -481,16 +487,18 @@ def cargar_caches_vinculos():
         caches["servicios"][_normalizar_nombre(s.nombre)] = s
     for f in Falla.objects.all():
         caches["fallas"][_normalizar_nombre(f.descripcion)] = f
+    for n in Nivel.objects.all():
+        caches["niveles"][_normalizar_nombre(n.nombre)] = n
     return caches
 
 
 def _resolver_vinculos(raw, caches):
     """Resuelve los vínculos de un ticket a partir de su raw_data (Fase 3)."""
-    from ..models import Falla, Servicio
+    from ..models import Falla, Nivel, Servicio
 
     raw = raw or {}
     edificio_nombre = str(raw.get("nivel") or "").strip()
-    nivel = str(raw.get("grupo") or "").strip()
+    nivel_nombre = str(raw.get("grupo") or "").strip()
     solicitante_raw = str(raw.get("solicitud_solicitante") or "").strip()
     servicio_nombre = str(raw.get("servicio") or "").strip()
     falla_desc = str(raw.get("falla_descripcion") or "").strip()
@@ -513,6 +521,14 @@ def _resolver_vinculos(raw, caches):
         if falla is None:
             falla, _ = Falla.objects.get_or_create(descripcion=falla_desc)
             caches["fallas"][clave] = falla
+
+    nivel = None
+    if nivel_nombre:
+        clave = _normalizar_nombre(nivel_nombre)
+        nivel = caches["niveles"].get(clave)
+        if nivel is None:
+            nivel, _ = Nivel.objects.get_or_create(nombre=nivel_nombre)
+            caches["niveles"][clave] = nivel
 
     return {
         "torre": torre,
@@ -602,7 +618,7 @@ def aplicar_tickets(datos, modo, ahora=None):
                     defaults["servicio"].pk if defaults["servicio"] else None
                 )
                 and t.falla_id == (defaults["falla"].pk if defaults["falla"] else None)
-                and t.nivel == defaults["nivel"]
+                and t.nivel_id == (defaults["nivel"].pk if defaults["nivel"] else None)
                 and t.solicitante_nombre == defaults["solicitante_nombre"]
                 and (modo != MODO_SYNC_COMPLETO or not t.archivado)
             )

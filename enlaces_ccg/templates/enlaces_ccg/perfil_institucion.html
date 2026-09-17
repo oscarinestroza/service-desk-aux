@@ -170,10 +170,10 @@
     </div>
 </div>
 
-<!-- Pestañas de enlaces -->
+<!-- Pestañas de enlaces / tickets -->
 <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
-        <a class="nav-link {% if vista_enlaces == 'activos' %}active{% endif %}" href="?">Activos</a>
+        <a class="nav-link {% if vista_enlaces == 'activos' and not ver_tickets %}active{% endif %}" href="?">Activos</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {% if vista_enlaces == 'inactivos' %}active{% endif %}" href="?venlaces=inactivos">Inactivos</a>
@@ -181,9 +181,247 @@
     <li class="nav-item">
         <a class="nav-link {% if vista_enlaces == 'todos' %}active{% endif %}" href="?venlaces=todos">Mostrar todos</a>
     </li>
+    {% if puede_tickets %}
+    <li class="nav-item">
+        <a class="nav-link {% if ver_tickets %}active{% endif %}" href="?ver_tickets=1">
+            <i class="fas fa-ticket-alt me-1"></i>Tickets
+            {% if total_tickets %}<span class="badge bg-secondary ms-1">{{ total_tickets }}</span>{% endif %}
+        </a>
+    </li>
+    {% endif %}
 </ul>
 
-{% if enlaces %}
+{% if ver_tickets and puede_tickets %}
+
+<!-- Tarjetas de resumen -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Total de tickets</span>
+                <span class="h4 mb-0">{{ total_tickets }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Abiertos</span>
+                <span class="h4 mb-0 text-danger">{{ tickets_abiertos }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Cerrados</span>
+                <span class="h4 mb-0 text-success">{{ tickets_cerrados }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Formulario de filtros -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <input type="hidden" name="ver_tickets" value="1">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Buscar</label>
+                <input type="text" name="q" class="form-control form-control-sm"
+                       placeholder="Número, ID o descripción" value="{{ q }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Estatus</label>
+                <select name="estatus" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
+                    <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Desde</label>
+                <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Hasta</label>
+                <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Edificio</label>
+                <select name="torre" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for ed in edificios %}
+                    <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Servicio</label>
+                <select name="servicio" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for s in servicios %}
+                    <option value="{{ s.pk }}" {% if servicio_id == s.pk %}selected{% endif %}>{{ s.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Falla</label>
+                <select name="falla" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for f in fallas %}
+                    <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Nivel</label>
+                <select name="nivel" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for n in niveles %}
+                    <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-primary" type="submit">
+                    <i class="fas fa-search me-1"></i>Filtrar
+                </button>
+                <a href="?ver_tickets=1" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+                <div class="form-check ms-2">
+                    <input class="form-check-input" type="checkbox" name="incluir" value="1"
+                           id="incluirArchivados" {% if incluir_archivados %}checked{% endif %}>
+                    <label class="form-check-label small" for="incluirArchivados">Incluir archivados</label>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de tickets -->
+<style>
+    .ccg-scroll-top { transform: scaleY(-1); }
+    .ccg-scroll-top > .ccg-table-wrap { transform: scaleY(-1); }
+    .ccg-ticket-actions .btn { line-height: 1; }
+</style>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <span class="small text-muted">
+            {% if page_obj.paginator.count %}
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
+            {% else %}Sin tickets{% endif %}
+        </span>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Paginación de tickets">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        {% if page_obj.object_list %}
+        <div class="ccg-scroll-top">
+            <div class="ccg-table-wrap">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center">Acciones</th>
+                            <th class="cell-name">Ticket</th>
+                            <th>Solicitante</th>
+                            <th>Falla</th>
+                            <th>Responsable de atención</th>
+                            <th>Fecha de solicitud</th>
+                            <th>Estatus</th>
+                            <th>Edificio</th>
+                            <th>Nivel</th>
+                            <th>Unidad Funcional</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in page_obj.object_list %}
+                        {% with c=t.raw_data %}
+                        <tr>
+                            <td class="text-center ccg-ticket-actions">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-ver-ticket"
+                                        data-pk="{{ t.pk }}"
+                                        data-url="{% url 'enlaces_ccg:ticket_json' t.pk %}"
+                                        title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                            <td class="cell-name">
+                                <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display|default:t.ticket_id }}</a>
+                            </td>
+                            <td>
+                                {% if t.solicitante %}
+                                    <a href="{% url 'enlaces_ccg:enlace_detalle' t.solicitante.pk %}"
+                                       title="Ver ficha del enlace">{{ t.solicitante.nombre_sig }}</a>
+                                {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                            </td>
+                            <td>
+                                {% if t.falla %}
+                                <a href="?ver_tickets=1&falla={{ t.falla_id }}" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
+                                {% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}
+                            </td>
+                            <td>{{ c.Responsable_atencion|default:"—" }}</td>
+                            <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                            <td>
+                                {% if t.estatus == 'CERRADO' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if t.torre %}
+                                <a href="{% url 'enlaces_ccg:detalle_edificio' t.torre.pk %}">{{ t.torre.nombre }}</a>
+                                {% else %}{{ c.nivel|default:"—" }}{% endif %}
+                            </td>
+                            <td>
+                                {% if t.nivel %}
+                                <a href="?ver_tickets=1&nivel={{ t.nivel.pk }}" title="Filtrar por este nivel">{{ t.nivel.nombre }}</a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>{{ c.unidad|default:"—" }}</td>
+                        </tr>
+                        {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-ticket-alt fa-2x text-muted mb-2"></i>
+            <p class="text-muted mb-0">No se encontraron tickets con los filtros aplicados.</p>
+            <a href="?ver_tickets=1" class="btn btn-sm btn-outline-secondary mt-2">Limpiar filtros</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% elif enlaces %}
 <div class="ccg-table-wrap">
     <table class="table align-middle">
         <thead>
@@ -200,20 +438,22 @@
         <tbody>
             {% for enlace in enlaces %}
             <tr{% if not enlace.sincronizado %} class="table-warning"{% endif %}>
-                <td class="ps-3 ccg-actions">
-                    <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
-                            data-pk="{{ enlace.pk }}" title="Ver detalles">
-                        <i class="fas fa-eye"></i>
-                    </button>
+                <td class="ccg-actions">
                     {% if user.is_authenticated %}
                     <button class="btn btn-outline-primary btn-sm btn-editar-enlace"
                             data-pk="{{ enlace.pk }}" title="Editar">
                         <i class="fas fa-pen"></i>
                     </button>
                     {% endif %}
+                    <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
+                            data-pk="{{ enlace.pk }}" title="Ver detalles">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </td>
                 <td>
-                    <div class="cell-name">{{ enlace.nombre_completo }}</div>
+                    <a href="{% url 'enlaces_ccg:enlace_detalle' enlace.pk %}" class="cell-name text-decoration-none">
+                        {{ enlace.nombre_completo }}
+                    </a>
                     {% if enlace.usuario_sig %}
                     <div class="cell-sub">{{ enlace.usuario_sig }}</div>
                     {% endif %}
@@ -291,8 +531,84 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Modal detalle rápido de ticket -->
+<div class="modal fade" id="modalTicket" tabindex="-1" aria-labelledby="modalTicketLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTicketLabel"><i class="fas fa-ticket-alt me-2"></i>Detalle del ticket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalTicketCuerpo">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" id="modalTicketEnlace" class="btn btn-outline-primary btn-sm" target="_blank">
+                    <i class="fas fa-external-link-alt me-1"></i>Ver ficha completa
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-// Capturar Correos (CCO) - Clipboard API + fallback (misma lógica que lista_enlaces)
+// ── Modal de detalle rápido de ticket ──────────────────────────────────────
+(function () {
+    var modalEl = document.getElementById('modalTicket');
+    if (!modalEl) return;
+    var modal  = new bootstrap.Modal(modalEl);
+    var cuerpo = document.getElementById('modalTicketCuerpo');
+    var enlace = document.getElementById('modalTicketEnlace');
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function render(d) {
+        var badge = d.estatus === 'CERRADO'
+            ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>'
+            : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>';
+        var filas = Object.keys(d.raw_data || {}).map(function (k) {
+            return '<tr><td class="text-muted" style="width:38%">' + esc(k) + '</td><td>' +
+                esc(d.raw_data[k] === '' ? '—' : d.raw_data[k]) + '</td></tr>';
+        }).join('');
+        return '<div class="d-flex justify-content-between align-items-center mb-3">' +
+            '<h5 class="mb-0">Ticket ' + esc(d.numero) + '</h5>' + badge + '</div>' +
+            '<dl class="row small mb-3">' +
+            '<dt class="col-5 text-muted">ID de solicitud</dt><dd class="col-7">' + esc(d.ticket_id) + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de solicitud</dt><dd class="col-7">' + esc(d.fecha || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de cierre</dt><dd class="col-7">' + esc(d.fecha_cierre || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Tipo de solicitud</dt><dd class="col-7">' + esc(d.solicitud_tipo || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Descripción</dt><dd class="col-7">' + esc(d.descripcion || '—') + '</dd>' +
+            '</dl><hr>' +
+            '<h6 class="small text-muted">Datos del SIG</h6>' +
+            '<div style="max-height:300px;overflow:auto">' +
+            '<table class="table table-sm table-striped mb-0"><tbody>' + filas + '</tbody></table></div>';
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-ver-ticket');
+        if (!btn) return;
+        cuerpo.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
+        modal.show();
+        fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (d) {
+                cuerpo.innerHTML = render(d);
+                enlace.href = d.url_detalle;
+            })
+            .catch(function () {
+                cuerpo.innerHTML = '<div class="alert alert-danger mb-0">No se pudieron cargar los datos del ticket.</div>';
+            });
+    });
+})();
+
+// ── Capturar Correos (CCO) ─────────────────────────────────────────────────
 document.getElementById('btnCapturarCorreos')?.addEventListener('click', async function () {
     const btn = this;
     // Construir URL con los MISMOS parámetros GET actuales (respeta pestaña activos/inactivos/todos)

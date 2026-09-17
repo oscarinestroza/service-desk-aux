@@ -20,6 +20,7 @@ from .models import (
     Falla,
     Institucion,
     InstitucionEdificio,
+    Nivel,
     Seccion,
     Servicio,
     SyncLog,
@@ -544,15 +545,24 @@ class FallaAdmin(admin.ModelAdmin):
     search_fields = ("descripcion",)
 
 
+@admin.register(Nivel)
+class NivelAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "activo", "creado_en")
+    list_filter = ("activo",)
+    search_fields = ("nombre",)
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = (
         "numero_display", "fecha", "estatus", "solicitud_tipo",
-        "torre", "servicio", "archivado", "ultima_sync",
+        "torre", "nivel", "servicio", "archivado", "ultima_sync",
     )
-    list_filter = ("estatus", "archivado", "solicitud_tipo", "torre", "servicio")
+    list_filter = (
+        "estatus", "archivado", "solicitud_tipo", "torre", "nivel", "servicio",
+    )
     search_fields = ("numero_display", "numero", "ticket_id", "descripcion")
-    list_select_related = ("torre", "servicio")
+    list_select_related = ("torre", "nivel", "servicio")
     ordering = ("-fecha",)
     readonly_fields = (
         "numero", "ticket_id", "fecha", "fecha_cierre", "estatus",

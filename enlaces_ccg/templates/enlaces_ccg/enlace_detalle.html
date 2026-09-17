@@ -1,0 +1,610 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}{{ enlace.nombre_completo }} — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Enlaces</a></li>
+<li class="breadcrumb-item active" aria-current="page">{{ enlace.nombre_completo }}</li>
+{% endblock %}
+
+{% block topbar_acciones %}
+{% if puede_editar %}
+<button type="button" class="btn btn-outline-primary btn-sm btn-editar-enlace"
+        data-pk="{{ enlace.pk }}">
+    <i class="fas fa-pen me-1"></i> Editar
+</button>
+{% endif %}
+{% endblock %}
+
+{% block contenido %}
+{% with tab=request.GET.tab|default:'' %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-address-card me-2 text-primary"></i>{{ enlace.nombre_completo }}
+    </h1>
+    <div class="d-flex align-items-center gap-2">
+        {% if enlace.esta_activo %}
+        <span class="badge bg-success badge-estado">
+            <i class="fas fa-check-circle me-1"></i>ACTIVO
+        </span>
+        {% else %}
+        <span class="badge bg-danger badge-estado">
+            <i class="fas fa-times-circle me-1"></i>INACTIVO
+        </span>
+        {% endif %}
+        {% if enlace.sincronizado %}
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+            <i class="fas fa-cloud-check me-1"></i>SIG
+        </span>
+        {% else %}
+        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+            <i class="fas fa-cloud me-1"></i>Sin sincronizar
+        </span>
+        {% endif %}
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if tab == '' or tab == 'generales' %}active{% endif %}" id="tab-generales-btn"
+                data-bs-toggle="tab" data-bs-target="#tab-generales" type="button" role="tab">
+            <i class="fas fa-id-card me-1"></i>Datos generales
+        </button>
+    </li>
+    {% if puede_tickets %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if tab == 'tickets' %}active{% endif %}" id="tab-tickets-btn"
+                data-bs-toggle="tab" data-bs-target="#tab-tickets" type="button" role="tab">
+            <i class="fas fa-ticket-alt me-1"></i>Tickets
+            <span class="badge bg-secondary ms-1">{{ total_tickets }}</span>
+        </button>
+    </li>
+    {% endif %}
+</ul>
+
+<div class="tab-content">
+
+    <!-- ── Datos generales ── -->
+    <div class="tab-pane fade {% if tab == '' or tab == 'generales' %}show active{% endif %}" id="tab-generales" role="tabpanel">
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-id-card me-1"></i>Datos generales</strong>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-3 g-3 small">
+                    <div class="col">
+                        <div class="text-muted">Nombre completo</div>
+                        <div class="fw-semibold">{{ enlace.nombre_completo }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Estatus</div>
+                        <div class="fw-semibold">{{ enlace.get_estado_display }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Comentarios</div>
+                        <div class="fw-semibold">{{ enlace.comentarios|default:"—" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-location-dot me-1"></i>Ubicación</strong>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-3 g-3 small">
+                    <div class="col">
+                        <div class="text-muted">Edificio</div>
+                        <div class="fw-semibold">
+                            {% for ie in niveles_edificios %}
+                            <a href="{% url 'enlaces_ccg:detalle_edificio' ie.edificio.pk %}">{{ ie.edificio.nombre }}</a>{% if not forloop.last %}, {% endif %}
+                            {% empty %}—{% endfor %}
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Institución</div>
+                        <div class="fw-semibold">
+                            {% if enlace.institucion %}
+                            <a href="{% url 'enlaces_ccg:perfil_institucion' enlace.institucion.pk %}">
+                                {{ enlace.institucion.nombre_completo }}
+                            </a>
+                            {% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Nivel de referencia</div>
+                        <div class="fw-semibold">{{ enlace.nivel_referencia|default:"—" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-address-book me-1"></i>Contacto</strong>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-3 g-3 small">
+                    <div class="col">
+                        <div>
+                            <div class="text-muted">Correo principal</div>
+                            <div class="fw-semibold">
+                                {% if enlace.correo_principal %}
+                                <a href="mailto:{{ enlace.correo_principal }}">{{ enlace.correo_principal }}</a>
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <div class="text-muted">Correo secundario</div>
+                            <div class="fw-semibold">
+                                {% if enlace.correo_secundario %}
+                                <a href="mailto:{{ enlace.correo_secundario }}">{{ enlace.correo_secundario }}</a>
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div>
+                            <div class="text-muted">Teléfono principal</div>
+                            <div class="fw-semibold">
+                                {% if enlace.telefono_principal %}
+                                <a href="tel:{{ enlace.telefono_principal }}">{{ enlace.telefono_principal }}</a>
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <div class="text-muted">Teléfono secundario</div>
+                            <div class="fw-semibold">
+                                {% if enlace.telefono_secundario %}
+                                <a href="tel:{{ enlace.telefono_secundario }}">{{ enlace.telefono_secundario }}</a>
+                                {% else %}—{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Extensión telefónica</div>
+                        <div class="fw-semibold">{{ enlace.extension_telefonica|default:"—" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white py-2">
+                        <strong class="text-success"><i class="fas fa-arrow-up me-1"></i>Alta</strong>
+                    </div>
+                    <div class="card-body small">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Fecha</dt>
+                            <dd class="col-7">{{ enlace.fecha_alta|date:"d/m/Y"|default:"—" }}</dd>
+                            <dt class="col-5 text-muted">Oficio</dt>
+                            <dd class="col-7">{{ enlace.oficio_alta|default:"—" }}</dd>
+                            <dt class="col-5 text-muted">Observaciones</dt>
+                            <dd class="col-7">{{ enlace.observaciones_alta|default:"—" }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white py-2">
+                        <strong class="text-primary"><i class="fas fa-rotate me-1"></i>Seguimiento</strong>
+                    </div>
+                    <div class="card-body small">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Fecha</dt>
+                            <dd class="col-7">{{ enlace.fecha_seguimiento|date:"d/m/Y"|default:"—" }}</dd>
+                            <dt class="col-5 text-muted">Oficio</dt>
+                            <dd class="col-7">{{ enlace.oficio_seguimiento|default:"—" }}</dd>
+                            <dt class="col-5 text-muted">Observaciones</dt>
+                            <dd class="col-7">{{ enlace.observaciones_seguimiento|default:"—" }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white py-2">
+                        <strong class="text-danger"><i class="fas fa-arrow-down me-1"></i>Baja</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row row-cols-1 row-cols-md-3 g-3 small">
+                            <div class="col">
+                                <div class="text-muted">Fecha</div>
+                                <div class="fw-semibold">{{ enlace.fecha_baja|date:"d/m/Y"|default:"—" }}</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted">Oficio</div>
+                                <div class="fw-semibold">{{ enlace.oficio_baja|default:"—" }}</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted">Observaciones</div>
+                                <div class="fw-semibold">{{ enlace.observaciones_baja|default:"—" }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <strong><i class="fas fa-user-shield me-1"></i>Datos SIG</strong>
+                {% if enlace.sincronizado %}
+                <span class="badge bg-success">Sincronizado</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">Pendiente de sincronizar</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-1 row-cols-md-4 g-3 small">
+                    <div class="col">
+                        <div class="text-muted">Usuario SIG</div>
+                        <div class="fw-semibold">{{ enlace.usuario_sig|default:"—" }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Nombre en SIG</div>
+                        <div class="fw-semibold">{{ enlace.nombre_sig|default:"—" }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">PIN SIG</div>
+                        <div class="fw-semibold">{{ enlace.pin_sig|default:"—" }}</div>
+                    </div>
+                    <div class="col">
+                        <div class="text-muted">Sincronizado</div>
+                        <div class="fw-semibold">{{ enlace.sincronizado|yesno:"Sí,No" }}</div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+                <strong class="small"><i class="fas fa-clock-rotate-left me-1"></i>Historial de sincronización</strong>
+                <div class="mt-2">
+                    {% for log in enlace.sync_logs.all %}
+                    <div class="d-flex justify-content-between align-items-start border-bottom pb-2 mb-2">
+                        <div>
+                            <div class="fw-semibold">
+                                {{ log.get_accion_display }}
+                                {% if log.estado == 'exitoso' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">{{ log.get_estado_display }}</span>
+                                {% elif log.estado == 'error' %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ log.get_estado_display }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ log.get_estado_display }}</span>
+                                {% endif %}
+                            </div>
+                            {% if log.mensaje %}
+                            <div class="small text-muted">{{ log.mensaje }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="small text-muted flex-shrink-0">{{ log.creado_en|date:"d/m/Y H:i" }}</div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small mb-0">No hay registros de sincronización.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if puede_tickets %}
+    <!-- ── Tickets ── -->
+    <div class="tab-pane fade {% if tab == 'tickets' %}show active{% endif %}" id="tab-tickets" role="tabpanel">
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Total de tickets</span>
+                        <span class="h4 mb-0">{{ total_tickets }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Abiertos</span>
+                        <span class="h4 mb-0 text-danger">{{ tickets_abiertos }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-3 d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Cerrados</span>
+                        <span class="h4 mb-0 text-success">{{ tickets_cerrados }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body py-3">
+                <form method="get" class="row g-2 align-items-end">
+                    <input type="hidden" name="tab" value="tickets">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Buscar</label>
+                        <input type="text" name="q" class="form-control form-control-sm"
+                               placeholder="Número, ID o descripción" value="{{ q }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Estatus</label>
+                        <select name="estatus" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
+                            <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Desde</label>
+                        <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Hasta</label>
+                        <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Edificio</label>
+                        <select name="torre" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            {% for ed in edificios %}
+                            <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Servicio</label>
+                        <select name="servicio" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            {% for s in servicios %}
+                            <option value="{{ s.pk }}" {% if servicio_id == s.pk %}selected{% endif %}>{{ s.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Falla</label>
+                        <select name="falla" class="form-select form-select-sm">
+                            <option value="">Todas</option>
+                            {% for f in fallas %}
+                            <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Nivel</label>
+                        <select name="nivel" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            {% for n in niveles %}
+                            <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-primary" type="submit">
+                            <i class="fas fa-search me-1"></i>Filtrar
+                        </button>
+                        <div class="form-check ms-2">
+                            <input class="form-check-input" type="checkbox" name="incluir" value="1"
+                                   id="incluirArchivados" {% if incluir_archivados %}checked{% endif %}>
+                            <label class="form-check-label small" for="incluirArchivados">Incluir archivados</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <style>
+            .ccg-scroll-top { transform: scaleY(-1); }
+            .ccg-scroll-top > .ccg-table-wrap { transform: scaleY(-1); }
+            .ccg-ticket-actions .btn { line-height: 1; }
+        </style>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+                <span class="small text-muted">
+                    {% if page_obj.paginator.count %}
+                    Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
+                    {% else %}Sin tickets{% endif %}
+                </span>
+                {% if page_obj.paginator.num_pages > 1 %}
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page=1">Primera</a></li>
+                        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a></li>
+                        {% endif %}
+                        <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+                        {% if page_obj.has_next %}
+                        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a></li>
+                        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <div class="ccg-scroll-top">
+                    <div class="ccg-table-wrap">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">Acciones</th>
+                                    <th class="cell-name">Ticket</th>
+                                    <th>Solicitante</th>
+                                    <th>Falla</th>
+                                    <th>Responsable de atención</th>
+                                    <th>Fecha de solicitud</th>
+                                    <th>Estatus</th>
+                                    <th>Edificio</th>
+                                    <th>Nivel</th>
+                                    <th>Unidad Funcional</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in page_obj.object_list %}
+                                {% with c=t.raw_data %}
+                                <tr>
+                                    <td class="text-center ccg-ticket-actions">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary btn-ver-ticket"
+                                                data-pk="{{ t.pk }}"
+                                                data-url="{% url 'enlaces_ccg:ticket_json' t.pk %}"
+                                                title="Ver detalle">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                    <td class="cell-name">
+                                        <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
+                                    </td>
+                                    <td>
+                                        {% if t.solicitante %}
+                                            {% if t.institucion %}
+                                            <a href="{% url 'enlaces_ccg:perfil_institucion' t.institucion.pk %}"
+                                               title="Institución: {{ t.institucion.nombre }}">{{ t.solicitante.nombre_sig }}</a>
+                                            {% else %}{{ t.solicitante.nombre_sig }}{% endif %}
+                                        {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if t.falla %}
+                                        <a href="?tab=tickets&falla={{ t.falla_id }}" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
+                                        {% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}
+                                    </td>
+                                    <td>{{ c.Responsable_atencion|default:"—" }}</td>
+                                    <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                                    <td>
+                                        {% if t.estatus == 'CERRADO' %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
+                                        {% else %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if t.torre %}
+                                        <a href="{% url 'enlaces_ccg:detalle_edificio' t.torre.pk %}">{{ t.torre.nombre }}</a>
+                                        {% else %}{{ c.nivel|default:"—" }}{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if t.nivel %}
+                                        <a href="?tab=tickets&nivel={{ t.nivel_id }}" title="Filtrar por este nivel">{{ t.nivel.nombre }}</a>
+                                        {% else %}{{ c.grupo|default:"—" }}{% endif %}
+                                    </td>
+                                    <td>{{ c.unidad|default:"—" }}</td>
+                                </tr>
+                                {% endwith %}
+                                {% empty %}
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted py-5">
+                                        <i class="fas fa-ticket-alt fa-2x mb-2 d-block"></i>
+                                        No hay tickets que coincidan con los filtros.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endwith %}
+
+<div class="modal fade" id="modalTicket" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-ticket-alt me-2 text-primary"></i>Detalle del ticket
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalTicketContenido"></div>
+            <div class="modal-footer">
+                <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                    <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
+                </a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Activar la pestaña indicada por el hash de la URL.
+    var hash = window.location.hash;
+    if (hash) {
+        var trigger = document.querySelector('.nav-tabs button[data-bs-target="' + hash + '"]');
+        if (trigger) new bootstrap.Tab(trigger).show();
+    }
+})();
+document.querySelectorAll('.nav-tabs button[data-bs-toggle="tab"]').forEach(function (btn) {
+    btn.addEventListener('shown.bs.tab', function () {
+        history.replaceState(null, '', this.dataset.bsTarget);
+    });
+});
+
+(function () {
+    // --- Modal de detalle de ticket ---
+    var modalEl = document.getElementById('modalTicket');
+    if (!modalEl) return;
+    var modal = new bootstrap.Modal(modalEl);
+    var cuerpo = document.getElementById('modalTicketContenido');
+    var enlace = document.getElementById('modalTicketEnlace');
+
+    var esc = function (v) {
+        return (v === null || v === undefined ? '' : String(v)).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+
+    var render = function (d) {
+        var badge = d.estatus === 'CERRADO'
+            ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>'
+            : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>';
+        var filas = Object.keys(d.raw_data || {}).map(function (k) {
+            return '<tr><td class="text-muted" style="width: 38%">' + esc(k) + '</td><td>' +
+                esc(d.raw_data[k] === '' ? '—' : d.raw_data[k]) + '</td></tr>';
+        }).join('');
+        return '' +
+            '<div class="d-flex justify-content-between align-items-center mb-3">' +
+            '<h5 class="mb-0">Ticket ' + esc(d.numero) + '</h5>' + badge + '</div>' +
+            '<dl class="row small mb-3">' +
+            '<dt class="col-5 text-muted">ID de solicitud</dt><dd class="col-7">' + esc(d.ticket_id) + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de solicitud</dt><dd class="col-7">' + esc(d.fecha || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Fecha de cierre</dt><dd class="col-7">' + esc(d.fecha_cierre || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Tipo de solicitud</dt><dd class="col-7">' + esc(d.solicitud_tipo || '—') + '</dd>' +
+            '<dt class="col-5 text-muted">Descripción</dt><dd class="col-7">' + esc(d.descripcion || '—') + '</dd>' +
+            '</dl><hr>' +
+            '<h6 class="small text-muted">Datos del SIG</h6>' +
+            '<div style="max-height: 300px; overflow: auto;">' +
+            '<table class="table table-sm table-striped mb-0"><tbody>' + filas + '</tbody></table></div>';
+    };
+
+    document.querySelectorAll('.btn-ver-ticket').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            cuerpo.innerHTML = '<div class="text-center py-4">' +
+                '<div class="spinner-border text-primary" role="status"></div></div>';
+            modal.show();
+            fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (d) {
+                    cuerpo.innerHTML = render(d);
+                    enlace.href = d.url_detalle;
+                })
+                .catch(function () {
+                    cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
+                        'No se pudieron cargar los datos del ticket.</div>';
+                });
+        });
+    });
+})();
+</script>
+{% endblock %}

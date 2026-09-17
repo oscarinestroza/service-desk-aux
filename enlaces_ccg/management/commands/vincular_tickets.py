@@ -25,7 +25,7 @@ CAMPOS_VINCULO = (
     "torre", "institucion", "solicitante", "servicio", "falla",
     "nivel", "solicitante_nombre",
 )
-CAMPOS_FK = ("torre", "institucion", "solicitante", "servicio", "falla")
+CAMPOS_FK = ("torre", "institucion", "solicitante", "servicio", "falla", "nivel")
 
 
 class Command(BaseCommand):
@@ -53,6 +53,7 @@ class Command(BaseCommand):
                 Q(torre__isnull=True)
                 | Q(servicio__isnull=True)
                 | Q(falla__isnull=True)
+                | Q(nivel__isnull=True)
                 | Q(solicitante__isnull=True)
             )
         qs = qs.only("pk", "raw_data", *CAMPOS_VINCULO).order_by("pk")

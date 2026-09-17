@@ -31,7 +31,8 @@ from .models import (
     Edificio,
     EnlaceAutorizado,
     Falla,
-    Institucion, InstitucionEdificio, Seccion, Servicio, Ticket, TicketRegistro,
+    Institucion, InstitucionEdificio, Nivel, Seccion, Servicio, Ticket,
+    TicketRegistro,
 )
 from .roles import (
     CAP_ADMIN,
@@ -360,46 +361,44 @@ def copiar_correos_comunicados(request):
     })
 
 
-@requiere(CAP_TICKETS)
-def seguimiento_tickets(request):
-    """Lista paginada de tickets con filtros (servidor-side).
+def _entero_o_none(valor):
+    """Convierte a int un valor de querystring (None si no es válido)."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
-    Rendimiento: consulta con índices, sin raw_data en la tabla, paginación
-    de 50 registros y badge con total_tickets sin contar por petición.
+
+def _filtrar_tickets(qs, params):
+    """Aplica los filtros del listado de tickets (compartido por la lista
+    general y la pestaña de tickets de la ficha de enlace).
+
+    Devuelve (queryset_filtrado, contexto) donde `contexto` trae los valores
+    normalizados para repintar el formulario de filtros.
     """
-    cfg = ConfiguracionTickets.cargar()
-    # Paginado servidor-side: SQL LIMIT/OFFSET; cada página trae solo 50 filas
-    # (incluye raw_data para las columnas de contexto, sin consultas extra).
-    qs = Ticket.objects.select_related(
-        "torre", "institucion", "solicitante", "servicio", "falla"
-    )
-
-    estatus = request.GET.get("estatus", "").strip()
+    estatus = params.get("estatus", "").strip()
     if estatus in (Ticket.ESTATUS_ABIERTO, Ticket.ESTATUS_CERRADO):
         qs = qs.filter(estatus=estatus)
 
-    incluir_archivados = request.GET.get("incluir", "") == "1"
+    incluir_archivados = params.get("incluir", "") == "1"
     if not incluir_archivados:
         qs = qs.filter(archivado=False)
 
-    # Filtros por vínculo (Fase 3): torre / servicio / falla (por PK).
-    def _entero(valor):
-        try:
-            return int(valor)
-        except (TypeError, ValueError):
-            return None
-
-    torre_id = _entero(request.GET.get("torre", ""))
+    # Filtros por vínculo (Fase 3): torre / servicio / falla / nivel (por PK).
+    torre_id = _entero_o_none(params.get("torre", ""))
     if torre_id:
         qs = qs.filter(torre_id=torre_id)
-    servicio_id = _entero(request.GET.get("servicio", ""))
+    servicio_id = _entero_o_none(params.get("servicio", ""))
     if servicio_id:
         qs = qs.filter(servicio_id=servicio_id)
-    falla_id = _entero(request.GET.get("falla", ""))
+    falla_id = _entero_o_none(params.get("falla", ""))
     if falla_id:
         qs = qs.filter(falla_id=falla_id)
+    nivel_id = _entero_o_none(params.get("nivel", ""))
+    if nivel_id:
+        qs = qs.filter(nivel_id=nivel_id)
 
-    q = request.GET.get("q", "").strip()
+    q = params.get("q", "").strip()
     if q:
         qs = qs.filter(
             Q(numero_display__icontains=q)
@@ -408,8 +407,8 @@ def seguimiento_tickets(request):
             | Q(descripcion__icontains=q)
         )
 
-    desde = request.GET.get("desde", "").strip()
-    hasta = request.GET.get("hasta", "").strip()
+    desde = params.get("desde", "").strip()
+    hasta = params.get("hasta", "").strip()
     if desde:
         try:
             qs = qs.filter(fecha__gte=datetime.strptime(desde, "%Y-%m-%d"))
@@ -422,6 +421,44 @@ def seguimiento_tickets(request):
             )
         except ValueError:
             hasta = ""
+
+    return qs, {
+        "estatus": estatus,
+        "incluir_archivados": incluir_archivados,
+        "torre_id": torre_id,
+        "servicio_id": servicio_id,
+        "falla_id": falla_id,
+        "nivel_id": nivel_id,
+        "q": q,
+        "desde": desde,
+        "hasta": hasta,
+    }
+
+
+@requiere(CAP_TICKETS)
+def seguimiento_tickets(request):
+    """Lista paginada de tickets con filtros (servidor-side).
+
+    Rendimiento: consulta con índices, sin raw_data en la tabla, paginación
+    de 50 registros y badge con total_tickets sin contar por petición.
+    """
+    cfg = ConfiguracionTickets.cargar()
+    # Paginado servidor-side: SQL LIMIT/OFFSET; cada página trae solo 50 filas
+    # (incluye raw_data para las columnas de contexto, sin consultas extra).
+    qs = Ticket.objects.select_related(
+        "torre", "institucion", "solicitante", "servicio", "falla", "nivel"
+    )
+
+    qs, filtros_ctx = _filtrar_tickets(qs, request.GET)
+    estatus = filtros_ctx["estatus"]
+    incluir_archivados = filtros_ctx["incluir_archivados"]
+    torre_id = filtros_ctx["torre_id"]
+    servicio_id = filtros_ctx["servicio_id"]
+    falla_id = filtros_ctx["falla_id"]
+    nivel_id = filtros_ctx["nivel_id"]
+    q = filtros_ctx["q"]
+    desde = filtros_ctx["desde"]
+    hasta = filtros_ctx["hasta"]
 
     paginator = Paginator(qs, 50)
     try:
@@ -459,9 +496,11 @@ def seguimiento_tickets(request):
             "torre_id": torre_id,
             "servicio_id": servicio_id,
             "falla_id": falla_id,
+            "nivel_id": nivel_id,
             "edificios": Edificio.objects.all(),
             "servicios": Servicio.objects.filter(activo=True),
             "fallas": Falla.objects.filter(activo=True),
+            "niveles": Nivel.objects.filter(activo=True),
             "total_tickets": cfg.total_tickets,
             "ultima_sincronizacion": cfg.ultima_sincronizacion,
             "proxima_sincronizacion": proxima,
@@ -1017,6 +1056,40 @@ def perfil_institucion(request, pk):
         enlaces = enlaces.filter(estado="INACTIVO")
     enlaces = enlaces.order_by("primer_apellido", "segundo_apellido", "nombres")
 
+    ver_tickets = request.GET.get("ver_tickets")
+    page_obj = None
+    total_tickets = abiertos = cerrados = 0
+    filtros_ctx = {}
+    filtros = ""
+
+    if ver_tickets and tiene(request.user, CAP_TICKETS):
+        qs = (
+            Ticket.objects.filter(institucion=institucion)
+            .select_related("torre", "solicitante", "servicio", "falla", "nivel")
+            .order_by("-fecha", "ticket_id")
+        )
+        # Conteos sin filtros (totales reales de la institución)
+        total_tickets = qs.count()
+        abiertos = qs.filter(estatus=Ticket.ESTATUS_ABIERTO).count()
+        cerrados = total_tickets - abiertos
+
+        # Aplicar filtros del formulario
+        qs, filtros_ctx = _filtrar_tickets(qs, request.GET)
+
+        paginator = Paginator(qs, 50)
+        try:
+            pagina = int(request.GET.get("page", "1"))
+        except (TypeError, ValueError):
+            pagina = 1
+        page_obj = paginator.get_page(pagina)
+
+        # Cadena de parámetros activos (para los enlaces de paginación)
+        filtros = "&".join(
+            f"{k}={quote(v)}"
+            for k, v in request.GET.items()
+            if k != "page" and v.strip() != ""
+        )
+
     return render(
         request,
         "enlaces_ccg/perfil_institucion.html",
@@ -1024,6 +1097,17 @@ def perfil_institucion(request, pk):
             "institucion": institucion,
             "enlaces": enlaces,
             "vista_enlaces": vista_enlaces,
+            "ver_tickets": ver_tickets,
+            "page_obj": page_obj,
+            "total_tickets": total_tickets,
+            "tickets_abiertos": abiertos,
+            "tickets_cerrados": cerrados,
+            "filtros": filtros,
+            "edificios": Edificio.objects.all(),
+            "servicios": Servicio.objects.filter(activo=True),
+            "fallas": Falla.objects.filter(activo=True),
+            "niveles": Nivel.objects.filter(activo=True),
+            **(filtros_ctx or {}),
         },
     )
 
@@ -1266,6 +1350,74 @@ def detalle_enlace_json(request, pk):
         "oficio_baja": enlace.oficio_baja or "",
         "observaciones_baja": enlace.observaciones_baja or "",
     })
+
+
+@requiere(CAP_DIRECTORIO)
+def enlace_detalle(request, pk):
+    """Ficha completa de un enlace con pestañas (datos, ubicación, contacto,
+    SIG, alta/seguimiento/baja y tickets vinculados)."""
+    enlace = get_object_or_404(
+        EnlaceAutorizado.objects.select_related("institucion").prefetch_related(
+            "institucion__edificio",
+            "adjuntos",
+            "sync_logs",
+        ),
+        pk=pk,
+    )
+
+    niveles_edificios = []
+    if enlace.institucion_id:
+        niveles_edificios = list(
+            InstitucionEdificio.objects.filter(institucion=enlace.institucion)
+            .select_related("edificio")
+        )
+
+    tickets = Ticket.objects.none()
+    page_obj = None
+    total_tickets = abiertos = cerrados = 0
+    filtros_ctx = {}
+    filtros = ""
+    if tiene(request.user, CAP_TICKETS):
+        tickets = (
+            Ticket.objects.filter(solicitante=enlace)
+            .select_related("torre", "institucion", "servicio", "falla", "nivel")
+            .order_by("-fecha")
+        )
+        total_tickets = tickets.count()
+        abiertos = tickets.filter(estatus=Ticket.ESTATUS_ABIERTO).count()
+        cerrados = total_tickets - abiertos
+
+        tickets, filtros_ctx = _filtrar_tickets(tickets, request.GET)
+        paginator = Paginator(tickets, 50)
+        try:
+            pagina = int(request.GET.get("page", "1"))
+        except (TypeError, ValueError):
+            pagina = 1
+        page_obj = paginator.get_page(pagina)
+        filtros = "&".join(
+            f"{k}={quote(v)}"
+            for k, v in request.GET.items()
+            if k != "page" and v.strip() != ""
+        )
+
+    return render(
+        request,
+        "enlaces_ccg/enlace_detalle.html",
+        {
+            "enlace": enlace,
+            "niveles_edificios": niveles_edificios,
+            "page_obj": page_obj,
+            "total_tickets": total_tickets,
+            "tickets_abiertos": abiertos,
+            "tickets_cerrados": cerrados,
+            "filtros": filtros,
+            "edificios": Edificio.objects.all(),
+            "servicios": Servicio.objects.filter(activo=True),
+            "fallas": Falla.objects.filter(activo=True),
+            "niveles": Nivel.objects.filter(activo=True),
+            **(filtros_ctx or {}),
+        },
+    )
 
 
 @require_POST

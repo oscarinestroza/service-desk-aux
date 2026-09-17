@@ -59,6 +59,11 @@ urlpatterns = [
         name="copiar_correos_enlaces",
     ),
     path(
+        "enlaces/<int:pk>/",
+        views.enlace_detalle,
+        name="enlace_detalle",
+    ),
+    path(
         "enlaces/<int:pk>/detalle/",
         views.detalle_enlace_json,
         name="detalle_enlace_json",

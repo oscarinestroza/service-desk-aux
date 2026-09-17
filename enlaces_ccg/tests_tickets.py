@@ -18,6 +18,7 @@ from .models import (
     EnlaceAutorizado,
     Falla,
     Institucion,
+    Nivel,
     Servicio,
     Ticket,
 )
@@ -356,9 +357,9 @@ class FasesProcesoTests(TestCase):
         self.assertEqual(self._estado(fases, "proceso"), "activo")
         self.assertEqual(self._estado(fases, "finalizado"), "pendiente")
         self.assertEqual(self._estado(fases, "completado"), "pendiente")
-        self.assertEqual(
-            next(f for f in fases if f["clave"] == "creado")["detalle"], "SS26-0600"
-        )
+        detalle_creado = next(f for f in fases if f["clave"] == "creado")["detalle"]
+        self.assertIn("Ticket SS26-0600 creado el", detalle_creado)
+        self.assertIn("a las", detalle_creado)
         self.assertEqual(
             next(f for f in fases if f["clave"] == "canalizado")["detalle"], "Resp"
         )
@@ -380,6 +381,15 @@ class FasesProcesoTests(TestCase):
         self.assertEqual(
             next(f for f in fases if f["clave"] == "canalizado")["detalle"],
             "Sin responsable de atención",
+        )
+
+    def test_creado_sin_fecha_cae_al_numero(self):
+        t = self._crear(1, "SS26-0607")
+        t.fecha = None
+        t.save(update_fields=["fecha"])
+        fases = Ticket.objects.get(pk=t.pk).fases_proceso()
+        self.assertEqual(
+            next(f for f in fases if f["clave"] == "creado")["detalle"], "SS26-0607"
         )
 
     def test_cerrado_finalizado(self):
@@ -416,9 +426,11 @@ class FasesProcesoTests(TestCase):
         self.assertIn("Canalizado con el servicio", html)
         self.assertIn("En proceso de atención", html)
         self.assertIn("ccg-termino-activo", html)
-        self.assertIn(">SS26-0605<", html)
-        self.assertIn(">Resp<", html)
+        self.assertIn("Ticket SS26-0605 creado el", html)
+        self.assertIn("Resp", html)
         self.assertIn("Trabajo en curso", html)
+        self.assertNotIn("Número visible", html)
+        self.assertNotIn("Tipo de solicitud", html)
 
     def test_comentarios_servicio_segun_estado(self):
         t = self._crear(1, "SS26-0606")
@@ -588,7 +600,7 @@ class VinculacionTests(TestCase):
         self.assertEqual(t.torre, self.edificio)  # case-insensitive TORRE 2
         self.assertEqual(t.institucion, self.institucion)  # del enlace
         self.assertEqual(t.solicitante, self.enlace)
-        self.assertEqual(t.nivel, "Nivel 8")
+        self.assertEqual(t.nivel.nombre, "Nivel 8")
         self.assertEqual(t.servicio.nombre, "Elevadores")
         self.assertEqual(t.falla.descripcion, "Falla Uno")
         self.assertEqual(t.solicitante_nombre, "")
@@ -608,6 +620,7 @@ class VinculacionTests(TestCase):
         ])
         self.assertEqual(Servicio.objects.count(), 1)
         self.assertEqual(Falla.objects.count(), 1)
+        self.assertEqual(Nivel.objects.count(), 1)
         self.assertEqual(Servicio.objects.first().nombre, "Elevadores")
 
     def test_backfill_command_idempotente(self):
@@ -634,7 +647,7 @@ class VinculacionTests(TestCase):
         t = Ticket.objects.get(ticket_id="1")
         self.assertEqual(t.torre.nombre, "TORRE 2")
         self.assertEqual(t.solicitante.nombre_sig, "Cesar Augusto Zavala")
-        self.assertEqual(t.nivel, "Nivel 8")
+        self.assertEqual(t.nivel.nombre, "Nivel 8")
 
         # Segunda corrida: no debe fallar (idempotente).
         call_command("vincular_tickets", "--todos", verbosity=0)
@@ -685,6 +698,13 @@ class VinculacionVistasTests(TestCase):
         ).content.decode("utf-8", "replace")
         self.assertIn("No hay tickets", html)
 
+    def test_filtro_por_nivel(self):
+        n = Nivel.objects.get(nombre="Nivel 8")
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"nivel": n.pk}
+        ).content.decode("utf-8", "replace")
+        self.assertIn("SS26-0710", html)
+
     def test_detalle_muestra_vinculos(self):
         t = Ticket.objects.get(ticket_id="1")
         html = self.client.get(
@@ -694,3 +714,22 @@ class VinculacionVistasTests(TestCase):
         self.assertIn("Institución Uno", html)
         self.assertIn("Elevadores", html)
         self.assertIn("Falla Uno", html)
+        self.assertIn("?nivel=", html)
+        self.assertIn("?servicio=", html)
+        self.assertIn("Detalle del SIG", html)
+
+    def test_ficha_enlace_muestra_pestanas_y_tickets(self):
+        html = self.client.get(
+            reverse("enlaces_ccg:enlace_detalle", args=[self.enlace.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Datos generales", html)
+        self.assertIn("Contacto", html)
+        self.assertIn("Ubicación", html)
+        self.assertIn("Datos SIG", html)
+        self.assertIn("Alta", html)
+        self.assertIn("Seguimiento", html)
+        self.assertIn("Baja", html)
+        self.assertIn("Tickets", html)
+        self.assertIn("SS26-0710", html)
+        self.assertNotIn('id="tab-alta"', html)
+        self.assertNotIn('id="tab-sig"', html)

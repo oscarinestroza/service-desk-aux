@@ -206,7 +206,9 @@
                     {% endif %}
                 </td>
                 <td>
-                    <div class="cell-name">{{ enlace.nombre_completo }}</div>
+                    <a href="{% url 'enlaces_ccg:enlace_detalle' enlace.pk %}" class="cell-name text-decoration-none">
+                        {{ enlace.nombre_completo }}
+                    </a>
                     {% if enlace.usuario_sig %}
                         <div class="cell-sub">{{ enlace.usuario_sig }}{% if enlace.pin_sig %} · PIN: {{ enlace.pin_sig }}{% endif %}</div>
                     {% endif %}

@@ -64,7 +64,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label small mb-1">Servicio</label>
                 <select name="servicio" class="form-select form-select-sm">
                     <option value="">Todos</option>
@@ -73,12 +73,21 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-5">
+            <div class="col-md-3">
                 <label class="form-label small mb-1">Falla</label>
                 <select name="falla" class="form-select form-select-sm">
                     <option value="">Todas</option>
                     {% for f in fallas %}
                     <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Nivel</label>
+                <select name="nivel" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for n in niveles %}
+                    <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -204,7 +213,11 @@
                                 <a href="{% url 'enlaces_ccg:detalle_edificio' t.torre.pk %}">{{ t.torre.nombre }}</a>
                                 {% else %}{{ c.nivel|default:"—" }}{% endif %}
                             </td>
-                            <td>{{ t.nivel|default:c.grupo|default:"—" }}</td>
+                            <td>
+                                {% if t.nivel %}
+                                <a href="?nivel={{ t.nivel_id }}" title="Filtrar por este nivel">{{ t.nivel.nombre }}</a>
+                                {% else %}{{ c.grupo|default:"—" }}{% endif %}
+                            </td>
                             <td>{{ c.unidad|default:"—" }}</td>
                         </tr>
                         {% endwith %}
