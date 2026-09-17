@@ -77,6 +77,33 @@
                     <dd class="col-7">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
                     <dt class="col-5 text-muted">Tipo de solicitud</dt>
                     <dd class="col-7">{{ ticket.solicitud_tipo|default:"—" }}</dd>
+                    <dt class="col-5 text-muted">Edificio</dt>
+                    <dd class="col-7">
+                        {% if ticket.torre %}
+                        <a href="{% url 'enlaces_ccg:detalle_edificio' ticket.torre.pk %}">{{ ticket.torre.nombre }}</a>
+                        {% else %}{{ ticket.raw_data.nivel|default:"—" }}{% endif %}
+                    </dd>
+                    <dt class="col-5 text-muted">Nivel</dt>
+                    <dd class="col-7">{{ ticket.nivel|default:ticket.raw_data.grupo|default:"—" }}</dd>
+                    <dt class="col-5 text-muted">Solicitante</dt>
+                    <dd class="col-7">
+                        {% if ticket.solicitante %}
+                            {{ ticket.solicitante.nombre_sig }}
+                            {% if ticket.institucion %}
+                            (<a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.siglas|default:ticket.institucion.nombre }}</a>)
+                            {% endif %}
+                        {% else %}{{ ticket.solicitante_nombre|default:ticket.raw_data.solicitud_solicitante|default:"—" }}{% endif %}
+                    </dd>
+                    <dt class="col-5 text-muted">Institución</dt>
+                    <dd class="col-7">
+                        {% if ticket.institucion %}
+                        <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.nombre_completo }}</a>
+                        {% else %}—{% endif %}
+                    </dd>
+                    <dt class="col-5 text-muted">Servicio</dt>
+                    <dd class="col-7">{{ ticket.servicio.nombre|default:ticket.raw_data.servicio|default:"—" }}</dd>
+                    <dt class="col-5 text-muted">Falla</dt>
+                    <dd class="col-7">{{ ticket.falla.descripcion|default:ticket.raw_data.falla_descripcion|default:"—" }}</dd>
                     <dt class="col-5 text-muted">Archivado</dt>
                     <dd class="col-7">{{ ticket.archivado|yesno:"Sí,No" }}</dd>
                     <dt class="col-5 text-muted">Última sync</dt>

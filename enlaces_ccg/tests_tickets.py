@@ -6,16 +6,26 @@ from io import BytesIO
 from pathlib import Path
 
 import openpyxl
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from unittest import mock
 
-from .models import ConfiguracionTickets, Ticket
+from .models import (
+    ConfiguracionTickets,
+    Edificio,
+    EnlaceAutorizado,
+    Falla,
+    Institucion,
+    Servicio,
+    Ticket,
+)
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
     MODO_SYNC_PARCIAL,
     _calcular_numero_display,
+    _normalizar_nombre,
     _parsear_fecha,
     aplicar_tickets,
     parsear_excel_tickets,
@@ -516,3 +526,171 @@ class ProximaSincronizacionTests(TestCase):
             timezone.get_current_timezone(),
         )
         self.assertEqual(proxima, manana)
+
+
+def _fila_v(tid, numero, solicitante="Cesar Augusto Zavala",
+            servicio="Elevadores", falla="Falla Uno",
+            nivel="Torre 2", grupo="Nivel 8"):
+    """Fila de Excel con datos de vínculos (Fase 3)."""
+    fila = [""] * len(ENCABEZADOS)
+    fila[0] = tid
+    fila[1] = numero
+    fila[2] = solicitante
+    fila[3] = "Resp"
+    fila[4] = "Falla"
+    fila[5] = falla
+    fila[7] = servicio
+    fila[11] = grupo
+    fila[12] = nivel
+    fila[13] = "2026-09-01 10:00:00"
+    return fila
+
+
+class NormalizarNombreTests(TestCase):
+    def test_colapsa_espacios_acentos_y_mayusculas(self):
+        self.assertEqual(
+            _normalizar_nombre("  Cesar   Augusto Zavala "),
+            "CESAR AUGUSTO ZAVALA",
+        )
+        self.assertEqual(
+            _normalizar_nombre("César  Augusto Zavála"),
+            _normalizar_nombre("CESAR AUGUSTO ZAVALA"),
+        )
+
+    def test_vacio(self):
+        self.assertEqual(_normalizar_nombre(None), "")
+
+
+class VinculacionTests(TestCase):
+    def setUp(self):
+        self.edificio = Edificio.objects.create(nombre="TORRE 2", siglas="T2")
+        self.institucion = Institucion.objects.create(
+            nombre="Institución Uno", siglas="IUNO"
+        )
+        self.enlace = EnlaceAutorizado.objects.create(
+            nombres="César Augusto",
+            primer_apellido="Zavala",
+            nombre_sig="Cesar Augusto Zavala",
+            institucion=self.institucion,
+            estado="ACTIVO",
+        )
+
+    def _importar(self, filas, modo=MODO_SYNC_PARCIAL):
+        ruta = _excel_tmp(filas)
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, modo)
+        return datos
+
+    def test_resuelve_vinculos(self):
+        self._importar([_fila_v(1, "SS26-0700")])
+        t = Ticket.objects.get(ticket_id="1")
+        self.assertEqual(t.torre, self.edificio)  # case-insensitive TORRE 2
+        self.assertEqual(t.institucion, self.institucion)  # del enlace
+        self.assertEqual(t.solicitante, self.enlace)
+        self.assertEqual(t.nivel, "Nivel 8")
+        self.assertEqual(t.servicio.nombre, "Elevadores")
+        self.assertEqual(t.falla.descripcion, "Falla Uno")
+        self.assertEqual(t.solicitante_nombre, "")
+
+    def test_sin_empate_guarda_snapshot(self):
+        self._importar([_fila_v(1, "SS26-0701", solicitante="Nadie Desconocido")])
+        t = Ticket.objects.get(ticket_id="1")
+        self.assertIsNone(t.solicitante)
+        self.assertIsNone(t.institucion)
+        self.assertEqual(t.solicitante_nombre, "Nadie Desconocido")
+
+    def test_catalogos_get_or_create_sin_duplicar(self):
+        self._importar([
+            _fila_v(1, "SS26-0702", servicio="Elevadores"),
+            _fila_v(2, "SS26-0703", servicio="elevadores",
+                    falla="Falla Uno"),
+        ])
+        self.assertEqual(Servicio.objects.count(), 1)
+        self.assertEqual(Falla.objects.count(), 1)
+        self.assertEqual(Servicio.objects.first().nombre, "Elevadores")
+
+    def test_backfill_command_idempotente(self):
+        # Se importa ANTES de que existan el edificio y el enlace.
+        self.enlace.delete()
+        self.edificio.delete()
+        ruta = _excel_tmp([_fila_v(1, "SS26-0704")])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        Ticket.objects.create(
+            ticket_id="1",
+            numero_display="SS26-0704",
+            raw_data=datos[0]["raw_data"],
+        )
+        self.assertIsNone(Ticket.objects.get(ticket_id="1").torre)
+
+        Edificio.objects.create(nombre="TORRE 2", siglas="T2")
+        EnlaceAutorizado.objects.create(
+            nombres="Cesar", primer_apellido="Zavala",
+            nombre_sig="Cesar Augusto Zavala", institucion=self.institucion,
+        )
+        call_command("vincular_tickets", verbosity=0)
+
+        t = Ticket.objects.get(ticket_id="1")
+        self.assertEqual(t.torre.nombre, "TORRE 2")
+        self.assertEqual(t.solicitante.nombre_sig, "Cesar Augusto Zavala")
+        self.assertEqual(t.nivel, "Nivel 8")
+
+        # Segunda corrida: no debe fallar (idempotente).
+        call_command("vincular_tickets", "--todos", verbosity=0)
+
+
+class VinculacionVistasTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "prueba_vinculos", "pv@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+        self.edificio = Edificio.objects.create(nombre="TORRE 2", siglas="T2")
+        self.institucion = Institucion.objects.create(
+            nombre="Institución Uno", siglas="IUNO"
+        )
+        self.enlace = EnlaceAutorizado.objects.create(
+            nombres="Cesar", primer_apellido="Zavala",
+            nombre_sig="Cesar Augusto Zavala", institucion=self.institucion,
+        )
+        ruta = _excel_tmp([_fila_v(1, "SS26-0710"), _fila_v(2, "SS26-0711")])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+
+    def test_lista_muestra_vinculos_con_enlaces(self):
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Cesar Augusto Zavala", html)
+        self.assertIn("Falla Uno", html)
+        self.assertIn(
+            reverse("enlaces_ccg:detalle_edificio", args=[self.edificio.pk]), html
+        )
+
+    def test_filtro_por_servicio(self):
+        s = Servicio.objects.get(nombre="Elevadores")
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"servicio": s.pk}
+        ).content.decode("utf-8", "replace")
+        self.assertIn("SS26-0710", html)
+
+    def test_filtro_por_falla_sin_resultados(self):
+        f = Falla.objects.create(descripcion="Otra falla")
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"falla": f.pk}
+        ).content.decode("utf-8", "replace")
+        self.assertIn("No hay tickets", html)
+
+    def test_detalle_muestra_vinculos(self):
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_detalle", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Cesar Augusto Zavala", html)
+        self.assertIn("Institución Uno", html)
+        self.assertIn("Elevadores", html)
+        self.assertIn("Falla Uno", html)

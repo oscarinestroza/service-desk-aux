@@ -940,6 +940,40 @@ class ConfiguracionTickets(models.Model):
         return obj
 
 
+class Servicio(models.Model):
+    """Catálogo de servicios de atención (columna `servicio` del SIG)."""
+
+    nombre = models.CharField(max_length=255, unique=True, verbose_name="Servicio")
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Servicio"
+        verbose_name_plural = "Servicios"
+
+    def __str__(self):
+        return self.nombre
+
+
+class Falla(models.Model):
+    """Catálogo de fallas (columna `falla_descripcion` del SIG)."""
+
+    descripcion = models.CharField(
+        max_length=400, unique=True, verbose_name="Descripción"
+    )
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["descripcion"]
+        verbose_name = "Falla"
+        verbose_name_plural = "Fallas"
+
+    def __str__(self):
+        return self.descripcion
+
+
 class Ticket(models.Model):
     """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
 
@@ -994,6 +1028,61 @@ class Ticket(models.Model):
     )
     descripcion = models.TextField(
         blank=True, default="", verbose_name="Descripción / asunto"
+    )
+    # ---- Vínculos con el directorio (Fase 3) ----
+    torre = models.ForeignKey(
+        Edificio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Edificio / torre",
+    )
+    institucion = models.ForeignKey(
+        Institucion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Institución",
+    )
+    solicitante = models.ForeignKey(
+        EnlaceAutorizado,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Solicitante",
+    )
+    servicio = models.ForeignKey(
+        Servicio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Servicio",
+    )
+    falla = models.ForeignKey(
+        Falla,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Falla",
+    )
+    nivel = models.CharField(
+        max_length=60,
+        blank=True,
+        default="",
+        verbose_name="Nivel",
+        help_text="Nivel del reporte (columna grupo del SIG, ej. Nivel 8).",
+    )
+    solicitante_nombre = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name="Solicitante (nombre SIG)",
+        help_text="Nombre tal cual viene del SIG cuando no empata con un enlace.",
     )
     archivado = models.BooleanField(
         default=False, db_index=True, verbose_name="Archivado"

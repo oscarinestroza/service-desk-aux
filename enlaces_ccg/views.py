@@ -30,7 +30,8 @@ from .models import (
     Adjunto, ComunicadoCC, ConfiguracionTickets, Documento, DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
-    Institucion, InstitucionEdificio, Seccion, Ticket, TicketRegistro,
+    Falla,
+    Institucion, InstitucionEdificio, Seccion, Servicio, Ticket, TicketRegistro,
 )
 from .roles import (
     CAP_ADMIN,
@@ -369,7 +370,9 @@ def seguimiento_tickets(request):
     cfg = ConfiguracionTickets.cargar()
     # Paginado servidor-side: SQL LIMIT/OFFSET; cada página trae solo 50 filas
     # (incluye raw_data para las columnas de contexto, sin consultas extra).
-    qs = Ticket.objects.all()
+    qs = Ticket.objects.select_related(
+        "torre", "institucion", "solicitante", "servicio", "falla"
+    )
 
     estatus = request.GET.get("estatus", "").strip()
     if estatus in (Ticket.ESTATUS_ABIERTO, Ticket.ESTATUS_CERRADO):
@@ -378,6 +381,23 @@ def seguimiento_tickets(request):
     incluir_archivados = request.GET.get("incluir", "") == "1"
     if not incluir_archivados:
         qs = qs.filter(archivado=False)
+
+    # Filtros por vínculo (Fase 3): torre / servicio / falla (por PK).
+    def _entero(valor):
+        try:
+            return int(valor)
+        except (TypeError, ValueError):
+            return None
+
+    torre_id = _entero(request.GET.get("torre", ""))
+    if torre_id:
+        qs = qs.filter(torre_id=torre_id)
+    servicio_id = _entero(request.GET.get("servicio", ""))
+    if servicio_id:
+        qs = qs.filter(servicio_id=servicio_id)
+    falla_id = _entero(request.GET.get("falla", ""))
+    if falla_id:
+        qs = qs.filter(falla_id=falla_id)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -436,6 +456,12 @@ def seguimiento_tickets(request):
             "desde": desde,
             "hasta": hasta,
             "incluir_archivados": incluir_archivados,
+            "torre_id": torre_id,
+            "servicio_id": servicio_id,
+            "falla_id": falla_id,
+            "edificios": Edificio.objects.all(),
+            "servicios": Servicio.objects.filter(activo=True),
+            "fallas": Falla.objects.filter(activo=True),
             "total_tickets": cfg.total_tickets,
             "ultima_sincronizacion": cfg.ultima_sincronizacion,
             "proxima_sincronizacion": proxima,

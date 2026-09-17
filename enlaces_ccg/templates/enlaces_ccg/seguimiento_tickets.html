@@ -55,6 +55,33 @@
                 <label class="form-label small mb-1">Hasta</label>
                 <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
             </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Edificio</label>
+                <select name="torre" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for ed in edificios %}
+                    <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Servicio</label>
+                <select name="servicio" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for s in servicios %}
+                    <option value="{{ s.pk }}" {% if servicio_id == s.pk %}selected{% endif %}>{{ s.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small mb-1">Falla</label>
+                <select name="falla" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for f in fallas %}
+                    <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="col-md-3 d-flex align-items-center gap-2">
                 <button class="btn btn-sm btn-primary" type="submit">
                     <i class="fas fa-search me-1"></i>Filtrar
@@ -150,8 +177,19 @@
                             <td class="cell-name">
                                 <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
                             </td>
-                            <td>{{ c.solicitud_solicitante|default:"—" }}</td>
-                            <td>{{ c.falla_descripcion|default:"—" }}</td>
+                            <td>
+                                {% if t.solicitante %}
+                                    {% if t.institucion %}
+                                    <a href="{% url 'enlaces_ccg:perfil_institucion' t.institucion.pk %}"
+                                       title="Institución: {{ t.institucion.nombre }}">{{ t.solicitante.nombre_sig }}</a>
+                                    {% else %}{{ t.solicitante.nombre_sig }}{% endif %}
+                                {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                            </td>
+                            <td>
+                                {% if t.falla %}
+                                <a href="?falla={{ t.falla_id }}" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
+                                {% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}
+                            </td>
                             <td>{{ c.Responsable_atencion|default:"—" }}</td>
                             <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
                             <td>
@@ -161,8 +199,12 @@
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
                                 {% endif %}
                             </td>
-                            <td>{{ c.nivel|default:"—" }}</td>
-                            <td>{{ c.grupo|default:"—" }}</td>
+                            <td>
+                                {% if t.torre %}
+                                <a href="{% url 'enlaces_ccg:detalle_edificio' t.torre.pk %}">{{ t.torre.nombre }}</a>
+                                {% else %}{{ c.nivel|default:"—" }}{% endif %}
+                            </td>
+                            <td>{{ t.nivel|default:c.grupo|default:"—" }}</td>
                             <td>{{ c.unidad|default:"—" }}</td>
                         </tr>
                         {% endwith %}

@@ -17,9 +17,11 @@ from .models import (
     ConfiguracionTickets, Documento, DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
+    Falla,
     Institucion,
     InstitucionEdificio,
     Seccion,
+    Servicio,
     SyncLog,
     Ticket,
     TicketLog,
@@ -528,19 +530,36 @@ class ConfiguracionTicketsAdmin(admin.ModelAdmin):
         )
 
 
+@admin.register(Servicio)
+class ServicioAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "activo", "creado_en")
+    list_filter = ("activo",)
+    search_fields = ("nombre",)
+
+
+@admin.register(Falla)
+class FallaAdmin(admin.ModelAdmin):
+    list_display = ("descripcion", "activo", "creado_en")
+    list_filter = ("activo",)
+    search_fields = ("descripcion",)
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = (
         "numero_display", "fecha", "estatus", "solicitud_tipo",
-        "archivado", "ultima_sync",
+        "torre", "servicio", "archivado", "ultima_sync",
     )
-    list_filter = ("estatus", "archivado", "solicitud_tipo")
+    list_filter = ("estatus", "archivado", "solicitud_tipo", "torre", "servicio")
     search_fields = ("numero_display", "numero", "ticket_id", "descripcion")
+    list_select_related = ("torre", "servicio")
     ordering = ("-fecha",)
     readonly_fields = (
         "numero", "ticket_id", "fecha", "fecha_cierre", "estatus",
         "solicitud_tipo", "archivado", "ultima_sync", "numero_display",
         "descripcion", "raw_data", "creado_en", "actualizado_en",
+        "torre", "institucion", "solicitante", "servicio", "falla",
+        "nivel", "solicitante_nombre",
     )
 
     def has_add_permission(self, request):

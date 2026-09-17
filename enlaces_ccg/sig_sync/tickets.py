@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+import unicodedata
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -441,6 +442,89 @@ def _chunks(secuencia, n=2500):
         yield secuencia[i:i + n]
 
 
+def _normalizar_nombre(valor) -> str:
+    """Normaliza texto para empates: sin acentos, espacios colapsados, MAYÚSCULAS.
+
+    Se aplica a AMBOS lados (Excel y directorio) para que " Cesar  Augusto
+    Zavala " empate con "César Augusto Zavala".
+    """
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return " ".join(texto.split()).upper()
+
+
+def cargar_caches_vinculos():
+    """Carga en memoria los catálogos/directorio para resolver vínculos (F3)."""
+    from ..models import Edificio, EnlaceAutorizado, Falla, Servicio
+
+    caches = {"edificios": {}, "enlaces": {}, "servicios": {}, "fallas": {}}
+
+    for ed in Edificio.objects.all():
+        caches["edificios"][_normalizar_nombre(ed.nombre)] = ed
+        if ed.siglas:
+            caches["edificios"].setdefault(_normalizar_nombre(ed.siglas), ed)
+
+    enlaces = sorted(
+        EnlaceAutorizado.objects.select_related("institucion").all(),
+        key=lambda e: (e.estado != "ACTIVO", e.pk),
+    )
+    for en in enlaces:
+        clave = _normalizar_nombre(en.nombre_sig)
+        if clave:
+            caches["enlaces"].setdefault(clave, en)
+        completo = " ".join(
+            x for x in (en.nombres, en.primer_apellido, en.segundo_apellido) if x
+        )
+        caches["enlaces"].setdefault(_normalizar_nombre(completo), en)
+
+    for s in Servicio.objects.all():
+        caches["servicios"][_normalizar_nombre(s.nombre)] = s
+    for f in Falla.objects.all():
+        caches["fallas"][_normalizar_nombre(f.descripcion)] = f
+    return caches
+
+
+def _resolver_vinculos(raw, caches):
+    """Resuelve los vínculos de un ticket a partir de su raw_data (Fase 3)."""
+    from ..models import Falla, Servicio
+
+    raw = raw or {}
+    edificio_nombre = str(raw.get("nivel") or "").strip()
+    nivel = str(raw.get("grupo") or "").strip()
+    solicitante_raw = str(raw.get("solicitud_solicitante") or "").strip()
+    servicio_nombre = str(raw.get("servicio") or "").strip()
+    falla_desc = str(raw.get("falla_descripcion") or "").strip()
+
+    torre = caches["edificios"].get(_normalizar_nombre(edificio_nombre))
+    solicitante = caches["enlaces"].get(_normalizar_nombre(solicitante_raw))
+
+    servicio = None
+    if servicio_nombre:
+        clave = _normalizar_nombre(servicio_nombre)
+        servicio = caches["servicios"].get(clave)
+        if servicio is None:
+            servicio, _ = Servicio.objects.get_or_create(nombre=servicio_nombre)
+            caches["servicios"][clave] = servicio
+
+    falla = None
+    if falla_desc:
+        clave = _normalizar_nombre(falla_desc)
+        falla = caches["fallas"].get(clave)
+        if falla is None:
+            falla, _ = Falla.objects.get_or_create(descripcion=falla_desc)
+            caches["fallas"][clave] = falla
+
+    return {
+        "torre": torre,
+        "institucion": solicitante.institucion if solicitante else None,
+        "solicitante": solicitante,
+        "servicio": servicio,
+        "falla": falla,
+        "nivel": nivel,
+        "solicitante_nombre": "" if solicitante else solicitante_raw,
+    }
+
+
 def aplicar_tickets(datos, modo, ahora=None):
     """Guarda los tickets en BD (transaccional). Devuelve conteos.
 
@@ -462,6 +546,7 @@ def aplicar_tickets(datos, modo, ahora=None):
     creados = actualizados = 0
     with transaction.atomic():
         datos = list(datos)
+        caches = cargar_caches_vinculos()
         presentes = [d["ticket_id"] for d in datos]
         db_ids = set(Ticket.objects.values_list("ticket_id", flat=True))
 
@@ -486,6 +571,7 @@ def aplicar_tickets(datos, modo, ahora=None):
                 "raw_data": d.get("raw_data") or {},
                 "ultima_sync": ahora,
             }
+            defaults.update(_resolver_vinculos(defaults["raw_data"], caches))
             if modo == MODO_SYNC_COMPLETO:
                 # Al existir de nuevo en el histórico se des-archiva
                 defaults["archivado"] = False
@@ -505,6 +591,19 @@ def aplicar_tickets(datos, modo, ahora=None):
                 and t.estatus == estatus
                 and t.descripcion == defaults["descripcion"]
                 and t.raw_data == defaults["raw_data"]
+                and t.torre_id == (defaults["torre"].pk if defaults["torre"] else None)
+                and t.institucion_id == (
+                    defaults["institucion"].pk if defaults["institucion"] else None
+                )
+                and t.solicitante_id == (
+                    defaults["solicitante"].pk if defaults["solicitante"] else None
+                )
+                and t.servicio_id == (
+                    defaults["servicio"].pk if defaults["servicio"] else None
+                )
+                and t.falla_id == (defaults["falla"].pk if defaults["falla"] else None)
+                and t.nivel == defaults["nivel"]
+                and t.solicitante_nombre == defaults["solicitante_nombre"]
                 and (modo != MODO_SYNC_COMPLETO or not t.archivado)
             )
             if sin_cambios:
