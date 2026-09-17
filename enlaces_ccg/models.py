@@ -34,6 +34,11 @@ class Edificio(models.Model):
         default="",
         help_text="Descripción opcional del edificio",
     )
+    visible = models.BooleanField(
+        default=True,
+        help_text="Marque si desea que este edificio aparezca en la lista pública",
+        verbose_name="Visible en directorio",
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -990,6 +995,22 @@ class Nivel(models.Model):
         return self.nombre
 
 
+class ResponsableAtencion(models.Model):
+    """Catálogo de responsables de atención reportados en el SIG."""
+
+    nombre = models.CharField(max_length=255, unique=True, verbose_name="Nombre")
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Responsable de atención"
+        verbose_name_plural = "Responsables de atención"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Ticket(models.Model):
     """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
 
@@ -1094,6 +1115,14 @@ class Ticket(models.Model):
         related_name="tickets",
         verbose_name="Nivel",
         help_text="Nivel del reporte (columna grupo del SIG, ej. Nivel 8).",
+    )
+    responsable_atencion = models.ForeignKey(
+        ResponsableAtencion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+        verbose_name="Responsable de atención",
     )
     solicitante_nombre = models.CharField(
         max_length=200,

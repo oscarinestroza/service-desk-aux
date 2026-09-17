@@ -31,7 +31,8 @@ from .models import (
     Edificio,
     EnlaceAutorizado,
     Falla,
-    Institucion, InstitucionEdificio, Nivel, Seccion, Servicio, Ticket,
+    Institucion, InstitucionEdificio, Nivel, ResponsableAtencion, Seccion,
+    Servicio, Ticket,
     TicketRegistro,
 )
 from .roles import (
@@ -254,7 +255,7 @@ def _fila_simple(enlace):
 @requiere(CAP_DIRECTORIO)
 def lista_edificios(request):
     """Muestra todos los edificios del CCG."""
-    edificios = Edificio.objects.annotate(
+    edificios = Edificio.objects.filter(visible=True).annotate(
         num_instituciones=models.Count("instituciones", distinct=True),
         num_enlaces_activos=models.Count(
             "instituciones__enlaces",
@@ -398,13 +399,32 @@ def _filtrar_tickets(qs, params):
     if nivel_id:
         qs = qs.filter(nivel_id=nivel_id)
 
+    # Responsable de atención (catálogo, se filtra por PK).
+    responsable_id = _entero_o_none(params.get("responsable", ""))
+    if responsable_id:
+        qs = qs.filter(responsable_atencion_id=responsable_id)
+
+    # Solicitante (enlace del directorio, se filtra por PK).
+    solicitante_id = _entero_o_none(params.get("solicitante", ""))
+    if solicitante_id:
+        qs = qs.filter(solicitante_id=solicitante_id)
+
+    institucion_id = _entero_o_none(params.get("institucion", ""))
+    if institucion_id:
+        qs = qs.filter(institucion_id=institucion_id)
+
     q = params.get("q", "").strip()
     if q:
         qs = qs.filter(
             Q(numero_display__icontains=q)
             | Q(numero__icontains=q)
-            | Q(ticket_id__icontains=q)
             | Q(descripcion__icontains=q)
+            | Q(raw_data__solicitud_descripcion__icontains=q)
+            | Q(falla__descripcion__icontains=q)
+            | Q(raw_data__falla__icontains=q)
+            | Q(raw_data__falla_descripcion__icontains=q)
+            | Q(raw_data__Observaciones__icontains=q)
+            | Q(raw_data__ObservacionesUsuario__icontains=q)
         )
 
     desde = params.get("desde", "").strip()
@@ -429,6 +449,9 @@ def _filtrar_tickets(qs, params):
         "servicio_id": servicio_id,
         "falla_id": falla_id,
         "nivel_id": nivel_id,
+        "responsable_id": responsable_id,
+        "solicitante_id": solicitante_id,
+        "institucion_id": institucion_id,
         "q": q,
         "desde": desde,
         "hasta": hasta,
@@ -456,6 +479,9 @@ def seguimiento_tickets(request):
     servicio_id = filtros_ctx["servicio_id"]
     falla_id = filtros_ctx["falla_id"]
     nivel_id = filtros_ctx["nivel_id"]
+    responsable_id = filtros_ctx["responsable_id"]
+    solicitante_id = filtros_ctx["solicitante_id"]
+    institucion_id = filtros_ctx["institucion_id"]
     q = filtros_ctx["q"]
     desde = filtros_ctx["desde"]
     hasta = filtros_ctx["hasta"]
@@ -497,10 +523,18 @@ def seguimiento_tickets(request):
             "servicio_id": servicio_id,
             "falla_id": falla_id,
             "nivel_id": nivel_id,
+            "responsable_id": responsable_id,
+            "solicitante_id": solicitante_id,
+            "institucion_id": institucion_id,
             "edificios": Edificio.objects.all(),
             "servicios": Servicio.objects.filter(activo=True),
             "fallas": Falla.objects.filter(activo=True),
             "niveles": Nivel.objects.filter(activo=True),
+            "responsables": ResponsableAtencion.objects.filter(activo=True),
+            "solicitantes": EnlaceAutorizado.objects.filter(
+                tickets__isnull=False
+            ).distinct().order_by("nombre_sig"),
+            "instituciones": Institucion.objects.order_by("nombre"),
             "total_tickets": cfg.total_tickets,
             "ultima_sincronizacion": cfg.ultima_sincronizacion,
             "proxima_sincronizacion": proxima,

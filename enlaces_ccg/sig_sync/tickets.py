@@ -455,7 +455,9 @@ def _normalizar_nombre(valor) -> str:
 
 def cargar_caches_vinculos():
     """Carga en memoria los catálogos/directorio para resolver vínculos (F3)."""
-    from ..models import Edificio, EnlaceAutorizado, Falla, Nivel, Servicio
+    from ..models import (
+        Edificio, EnlaceAutorizado, Falla, Nivel, ResponsableAtencion, Servicio,
+    )
 
     caches = {
         "edificios": {},
@@ -463,6 +465,7 @@ def cargar_caches_vinculos():
         "servicios": {},
         "fallas": {},
         "niveles": {},
+        "responsables": {},
     }
 
     for ed in Edificio.objects.all():
@@ -489,12 +492,14 @@ def cargar_caches_vinculos():
         caches["fallas"][_normalizar_nombre(f.descripcion)] = f
     for n in Nivel.objects.all():
         caches["niveles"][_normalizar_nombre(n.nombre)] = n
+    for r in ResponsableAtencion.objects.all():
+        caches["responsables"][_normalizar_nombre(r.nombre)] = r
     return caches
 
 
 def _resolver_vinculos(raw, caches):
     """Resuelve los vínculos de un ticket a partir de su raw_data (Fase 3)."""
-    from ..models import Falla, Nivel, Servicio
+    from ..models import Edificio, Falla, Nivel, ResponsableAtencion, Servicio
 
     raw = raw or {}
     edificio_nombre = str(raw.get("nivel") or "").strip()
@@ -502,8 +507,17 @@ def _resolver_vinculos(raw, caches):
     solicitante_raw = str(raw.get("solicitud_solicitante") or "").strip()
     servicio_nombre = str(raw.get("servicio") or "").strip()
     falla_desc = str(raw.get("falla_descripcion") or "").strip()
+    responsable_nombre = str(raw.get("Responsable_atencion") or "").strip()
 
-    torre = caches["edificios"].get(_normalizar_nombre(edificio_nombre))
+    # Edificio: si el SIG reporta uno que no existe en el directorio, se crea.
+    torre = None
+    if edificio_nombre:
+        clave_ed = _normalizar_nombre(edificio_nombre)
+        torre = caches["edificios"].get(clave_ed)
+        if torre is None:
+            torre, _ = Edificio.objects.get_or_create(nombre=edificio_nombre)
+            caches["edificios"][clave_ed] = torre
+
     solicitante = caches["enlaces"].get(_normalizar_nombre(solicitante_raw))
 
     servicio = None
@@ -530,6 +544,16 @@ def _resolver_vinculos(raw, caches):
             nivel, _ = Nivel.objects.get_or_create(nombre=nivel_nombre)
             caches["niveles"][clave] = nivel
 
+    responsable = None
+    if responsable_nombre:
+        clave = _normalizar_nombre(responsable_nombre)
+        responsable = caches["responsables"].get(clave)
+        if responsable is None:
+            responsable, _ = ResponsableAtencion.objects.get_or_create(
+                nombre=responsable_nombre
+            )
+            caches["responsables"][clave] = responsable
+
     return {
         "torre": torre,
         "institucion": solicitante.institucion if solicitante else None,
@@ -537,6 +561,7 @@ def _resolver_vinculos(raw, caches):
         "servicio": servicio,
         "falla": falla,
         "nivel": nivel,
+        "responsable_atencion": responsable,
         "solicitante_nombre": "" if solicitante else solicitante_raw,
     }
 
@@ -619,6 +644,11 @@ def aplicar_tickets(datos, modo, ahora=None):
                 )
                 and t.falla_id == (defaults["falla"].pk if defaults["falla"] else None)
                 and t.nivel_id == (defaults["nivel"].pk if defaults["nivel"] else None)
+                and t.responsable_atencion_id == (
+                    defaults["responsable_atencion"].pk
+                    if defaults["responsable_atencion"]
+                    else None
+                )
                 and t.solicitante_nombre == defaults["solicitante_nombre"]
                 and (modo != MODO_SYNC_COMPLETO or not t.archivado)
             )

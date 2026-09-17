@@ -1,15 +1,16 @@
 """Management command para (re)vincular los tickets con el directorio (Fase 3).
 
 Recorre `Ticket.raw_data` y resuelve torre, institución, solicitante,
-servicio, falla y nivel usando los catálogos y el directorio actuales.
-Es idempotente y re-ejecutable (por ejemplo, cuando se agregan enlaces).
+servicio, falla, nivel y responsable de atención usando los catálogos y el
+directorio actuales. Es idempotente y re-ejecutable (por ejemplo, cuando se
+agregan enlaces).
 
 Uso:
     python manage.py vincular_tickets [--batch 2000] [--todos]
 
-Por defecto solo revisa tickets sin vínculos (torre/servicio/falla/solicitante
-nulos) y los que no han empatado solicitante. Con --todos reprocesa el
-histórico completo.
+Por defecto solo revisa tickets sin vínculos (torre/servicio/falla/nivel/
+responsable nulos) y los que no han empatado solicitante. Con --todos
+reprocesa el histórico completo.
 """
 
 from django.core.management.base import BaseCommand
@@ -23,9 +24,12 @@ from enlaces_ccg.sig_sync.tickets import (
 
 CAMPOS_VINCULO = (
     "torre", "institucion", "solicitante", "servicio", "falla",
-    "nivel", "solicitante_nombre",
+    "nivel", "responsable_atencion", "solicitante_nombre",
 )
-CAMPOS_FK = ("torre", "institucion", "solicitante", "servicio", "falla", "nivel")
+CAMPOS_FK = (
+    "torre", "institucion", "solicitante", "servicio", "falla", "nivel",
+    "responsable_atencion",
+)
 
 
 class Command(BaseCommand):
@@ -54,6 +58,7 @@ class Command(BaseCommand):
                 | Q(servicio__isnull=True)
                 | Q(falla__isnull=True)
                 | Q(nivel__isnull=True)
+                | Q(responsable_atencion__isnull=True)
                 | Q(solicitante__isnull=True)
             )
         qs = qs.only("pk", "raw_data", *CAMPOS_VINCULO).order_by("pk")

@@ -33,72 +33,99 @@
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-3">
-        <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Buscar</label>
-                <input type="text" name="q" class="form-control form-control-sm"
-                       placeholder="Número, ID o descripción" value="{{ q }}">
+        <form method="get">
+            <div class="row row-cols-1 row-cols-md-5 g-2 align-items-end">
+                <div class="col">
+                    <label class="form-label small mb-1">Buscar</label>
+                    <input type="text" name="q" class="form-control form-control-sm"
+                           placeholder="Folio, descripción, falla u observaciones" value="{{ q }}">
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Responsable de atención</label>
+                    <select name="responsable" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for r in responsables %}
+                        <option value="{{ r.pk }}" {% if responsable_id == r.pk %}selected{% endif %}>{{ r.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Desde</label>
+                    <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Hasta</label>
+                    <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Estatus</label>
+                    <select name="estatus" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
+                        <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
+                    </select>
+                </div>
+
+                <div class="col">
+                    <label class="form-label small mb-1">Servicio</label>
+                    <select name="servicio" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for s in servicios %}
+                        <option value="{{ s.pk }}" {% if servicio_id == s.pk %}selected{% endif %}>{{ s.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Solicitante</label>
+                    <select name="solicitante" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for s in solicitantes %}
+                        <option value="{{ s.pk }}" {% if solicitante_id == s.pk %}selected{% endif %}>{{ s.nombre_sig }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Institución</label>
+                    <select name="institucion" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        {% for inst in instituciones %}
+                        <option value="{{ inst.pk }}" {% if institucion_id == inst.pk %}selected{% endif %}>{{ inst.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Edificio</label>
+                    <select name="torre" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for ed in edificios %}
+                        <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Nivel</label>
+                    <select name="nivel" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for n in niveles %}
+                        <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Estatus</label>
-                <select name="estatus" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
-                    <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Desde</label>
-                <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Hasta</label>
-                <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Edificio</label>
-                <select name="torre" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    {% for ed in edificios %}
-                    <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Servicio</label>
-                <select name="servicio" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    {% for s in servicios %}
-                    <option value="{{ s.pk }}" {% if servicio_id == s.pk %}selected{% endif %}>{{ s.nombre }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Falla</label>
-                <select name="falla" class="form-select form-select-sm">
-                    <option value="">Todas</option>
-                    {% for f in fallas %}
-                    <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Nivel</label>
-                <select name="nivel" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    {% for n in niveles %}
-                    <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3 d-flex align-items-center gap-2">
-                <button class="btn btn-sm btn-primary" type="submit">
-                    <i class="fas fa-search me-1"></i>Filtrar
-                </button>
-                <div class="form-check ms-2">
+
+            <div class="d-flex justify-content-between align-items-center gap-2 pt-2">
+                <div class="form-check mb-0">
                     <input class="form-check-input" type="checkbox" name="incluir" value="1"
                            id="incluirArchivados" {% if incluir_archivados %}checked{% endif %}>
                     <label class="form-check-label small" for="incluirArchivados">Incluir archivados</label>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-eraser me-1"></i>Borrar filtros
+                    </a>
+                    <button class="btn btn-sm btn-primary" type="submit">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
                 </div>
             </div>
         </form>
@@ -199,7 +226,11 @@
                                 <a href="?falla={{ t.falla_id }}" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
                                 {% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}
                             </td>
-                            <td>{{ c.Responsable_atencion|default:"—" }}</td>
+                            <td>
+                                {% if t.responsable_atencion %}
+                                <a href="?responsable={{ t.responsable_atencion_id }}" title="Filtrar por este responsable">{{ t.responsable_atencion.nombre }}</a>
+                                {% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}
+                            </td>
                             <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
                             <td>
                                 {% if t.estatus == 'CERRADO' %}

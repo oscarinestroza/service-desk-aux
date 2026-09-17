@@ -21,6 +21,7 @@ from .models import (
     Institucion,
     InstitucionEdificio,
     Nivel,
+    ResponsableAtencion,
     Seccion,
     Servicio,
     SyncLog,
@@ -136,13 +137,15 @@ def _generar_excel_enlaces(enlaces, titulo, subtitulo, archivo_prefijo):
 # ---------------------------------------------------------------------------
 @admin.register(Edificio)
 class EdificioAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "siglas", "creado_en")
+    list_display = ("nombre", "siglas", "visible", "creado_en")
+    list_editable = ("visible",)
+    list_filter = ("visible",)
     search_fields = ("nombre", "siglas")
     readonly_fields = ("creado_en",)
 
     fieldsets = (
         (None, {
-            "fields": ("nombre", "siglas", "descripcion"),
+            "fields": ("nombre", "siglas", "descripcion", "visible"),
         }),
         ("Metadata", {
             "classes": ("collapse",),
@@ -552,24 +555,33 @@ class NivelAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
 
+@admin.register(ResponsableAtencion)
+class ResponsableAtencionAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "activo", "creado_en")
+    list_filter = ("activo",)
+    search_fields = ("nombre",)
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = (
         "numero_display", "fecha", "estatus", "solicitud_tipo",
-        "torre", "nivel", "servicio", "archivado", "ultima_sync",
+        "torre", "nivel", "servicio", "responsable_atencion", "archivado",
+        "ultima_sync",
     )
     list_filter = (
         "estatus", "archivado", "solicitud_tipo", "torre", "nivel", "servicio",
+        "responsable_atencion",
     )
     search_fields = ("numero_display", "numero", "ticket_id", "descripcion")
-    list_select_related = ("torre", "nivel", "servicio")
+    list_select_related = ("torre", "nivel", "servicio", "responsable_atencion")
     ordering = ("-fecha",)
     readonly_fields = (
         "numero", "ticket_id", "fecha", "fecha_cierre", "estatus",
         "solicitud_tipo", "archivado", "ultima_sync", "numero_display",
         "descripcion", "raw_data", "creado_en", "actualizado_en",
         "torre", "institucion", "solicitante", "servicio", "falla",
-        "nivel", "solicitante_nombre",
+        "nivel", "responsable_atencion", "solicitante_nombre",
     )
 
     def has_add_permission(self, request):
