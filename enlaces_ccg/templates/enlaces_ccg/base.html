@@ -9,6 +9,12 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
           rel="stylesheet">
     <style>
+        /* Botón del selector con búsqueda: recortar texto largo */
+        .ccg-picker-btn {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         :root {
             --ccg-blue-darkest: #0a1628;
             --ccg-blue-dark: #0d1b3e;
@@ -1087,6 +1093,24 @@
         </div>
     </div>
 
+    <!-- Modal selector con búsqueda (filtros con muchas opciones) -->
+    <div class="modal fade" id="ccgPickerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title" id="ccgPickerTitulo">Seleccionar</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-2">
+                    <input type="text" class="form-control form-control-sm mb-2" id="ccgPickerBuscar"
+                           placeholder="Escribir para filtrar..." autocomplete="off">
+                    <div class="list-group list-group-flush" id="ccgPickerLista"
+                         style="max-height: 55vh; overflow-y: auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     (function() {
@@ -1917,5 +1941,86 @@ let contactoContenido = `
     })();
     </script>
     {% block extra_js %}{% endblock %}
+    <script>
+    (function () {
+        // Convierte los <select class="ccg-select-busqueda"> en un botón que
+        // abre un modal con buscador (para listas largas). El <select> original
+        // queda oculto y sigue enviándose en el formulario.
+        var modalEl = document.getElementById('ccgPickerModal');
+        if (!modalEl || !window.bootstrap) return;
+        var modal = new bootstrap.Modal(modalEl);
+        var titulo = document.getElementById('ccgPickerTitulo');
+        var buscar = document.getElementById('ccgPickerBuscar');
+        var lista = document.getElementById('ccgPickerLista');
+        var selectActual = null;
+        var items = [];
+
+        var normalizar = function (t) {
+            return (t || '').toString().normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        };
+
+        var textoSeleccionado = function (sel) {
+            var opt = sel.options[sel.selectedIndex];
+            return opt ? opt.textContent.trim() : '';
+        };
+
+        var actualizarBoton = function (sel) {
+            if (!sel._ccgBtn) return;
+            var span = sel._ccgBtn.querySelector('.ccg-picker-label');
+            var txt = textoSeleccionado(sel);
+            span.textContent = txt || 'Todos';
+            sel._ccgBtn.classList.toggle('text-muted', !sel.value);
+        };
+
+        var filtrar = function () {
+            var q = normalizar(buscar.value);
+            items.forEach(function (it) {
+                it.el.style.display = (!q || it.texto.indexOf(q) !== -1) ? '' : 'none';
+            });
+        };
+
+        var abrir = function (sel) {
+            selectActual = sel;
+            var col = sel.closest('.col') || sel.parentElement;
+            var lab = col ? col.querySelector('label') : null;
+            titulo.textContent = lab ? lab.textContent.trim() : 'Seleccionar';
+            buscar.value = '';
+            lista.innerHTML = '';
+            items = [];
+            Array.prototype.forEach.call(sel.options, function (opt) {
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                b.textContent = opt.textContent.trim() || 'Todos';
+                if (opt.value === sel.value) b.classList.add('active');
+                b.addEventListener('click', function () {
+                    sel.value = opt.value;
+                    actualizarBoton(sel);
+                    modal.hide();
+                });
+                lista.appendChild(b);
+                items.push({ el: b, texto: normalizar(opt.textContent) });
+            });
+            modal.show();
+        };
+
+        buscar.addEventListener('input', filtrar);
+        modalEl.addEventListener('shown.bs.modal', function () { buscar.focus(); });
+
+        document.querySelectorAll('select.ccg-select-busqueda').forEach(function (sel) {
+            if (sel._ccgBtn) return;
+            sel.classList.add('d-none');
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'form-select form-select-sm text-start ccg-picker-btn';
+            btn.innerHTML = '<span class="ccg-picker-label"></span>';
+            btn.addEventListener('click', function () { abrir(sel); });
+            sel.parentNode.insertBefore(btn, sel.nextSibling);
+            sel._ccgBtn = btn;
+            actualizarBoton(sel);
+        });
+    })();
+    </script>
 </body>
 </html>
