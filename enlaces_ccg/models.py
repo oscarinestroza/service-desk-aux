@@ -926,17 +926,19 @@ class ConfiguracionTickets(models.Model):
             return None
         if ahora is None:
             ahora = timezone.now()
-        candidatas = []
         if self.ultima_sincronizacion:
-            candidatas.append(
-                self.ultima_sincronizacion
-                + timedelta(minutes=self.intervalo_minutos or 5)
+            parcial = self.ultima_sincronizacion + timedelta(
+                minutes=self.intervalo_minutos or 5
             )
         else:
-            candidatas.append(ahora)
+            parcial = ahora
+        # Si el parcial ya venció, la próxima es inmediata (no saltar a la
+        # hora de descarga completa, que puede estar a horas de distancia).
+        if parcial < ahora:
+            parcial = ahora
+        candidatas = [parcial]
         candidatas.extend(self._siguiente_hora(self.descarga_completa_horas, ahora))
-        futuras = [c for c in candidatas if c > ahora]
-        return min(futuras) if futuras else ahora
+        return min(candidatas) if candidatas else ahora
 
     @classmethod
     def cargar(cls):

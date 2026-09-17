@@ -804,9 +804,9 @@ def tick_sync_tickets_task():
 
     ahora = timezone.now()
     horas = cfg.descarga_completa_horas or []
-    es_hora_completa = (
-        isinstance(horas, list) and ahora.strftime("%H:%M") in horas
-    )
+    # Las horas configuradas son locales; comparar en hora local (no UTC).
+    hora_local = timezone.localtime(ahora).strftime("%H:%M")
+    es_hora_completa = isinstance(horas, list) and hora_local in horas
     if es_hora_completa:
         modo = MODO_SYNC_COMPLETO
     else:

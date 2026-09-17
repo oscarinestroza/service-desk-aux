@@ -83,8 +83,12 @@ SIG mediante automatización Playwright.
    # Worker 1 — enlaces (no-programadas). El default si no usas -Q.
    celery -A enlacesMAO worker -Q no-programadas --loglevel=info --concurrency=1 --pool=solo
 
-   # Worker 2 — tickets (programadas) + Beat para las tareas periódicas.
-   celery -A enlacesMAO worker -Q programadas --loglevel=info --concurrency=1 --pool=solo --beat
+   # Worker 2 — tickets (programadas).
+   celery -A enlacesMAO worker -Q programadas --loglevel=info --concurrency=1 --pool=solo
+
+   # Beat — tareas periódicas (tick de sincronización de tickets cada 60 s).
+   # En Windows debe correr APARTE: el flag --beat del worker no funciona.
+   celery -A enlacesMAO beat --loglevel=info
    ```
 
    `--concurrency=1` + `--pool=solo` garantiza que las operaciones SIG
