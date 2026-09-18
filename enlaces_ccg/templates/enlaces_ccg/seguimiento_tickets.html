@@ -164,10 +164,13 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
-        <div class="flex-grow-1" style="min-width: 260px; max-width: 460px;">
-            <span class="small text-muted d-inline-flex align-items-center gap-2">
-                Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
-                <span id="syncDot" class="ccg-sync-dot" title="Estado de sincronización"></span>
+        <div class="flex-grow-1" style="min-width: 260px; max-width: 560px;">
+            <span class="small text-muted d-flex flex-wrap align-items-center gap-2">
+                <span>Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets</span>
+                <span class="d-inline-flex align-items-center gap-1">
+                    <span id="syncDot" class="ccg-sync-dot" title="Estado de sincronización"></span>
+                    <span id="syncTexto"></span>
+                </span>
             </span>
         </div>
         {% if page_obj.paginator.num_pages > 1 %}
@@ -302,24 +305,19 @@
     var badge = document.getElementById('badgeUltima');
     var badgeTexto = document.getElementById('badgeUltimaTexto');
     var dot = document.getElementById('syncDot');
+    var dotTexto = document.getElementById('syncTexto');
     var estadoUrl = (badge && badge.dataset.estadoUrl) || null;
 
-    var ESPERA = 60000;   // 1 min mostrando el resultado antes de recargar
     var POLL = 4000;      // consulta al servidor cada 4 s
 
-    // El badge cuenta desde la última corrida EXITOSA (no se reinicia si
-    // falla). El resultado de cada intento se detecta por 'ultimo_intento'.
-    var baselineIntento = parseInt((badge && badge.dataset.intento) || '0', 10);
-    var ultimaServidor = null;  // segundos (int) de la última sincronización OK
-    var inicial = parseInt((badge && badge.dataset.ultima) || '0', 10);
-    if (inicial > 0) ultimaServidor = inicial;
+    // Marca de la última importación al cargar la página. Si el servidor
+    // reporta una más nueva, esta página quedó desactualizada.
+    var baselineUltima = parseInt((badge && badge.dataset.ultima) || '0', 10);
+    var ultimaServidor = baselineUltima > 0 ? baselineUltima : null;
 
     var estadoServidor = '';
     var sincronizando = false;
-    var resultado = null;       // null | 'ok' | 'error'
-    var inicioResultado = 0;
     var ultimaConsulta = 0;
-    var recargado = false;
 
     var formatearHace = function (seg) {
         if (seg < 60) return 'hace unos segundos';
@@ -347,25 +345,27 @@
         badgeTexto.textContent = 'Última: ' + formatearHace(seg);
     };
 
-    // Círculo de estado: gris (sin datos), pulsante (actualizando),
-    // verde (última corrida OK) o rojo (última corrida con error).
+    // Círculo de estado:
+    //   - pulsante azul: actualización en progreso.
+    //   - verde: esta página ya tiene los últimos registros de la BD.
+    //   - gris: la BD tiene registros más nuevos; hay que refrescar la página.
     var pintarDot = function () {
         if (!dot) return;
-        var e = (estadoServidor || '').toUpperCase();
         var clase = 'ccg-sync-dot';
-        var titulo = 'Sin sincronizar';
+        var texto = '';
         if (sincronizando) {
             clase += ' ccg-dot-sync';
-            titulo = 'Actualizando…';
-        } else if (e === 'OK') {
+            texto = 'Actualización en Progreso';
+        } else if (ultimaServidor === null) {
+            texto = 'Sin sincronizar';
+        } else if (ultimaServidor > baselineUltima) {
+            texto = 'Actualiza la página para ver los últimos registros';
+        } else {
             clase += ' ccg-dot-ok';
-            titulo = 'Actualizado correctamente';
-        } else if (e === 'ERROR') {
-            clase += ' ccg-dot-error';
-            titulo = 'Error al actualizar';
+            texto = 'Actualizado';
         }
         dot.className = clase;
-        dot.title = titulo;
+        if (dotTexto) dotTexto.textContent = texto;
     };
 
     var consultar = function () {
@@ -384,29 +384,12 @@
                 sincronizando = (s.sincronizando === true);
                 pintarBadge();
                 pintarDot();
-
-                if (resultado) return;
-                var intento = (s.ultimo_intento === null ||
-                               s.ultimo_intento === undefined)
-                    ? 0 : Math.floor(s.ultimo_intento);
-                if (intento > baselineIntento) {
-                    // Terminó una corrida posterior a la carga.
-                    resultado = (estadoServidor.toUpperCase() === 'OK') ? 'ok' : 'error';
-                    inicioResultado = Date.now();
-                }
             })
             .catch(function () {});
     };
 
     var tick = function () {
         pintarBadge();   // recalcula "hace X" cada segundo
-        if (resultado) {
-            if (Date.now() - inicioResultado >= ESPERA && !recargado) {
-                recargado = true;
-                location.reload();
-            }
-            return;
-        }
         consultar();
     };
 

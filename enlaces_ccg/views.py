@@ -858,7 +858,7 @@ def lista_instituciones(request):
                 if any(n in (ie.nivel or []) for n in niveles)
             ]
             qs = qs.filter(pk__in=inst_ids)
-    edificios = Edificio.objects.order_by("nombre")
+    edificios = Edificio.objects.filter(visible=True).order_by("nombre")
     return render(
         request,
         "enlaces_ccg/lista_instituciones.html",
@@ -986,7 +986,7 @@ def lista_enlaces(request):
     # Usar helper de filtrado compartido
     enlaces = _filtrar_enlaces(request.GET, institucion=None)
 
-    edificios = Edificio.objects.order_by("nombre")
+    edificios = Edificio.objects.filter(visible=True).order_by("nombre")
     qs_niveles = "".join("&niveles={}".format(quote(n)) for n in request.GET.getlist("niveles"))
     return render(
         request,
