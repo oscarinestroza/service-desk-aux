@@ -15,10 +15,10 @@
         <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
             <i class="fas fa-clipboard-list me-1"></i>{{ total_tickets }} tickets
         </span>
-        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" title="Última sincronización">
-            <i class="fas fa-sync-alt me-1"></i>
-            {% if ultima_sincronizacion %}Última: {{ ultima_sincronizacion|timesince }} atrás
-            {% else %}Sin sincronizar{% endif %}
+        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" title="Última sincronización"
+              id="badgeUltima" data-ultima="{{ ultima_sync_ts }}" data-intento="{{ ultimo_intento_ts }}"
+              data-estado-url="{% url 'enlaces_ccg:ticket_sincronizacion_estado' %}">
+            <i class="fas fa-sync-alt me-1"></i><span id="badgeUltimaTexto">{% if ultima_sincronizacion %}Última: {{ ultima_sincronizacion|timesince }} atrás{% else %}Sin sincronizar{% endif %}</span>
         </span>
         {% if puede_editar %}
         <form method="post" action="{% url 'enlaces_ccg:ticket_sincronizar' %}">
@@ -76,24 +76,6 @@
                     </select>
                 </div>
                 <div class="col">
-                    <label class="form-label small mb-1">Solicitante</label>
-                    <select name="solicitante" class="form-select form-select-sm ccg-select-busqueda">
-                        <option value="">Todos</option>
-                        {% for s in solicitantes %}
-                        <option value="{{ s.pk }}" {% if solicitante_id == s.pk %}selected{% endif %}>{{ s.nombre_sig }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col">
-                    <label class="form-label small mb-1">Institución</label>
-                    <select name="institucion" class="form-select form-select-sm ccg-select-busqueda">
-                        <option value="">Todas</option>
-                        {% for inst in instituciones %}
-                        <option value="{{ inst.pk }}" {% if institucion_id == inst.pk %}selected{% endif %}>{{ inst.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col">
                     <label class="form-label small mb-1">Edificio</label>
                     <select name="torre" class="form-select form-select-sm">
                         <option value="">Todos</option>
@@ -108,6 +90,24 @@
                         <option value="">Todos</option>
                         {% for n in niveles %}
                         <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Solicitante</label>
+                    <select name="solicitante" class="form-select form-select-sm ccg-select-busqueda">
+                        <option value="">Todos</option>
+                        {% for s in solicitantes %}
+                        <option value="{{ s.pk }}" {% if solicitante_id == s.pk %}selected{% endif %}>{{ s.nombre_sig }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label small mb-1">Institución</label>
+                    <select name="institucion" class="form-select form-select-sm ccg-select-busqueda">
+                        <option value="">Todas</option>
+                        {% for inst in instituciones %}
+                        <option value="{{ inst.pk }}" {% if institucion_id == inst.pk %}selected{% endif %}>{{ inst.nombre }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -139,29 +139,36 @@
     .ccg-scroll-top { transform: scaleY(-1); }
     .ccg-scroll-top > .ccg-table-wrap { transform: scaleY(-1); }
     .ccg-ticket-actions .btn { line-height: 1; }
+
+    /* Círculo de estado de sincronización */
+    .ccg-sync-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #adb5bd;   /* gris: sin datos */
+        vertical-align: middle;
+        transition: background-color .3s ease;
+    }
+    .ccg-sync-dot.ccg-dot-ok { background-color: #198754; }     /* verde */
+    .ccg-sync-dot.ccg-dot-error { background-color: #dc3545; }  /* rojo */
+    .ccg-sync-dot.ccg-dot-sync {
+        background-color: #0dcaf0;   /* azul: actualizando */
+        animation: ccg-dot-pulse 1s ease-in-out infinite;
+    }
+    @keyframes ccg-dot-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: .35; transform: scale(1.5); }
+    }
 </style>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
         <div class="flex-grow-1" style="min-width: 260px; max-width: 460px;">
-            <span class="small text-muted">
+            <span class="small text-muted d-inline-flex align-items-center gap-2">
                 Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} tickets
+                <span id="syncDot" class="ccg-sync-dot" title="Estado de sincronización"></span>
             </span>
-            {% if sync_proxima_ts %}
-            <div class="d-flex align-items-center gap-2 mt-1"
-                 data-inicio="{{ sync_inicio_ts }}" data-fin="{{ sync_proxima_ts }}"
-                 data-ultima="{{ ultima_sync_ts }}"
-                 data-estado-url="{% url 'enlaces_ccg:ticket_sincronizacion_estado' %}">
-                <div class="progress flex-grow-1" style="height: 6px; min-width: 120px;">
-                    <div id="barraSync" class="progress-bar bg-info" role="progressbar" style="width: 0%;"></div>
-                </div>
-                <span id="textoSync" class="small text-muted text-nowrap">Próxima actualización…</span>
-            </div>
-            {% else %}
-            <div class="small text-muted mt-1">
-                <i class="fas fa-pause-circle me-1"></i>Sincronización automática deshabilitada
-            </div>
-            {% endif %}
         </div>
         {% if page_obj.paginator.num_pages > 1 %}
         <nav>
@@ -291,100 +298,122 @@
 {% block extra_js %}
 <script>
 (function () {
-    // --- Barra de progreso de la próxima sincronización ---
-    var barra = document.getElementById('barraSync');
-    var texto = document.getElementById('textoSync');
-    if (barra && texto) {
-        var cont = barra.closest('[data-fin]');
-        var inicio = parseInt(cont.dataset.inicio, 10) * 1000;
-        var fin = parseInt(cont.dataset.fin, 10) * 1000;
-        var baseline = parseInt(cont.dataset.ultima || '0', 10) * 1000;
-        var estadoUrl = cont.dataset.estadoUrl;
-        var GRACIA = 30000;      // 30 s de gracia antes de comprobar la actualización
-        var ESPERA = 60000;      // 1 min mostrando el mensaje "Actualizado"
-        var FALLO_MAX = 300000;  // 5 min sin avanzar => recarga
-        var objetivo = fin + GRACIA;
-        var estado = 'conteo';   // 'conteo' -> 'espera' -> 'actualizado'
-        var inicioActualizado = 0;
-        var ultimaVerificacion = 0;
-        var recargado = false;
+    // --- Sincronización: badge "Última" + círculo de estado ---
+    var badge = document.getElementById('badgeUltima');
+    var badgeTexto = document.getElementById('badgeUltimaTexto');
+    var dot = document.getElementById('syncDot');
+    var estadoUrl = (badge && badge.dataset.estadoUrl) || null;
 
-        var formatear = function (seg) {
-            var h = Math.floor(seg / 3600);
-            var m = Math.floor((seg % 3600) / 60);
-            var s = seg % 60;
-            var partes = [];
-            if (h) partes.push(h + ' h');
-            if (m || h) partes.push(m + ' min');
-            partes.push(s + ' s');
-            return partes.join(' ');
-        };
+    var ESPERA = 60000;   // 1 min mostrando el resultado antes de recargar
+    var POLL = 4000;      // consulta al servidor cada 4 s
 
-        // Consulta el estado hasta que la última sincronización avance.
-        var verificarSincronizacion = function () {
-            var ahora = Date.now();
-            if (ahora - ultimaVerificacion < 4000) return;
-            ultimaVerificacion = ahora;
-            fetch(estadoUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-                .then(function (s) {
-                    if (estado !== 'espera') return;
-                    var nueva = Math.floor((s.ultima_sincronizacion || 0) * 1000);
-                    if (nueva > baseline) {
-                        estado = 'actualizado';
-                        inicioActualizado = Date.now();
-                        barra.style.width = '100%';
-                        barra.classList.add('progress-bar-striped', 'progress-bar-animated');
-                        texto.textContent = 'Actualizado (Puedes refrescar para ver los ' +
-                            'registros más recientes)';
-                    }
-                })
-                .catch(function () {});
-        };
+    // El badge cuenta desde la última corrida EXITOSA (no se reinicia si
+    // falla). El resultado de cada intento se detecta por 'ultimo_intento'.
+    var baselineIntento = parseInt((badge && badge.dataset.intento) || '0', 10);
+    var ultimaServidor = null;  // segundos (int) de la última sincronización OK
+    var inicial = parseInt((badge && badge.dataset.ultima) || '0', 10);
+    if (inicial > 0) ultimaServidor = inicial;
 
-        var actualizarBarra = function () {
-            var ahora = Date.now();
-            var total = Math.max(1, objetivo - inicio);
-            var pct = Math.min(100, Math.max(0, ((ahora - inicio) / total) * 100));
-            barra.style.width = pct.toFixed(1) + '%';
+    var estadoServidor = '';
+    var sincronizando = false;
+    var resultado = null;       // null | 'ok' | 'error'
+    var inicioResultado = 0;
+    var ultimaConsulta = 0;
+    var recargado = false;
 
-            if (estado === 'conteo') {
-                if (ahora < objetivo) {
-                    barra.classList.remove('progress-bar-striped', 'progress-bar-animated');
-                    texto.textContent = 'Próxima actualización inicia en ' +
-                        formatear(Math.ceil((objetivo - ahora) / 1000));
-                    return;
+    var formatearHace = function (seg) {
+        if (seg < 60) return 'hace unos segundos';
+        var m = Math.floor(seg / 60);
+        if (m < 60) return 'hace ' + m + ' min';
+        var h = Math.floor(m / 60);
+        var rm = m % 60;
+        return 'hace ' + h + ' h' + (rm ? ' ' + rm + ' min' : '');
+    };
+
+    var pintarBadge = function () {
+        if (!badge || !badgeTexto) return;
+        var e = (estadoServidor || '').toUpperCase();
+        badge.className = 'badge border border-secondary-subtle bg-secondary-subtle text-secondary';
+        if (e === 'OK') {
+            badge.className = 'badge border border-success-subtle bg-success-subtle text-success';
+        } else if (e === 'ERROR') {
+            badge.className = 'badge border border-danger-subtle bg-danger-subtle text-danger';
+        }
+        if (ultimaServidor === null) {
+            badgeTexto.textContent = 'Sin sincronizar';
+            return;
+        }
+        var seg = Math.max(0, Math.floor(Date.now() / 1000) - ultimaServidor);
+        badgeTexto.textContent = 'Última: ' + formatearHace(seg);
+    };
+
+    // Círculo de estado: gris (sin datos), pulsante (actualizando),
+    // verde (última corrida OK) o rojo (última corrida con error).
+    var pintarDot = function () {
+        if (!dot) return;
+        var e = (estadoServidor || '').toUpperCase();
+        var clase = 'ccg-sync-dot';
+        var titulo = 'Sin sincronizar';
+        if (sincronizando) {
+            clase += ' ccg-dot-sync';
+            titulo = 'Actualizando…';
+        } else if (e === 'OK') {
+            clase += ' ccg-dot-ok';
+            titulo = 'Actualizado correctamente';
+        } else if (e === 'ERROR') {
+            clase += ' ccg-dot-error';
+            titulo = 'Error al actualizar';
+        }
+        dot.className = clase;
+        dot.title = titulo;
+    };
+
+    var consultar = function () {
+        if (!estadoUrl) return;
+        var ahora = Date.now();
+        if (ahora - ultimaConsulta < POLL) return;
+        ultimaConsulta = ahora;
+        fetch(estadoUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (s) {
+                // El servidor es la fuente de verdad (segundos enteros).
+                ultimaServidor = (s.ultima_sincronizacion === null ||
+                                  s.ultima_sincronizacion === undefined)
+                    ? null : Math.floor(s.ultima_sincronizacion);
+                estadoServidor = s.ultimo_estado || '';
+                sincronizando = (s.sincronizando === true);
+                pintarBadge();
+                pintarDot();
+
+                if (resultado) return;
+                var intento = (s.ultimo_intento === null ||
+                               s.ultimo_intento === undefined)
+                    ? 0 : Math.floor(s.ultimo_intento);
+                if (intento > baselineIntento) {
+                    // Terminó una corrida posterior a la carga.
+                    resultado = (estadoServidor.toUpperCase() === 'OK') ? 'ok' : 'error';
+                    inicioResultado = Date.now();
                 }
-                // Se alcanzó la hora: esperar a que el worker termine.
-                estado = 'espera';
-                barra.style.width = '100%';
-                barra.classList.add('progress-bar-striped', 'progress-bar-animated');
-                texto.textContent = 'Actualizando';
-                ultimaVerificacion = 0;
-                verificarSincronizacion();
-                return;
-            }
+            })
+            .catch(function () {});
+    };
 
-            if (estado === 'espera') {
-                verificarSincronizacion();
-                // Red de seguridad: si tarda demasiado, se recarga igual.
-                if (ahora - objetivo > FALLO_MAX && !recargado) {
-                    recargado = true;
-                    location.reload();
-                }
-                return;
-            }
-
-            // 'actualizado': mantener el mensaje 1 min y reiniciar el conteo.
-            if (ahora - inicioActualizado < ESPERA) return;
-            if (!recargado) {
+    var tick = function () {
+        pintarBadge();   // recalcula "hace X" cada segundo
+        if (resultado) {
+            if (Date.now() - inicioResultado >= ESPERA && !recargado) {
                 recargado = true;
                 location.reload();
             }
-        };
-        actualizarBarra();
-        setInterval(actualizarBarra, 1000);
-    }
+            return;
+        }
+        consultar();
+    };
+
+    pintarBadge();
+    pintarDot();
+    consultar();
+    setInterval(tick, 1000);
 
     // --- Modal de acciones ---
     var modalEl = document.getElementById('modalTicket');

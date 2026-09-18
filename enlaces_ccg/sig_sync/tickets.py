@@ -63,19 +63,49 @@ SEL_TICKETS = {
     ),
     "descargar_excel": (
         "#btnSolicitudesExcel",
+        "button:has-text('EXPORT')",
         "button:has-text('Excel')",
-        "button:has-text('Descargar')",
+        "a:has-text('EXPORT')",
         "a:has-text('Excel')",
-        "a:has-text('Descargar')",
-        "button[class*='excel' i]",
     ),
 }
+
+# Timeout (ms) para esperar el botón de descarga: el reporte del SIG puede
+# tardar en renderizar; se le da más margen que a los demás selectores.
+TIMEOUT_BOTON_DESCARGA_MS = 20000
 
 
 def _directorio_descargas() -> Path:
     path = Path(settings.MEDIA_ROOT) / "tickets" / "descargas"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _limpiar_descargas():
+    """Elimina los temporales de descarga (Excel y JSON de metadatos).
+
+    Se llama tras cada importación para que media/ no se llene.
+    """
+    try:
+        dirp = _directorio_descargas()
+    except Exception:  # noqa: BLE001
+        return
+    for f in dirp.glob("*"):
+        if f.is_file():
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
+def _registrar_error_log(mensaje):
+    """Anexa una línea al archivo tickets_errores.log (para revisión manual)."""
+    try:
+        path = Path(settings.BASE_DIR) / "tickets_errores.log"
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | {mensaje}\n")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("No se pudo escribir tickets_errores.log: %s", e)
 
 
 def _normalizar_fecha_desde(valor) -> str:
@@ -230,17 +260,19 @@ class TicketsSIGClient(SIGClient):
         logger.info("Tickets (completa): filtros aplicados (desde=%s)", desde)
 
     def _disparar_descarga(self):
-        if not self._click_primero(SEL_TICKETS["descargar_excel"]):
+        if not self._click_primero(
+            SEL_TICKETS["descargar_excel"], timeout_ms=TIMEOUT_BOTON_DESCARGA_MS
+        ):
             raise SIGClientError(
                 "No se encontró el botón de descarga del Excel (calibrar selector)"
             )
 
-    def _click_primero(self, selectores):
+    def _click_primero(self, selectores, timeout_ms=8000):
         for sel in selectores:
             try:
                 loc = self.page.locator(sel).first
-                loc.wait_for(state="visible", timeout=8000)
-                loc.click(timeout=8000)
+                loc.wait_for(state="visible", timeout=timeout_ms)
+                loc.click(timeout=timeout_ms)
                 return True
             except PlaywrightTimeoutError:
                 continue
@@ -278,12 +310,10 @@ def descargar_excel_tickets(modo=MODO_RAPIDA, desde=None, report_url=None):
             modo=modo, base_url=base_url, username=usuario, password=password
         )
         client.login()
-        resultado = client.descargar_excel(
-            report_url=url_reporte, desde=desde
-        )
+        resultado = client.descargar_excel(report_url=url_reporte, desde=desde)
         _escribir_metadatos(resultado)
         return resultado
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception("Descarga de tickets (%s) falló", modo)
         _escribir_metadatos({"modo": modo, "error": str(e)})
         if client is not None:
@@ -383,35 +413,40 @@ def parsear_excel_tickets(ruta, hoja=None):
         hoja = ConfiguracionTickets.cargar().hoja_valor()
 
     wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
-    ws = wb[hoja] if hoja else wb[wb.sheetnames[0]]
+    try:
+        ws = wb[hoja] if hoja else wb[wb.sheetnames[0]]
 
-    it = ws.iter_rows(values_only=True)
-    encabezados = [str(h or "").strip() for h in next(it, ())]
-    mapa_col = {}
-    for i, nombre in enumerate(encabezados):
-        campo = _MAPA_CAMPOS_TICKETS.get(nombre)
-        if campo:
-            mapa_col[campo] = i
+        it = ws.iter_rows(values_only=True)
+        encabezados = [str(h or "").strip() for h in next(it, ())]
+        mapa_col = {}
+        for i, nombre in enumerate(encabezados):
+            campo = _MAPA_CAMPOS_TICKETS.get(nombre)
+            if campo:
+                mapa_col[campo] = i
 
-    por_id = {}
-    errores = 0
-    for fila in it:
-        fila = {encabezados[i]: fila[i] for i in range(min(len(encabezados), len(fila)))}
-        tid = str(fila.get("ID Solicitud servicio") or "").strip()
-        if not tid:
-            errores += 1
-            continue
-        por_id[tid] = {
-            "ticket_id": tid,
-            "numero": str(fila.get("foliosolicitudservicio") or "").strip(),
-            "solicitud_tipo": str(fila.get("solicitud_tipo") or "").strip(),
-            "fecha": _parsear_fecha(fila.get("solicitud_fecha")),
-            "fecha_cierre": _parsear_fecha(fila.get("cerro_fecha")),
-            "descripcion": str(fila.get("solicitud_descripcion") or "").strip(),
-            "raw_data": {k: _valor_crudo(v) for k, v in fila.items()},
-        }
+        por_id = {}
+        errores = 0
+        for fila in it:
+            fila = {encabezados[i]: fila[i] for i in range(min(len(encabezados), len(fila)))}
+            tid = str(fila.get("ID Solicitud servicio") or "").strip()
+            if not tid:
+                errores += 1
+                continue
+            por_id[tid] = {
+                "ticket_id": tid,
+                "numero": str(fila.get("foliosolicitudservicio") or "").strip(),
+                "solicitud_tipo": str(fila.get("solicitud_tipo") or "").strip(),
+                "fecha": _parsear_fecha(fila.get("solicitud_fecha")),
+                "fecha_cierre": _parsear_fecha(fila.get("cerro_fecha")),
+                "descripcion": str(fila.get("solicitud_descripcion") or "").strip(),
+                "raw_data": {k: _valor_crudo(v) for k, v in fila.items()},
+            }
 
-    return list(por_id.values()), errores
+        return list(por_id.values()), errores
+    finally:
+        # Cierra el workbook para liberar el archivo (en Windows queda
+        # bloqueado y la limpieza posterior no podría borrarlo).
+        wb.close()
 
 
 def _calcular_numero_display(datos):
@@ -675,7 +710,11 @@ def aplicar_tickets(datos, modo, ahora=None):
 
 
 def _registrar_resultado(modo, estado, mensaje, conteos=None):
-    """Escribe TicketLog y actualiza la info de ConfiguracionTickets."""
+    """Escribe TicketLog y actualiza la info de ConfiguracionTickets.
+
+    `ultimo_intento` se actualiza siempre; `ultima_sincronizacion` solo cuando
+    el estado es OK, para que el badge "Última" no se reinicie si falla.
+    """
     from ..models import ConfiguracionTickets, Ticket, TicketLog
 
     conteos = conteos or {}
@@ -689,17 +728,22 @@ def _registrar_resultado(modo, estado, mensaje, conteos=None):
         archivados=conteos.get("archivados", 0),
         errores=conteos.get("errores", 0),
     )
-    cfg.ultima_sincronizacion = timezone.now()
+    ahora = timezone.now()
+    cfg.ultimo_intento = ahora
+    if estado == TicketLog.ESTADO_OK:
+        cfg.ultima_sincronizacion = ahora
     cfg.ultimo_modo = modo
     cfg.ultimo_estado = estado
     cfg.ultimo_mensaje = mensaje
     cfg.total_tickets = Ticket.objects.count()
     cfg.save(
         update_fields=[
-            "ultima_sincronizacion", "ultimo_modo", "ultimo_estado",
-            "ultimo_mensaje", "total_tickets",
+            "ultimo_intento", "ultima_sincronizacion", "ultimo_modo",
+            "ultimo_estado", "ultimo_mensaje", "total_tickets",
         ]
     )
+    if estado != TicketLog.ESTADO_OK:
+        _registrar_error_log(f"[{modo}] {mensaje}")
 
 
 def sincronizar_tickets(modo=None, desde=None):
@@ -724,10 +768,8 @@ def sincronizar_tickets(modo=None, desde=None):
         _calcular_numero_display(datos)
         conteos = aplicar_tickets(datos, modo)
     finally:
-        try:
-            os.remove(ruta)
-        except OSError:
-            pass
+        # Borra el Excel descargado y los JSON de metadatos para no llenar media/.
+        _limpiar_descargas()
 
     conteos["errores"] = errores_parse
     conteos["modo"] = modo
@@ -810,9 +852,11 @@ def tick_sync_tickets_task():
     if es_hora_completa:
         modo = MODO_SYNC_COMPLETO
     else:
-        ultima = cfg.ultima_sincronizacion
+        # El intervalo se mide desde el último INTENTO (aunque haya fallado),
+        # para no reintentar en cada tick de 60 s tras un error.
+        referencia = cfg.ultimo_intento or cfg.ultima_sincronizacion
         intervalo = cfg.intervalo_minutos or 5
-        if ultima and (ahora - ultima) < timedelta(minutes=intervalo):
+        if referencia and (ahora - referencia) < timedelta(minutes=intervalo):
             return {"sincronizado": False, "motivo": "intervalo"}
         modo = MODO_SYNC_PARCIAL
 

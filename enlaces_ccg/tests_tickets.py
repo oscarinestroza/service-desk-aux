@@ -21,6 +21,7 @@ from .models import (
     Nivel,
     Servicio,
     Ticket,
+    TicketLog,
 )
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
@@ -28,6 +29,7 @@ from .sig_sync.tickets import (
     _calcular_numero_display,
     _normalizar_nombre,
     _parsear_fecha,
+    _registrar_resultado,
     aplicar_tickets,
     parsear_excel_tickets,
 )
@@ -284,7 +286,8 @@ class VistaTicketsTests(TestCase):
         respuesta = self.client.get(reverse("enlaces_ccg:seguimiento_tickets"))
         html = respuesta.content.decode("utf-8", "replace")
         self.assertIn("Responsable de atención", html)
-        self.assertIn('id="barraSync"', html)
+        self.assertIn('id="syncDot"', html)
+        self.assertIn('id="badgeUltima"', html)
         self.assertIn('id="modalTicket"', html)
         self.assertIn("btn-ver-ticket", html)
 
@@ -319,7 +322,18 @@ class VistaTicketsTests(TestCase):
         self.assertIn("ultima_sincronizacion", datos)
         self.assertIn("sincronizando", datos)
         self.assertIn("habilitado", datos)
+        self.assertIn("ultimo_estado", datos)
+        self.assertIn("ultimo_mensaje", datos)
         self.assertIs(datos["sincronizando"], False)
+
+    def test_sincronizacion_estado_activo(self):
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets._lock_activo", return_value=True
+        ):
+            respuesta = self.client.get(
+                reverse("enlaces_ccg:ticket_sincronizacion_estado")
+            )
+        self.assertIs(respuesta.json()["sincronizando"], True)
 
 
 class FasesProcesoTests(TestCase):
@@ -538,6 +552,39 @@ class ProximaSincronizacionTests(TestCase):
             timezone.get_current_timezone(),
         )
         self.assertEqual(proxima, manana)
+
+
+class RegistroResultadoTests(TestCase):
+    """`_registrar_resultado`: el badge "Última" no se reinicia si falla."""
+
+    def setUp(self):
+        self.cfg = ConfiguracionTickets.cargar()
+
+    def test_ok_actualiza_ultima_e_intento(self):
+        self.cfg.ultima_sincronizacion = None
+        self.cfg.save(update_fields=["ultima_sincronizacion"])
+        _registrar_resultado("parcial", TicketLog.ESTADO_OK, "todo bien")
+        self.cfg.refresh_from_db()
+        self.assertIsNotNone(self.cfg.ultima_sincronizacion)
+        self.assertIsNotNone(self.cfg.ultimo_intento)
+        self.assertEqual(self.cfg.ultimo_estado, "OK")
+        self.assertEqual(TicketLog.objects.count(), 1)
+
+    def test_error_no_reinicia_ultima_pero_si_intento(self):
+        anterior = timezone.now() - timedelta(minutes=10)
+        self.cfg.ultima_sincronizacion = anterior
+        self.cfg.save(update_fields=["ultima_sincronizacion"])
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets._registrar_error_log"
+        ) as log_mock:
+            _registrar_resultado("parcial", TicketLog.ESTADO_ERROR, "boom")
+        self.cfg.refresh_from_db()
+        # "Última" (exitosa) no cambia; el intento sí se registra.
+        self.assertEqual(self.cfg.ultima_sincronizacion, anterior)
+        self.assertIsNotNone(self.cfg.ultimo_intento)
+        self.assertEqual(self.cfg.ultimo_estado, "ERROR")
+        self.assertEqual(TicketLog.objects.count(), 1)
+        log_mock.assert_called_once()
 
 
 def _fila_v(tid, numero, solicitante="Cesar Augusto Zavala",

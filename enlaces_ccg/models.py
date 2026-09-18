@@ -854,6 +854,14 @@ class ConfiguracionTickets(models.Model):
         blank=True,
         editable=False,
         verbose_name="Última sincronización",
+        help_text="Última corrida EXITOSA. No se actualiza si la sincronización falla.",
+    )
+    ultimo_intento = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name="Último intento",
+        help_text="Última corrida (exitosa o fallida). Se usa para el intervalo.",
     )
     ultimo_modo = models.CharField(
         max_length=10, blank=True, default="", editable=False
@@ -926,10 +934,9 @@ class ConfiguracionTickets(models.Model):
             return None
         if ahora is None:
             ahora = timezone.now()
-        if self.ultima_sincronizacion:
-            parcial = self.ultima_sincronizacion + timedelta(
-                minutes=self.intervalo_minutos or 5
-            )
+        referencia = self.ultimo_intento or self.ultima_sincronizacion
+        if referencia:
+            parcial = referencia + timedelta(minutes=self.intervalo_minutos or 5)
         else:
             parcial = ahora
         # Si el parcial ya venció, la próxima es inmediata (no saltar a la

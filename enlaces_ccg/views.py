@@ -545,6 +545,9 @@ def seguimiento_tickets(request):
                 if cfg.ultima_sincronizacion
                 else 0
             ),
+            "ultimo_intento_ts": (
+                int(cfg.ultimo_intento.timestamp()) if cfg.ultimo_intento else 0
+            ),
             "cfg": cfg,
         },
     )
@@ -651,10 +654,15 @@ def sincronizacion_estado(request):
         proxima_ts = None
     return JsonResponse(
         {
-            "ultima_sincronizacion": ultima.timestamp() if ultima else None,
+            "ultima_sincronizacion": int(ultima.timestamp()) if ultima else None,
+            "ultimo_intento": (
+                int(cfg.ultimo_intento.timestamp()) if cfg.ultimo_intento else None
+            ),
             "proxima_sincronizacion": proxima_ts,
             "sincronizando": _lock_activo(),
             "habilitado": cfg.habilitado,
+            "ultimo_estado": cfg.ultimo_estado or "",
+            "ultimo_mensaje": cfg.ultimo_mensaje or "",
         }
     )
 

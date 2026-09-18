@@ -76,3 +76,5 @@ sig_debug/
 Sig_Solicitudes_Seguimiento.xlsx
 # Archivos del scheduler de Celery Beat local
 celerybeat-schedule*
+# Script local para levantar el entorno (no se sube a git)
+levantar.bat
