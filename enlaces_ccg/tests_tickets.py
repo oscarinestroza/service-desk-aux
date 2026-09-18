@@ -19,6 +19,7 @@ from .models import (
     Falla,
     Institucion,
     Nivel,
+    ResponsableAtencion,
     Servicio,
     Ticket,
     TicketCierre,
@@ -985,6 +986,27 @@ class VinculacionVistasTests(TestCase):
             reverse("enlaces_ccg:seguimiento_tickets"), {"nivel": n.pk}
         ).content.decode("utf-8", "replace")
         self.assertIn("SS26-0710", html)
+
+    def test_filtro_responsable_multiple(self):
+        f1 = _fila("A1", "SS26-A1")
+        f1[3] = "Resp Uno"
+        f2 = _fila("A2", "SS26-A2")
+        f2[3] = "Resp Dos"
+        f3 = _fila("A3", "SS26-A3")
+        f3[3] = "Resp Tres"
+        ruta = _excel_tmp([f1, f2, f3])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+        r1 = ResponsableAtencion.objects.get(nombre="Resp Uno")
+        r2 = ResponsableAtencion.objects.get(nombre="Resp Dos")
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"),
+            {"responsable": [r1.pk, r2.pk]},
+        ).content.decode("utf-8", "replace")
+        self.assertIn("SS26-A1", html)
+        self.assertIn("SS26-A2", html)
+        self.assertNotIn("SS26-A3", html)
 
     def test_detalle_muestra_vinculos(self):
         t = Ticket.objects.get(ticket_id="1")

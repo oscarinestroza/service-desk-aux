@@ -1158,6 +1158,12 @@
                     <div class="list-group list-group-flush" id="ccgPickerLista"
                          style="max-height: 55vh; overflow-y: auto;"></div>
                 </div>
+                <div class="modal-footer py-2 d-none" id="ccgPickerFooter">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            id="ccgPickerLimpiar">Limpiar</button>
+                    <button type="button" class="btn btn-sm btn-primary"
+                            id="ccgPickerListo">Listo</button>
+                </div>
             </div>
         </div>
     </div>
@@ -2037,6 +2043,9 @@ let contactoContenido = `
         var lista = document.getElementById('ccgPickerLista');
         var selectActual = null;
         var items = [];
+        var footer = document.getElementById('ccgPickerFooter');
+        var botonLimpiar = document.getElementById('ccgPickerLimpiar');
+        var botonListo = document.getElementById('ccgPickerListo');
 
         var normalizar = function (t) {
             return (t || '').toString().normalize('NFD')
@@ -2051,7 +2060,15 @@ let contactoContenido = `
         var actualizarBoton = function (sel) {
             if (!sel._ccgBtn) return;
             var span = sel._ccgBtn.querySelector('.ccg-picker-label');
-            var txt = textoSeleccionado(sel);
+            var txt;
+            if (sel.multiple) {
+                var n = sel.selectedOptions.length;
+                if (!n) txt = 'Todos';
+                else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
+                else txt = n + ' seleccionados';
+            } else {
+                txt = textoSeleccionado(sel);
+            }
             span.textContent = txt || 'Todos';
             sel._ccgBtn.classList.toggle('text-muted', !sel.value);
         };
@@ -2065,6 +2082,8 @@ let contactoContenido = `
 
         var abrir = function (sel) {
             selectActual = sel;
+            var multiple = !!sel.multiple;
+            if (footer) footer.classList.toggle('d-none', !multiple);
             var col = sel.closest('.col') || sel.parentElement;
             var lab = col ? col.querySelector('label') : null;
             titulo.textContent = lab ? lab.textContent.trim() : 'Seleccionar';
@@ -2076,17 +2095,40 @@ let contactoContenido = `
                 b.type = 'button';
                 b.className = 'list-group-item list-group-item-action py-1 px-2 small';
                 b.textContent = opt.textContent.trim() || 'Todos';
-                if (opt.value === sel.value) b.classList.add('active');
-                b.addEventListener('click', function () {
-                    sel.value = opt.value;
-                    actualizarBoton(sel);
-                    modal.hide();
-                });
+                if (multiple) {
+                    if (opt.selected) b.classList.add('active');
+                    b.addEventListener('click', function () {
+                        opt.selected = !opt.selected;
+                        b.classList.toggle('active', opt.selected);
+                        actualizarBoton(sel);
+                    });
+                } else {
+                    if (opt.value === sel.value) b.classList.add('active');
+                    b.addEventListener('click', function () {
+                        sel.value = opt.value;
+                        actualizarBoton(sel);
+                        modal.hide();
+                    });
+                }
                 lista.appendChild(b);
                 items.push({ el: b, texto: normalizar(opt.textContent) });
             });
             modal.show();
         };
+
+        if (botonLimpiar) {
+            botonLimpiar.addEventListener('click', function () {
+                if (!selectActual) return;
+                for (var i = 0; i < selectActual.options.length; i++) {
+                    selectActual.options[i].selected = false;
+                }
+                items.forEach(function (it) { it.el.classList.remove('active'); });
+                actualizarBoton(selectActual);
+            });
+        }
+        if (botonListo) {
+            botonListo.addEventListener('click', function () { modal.hide(); });
+        }
 
         buscar.addEventListener('input', filtrar);
         modalEl.addEventListener('shown.bs.modal', function () { buscar.focus(); });

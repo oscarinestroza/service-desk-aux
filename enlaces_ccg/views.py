@@ -403,10 +403,14 @@ def _filtrar_tickets(qs, params):
     if nivel_id:
         qs = qs.filter(nivel_id=nivel_id)
 
-    # Responsable de atención (catálogo, se filtra por PK).
-    responsable_id = _entero_o_none(params.get("responsable", ""))
-    if responsable_id:
-        qs = qs.filter(responsable_atencion_id=responsable_id)
+    # Responsable de atención (catálogo, se filtra por PK; permite varios).
+    responsable_ids = [
+        rid
+        for rid in (_entero_o_none(v) for v in params.getlist("responsable"))
+        if rid
+    ]
+    if responsable_ids:
+        qs = qs.filter(responsable_atencion_id__in=responsable_ids)
 
     # Solicitante (enlace del directorio, se filtra por PK).
     solicitante_id = _entero_o_none(params.get("solicitante", ""))
@@ -453,7 +457,7 @@ def _filtrar_tickets(qs, params):
         "servicio_id": servicio_id,
         "falla_id": falla_id,
         "nivel_id": nivel_id,
-        "responsable_id": responsable_id,
+        "responsable_ids": responsable_ids,
         "solicitante_id": solicitante_id,
         "institucion_id": institucion_id,
         "q": q,
@@ -483,7 +487,7 @@ def seguimiento_tickets(request):
     servicio_id = filtros_ctx["servicio_id"]
     falla_id = filtros_ctx["falla_id"]
     nivel_id = filtros_ctx["nivel_id"]
-    responsable_id = filtros_ctx["responsable_id"]
+    responsable_ids = filtros_ctx["responsable_ids"]
     solicitante_id = filtros_ctx["solicitante_id"]
     institucion_id = filtros_ctx["institucion_id"]
     q = filtros_ctx["q"]
@@ -499,7 +503,8 @@ def seguimiento_tickets(request):
 
     filtros = "&".join(
         f"{k}={quote(v)}"
-        for k, v in request.GET.items()
+        for k, valores in request.GET.lists()
+        for v in valores
         if k != "page" and v.strip() != ""
     )
 
@@ -527,7 +532,7 @@ def seguimiento_tickets(request):
             "servicio_id": servicio_id,
             "falla_id": falla_id,
             "nivel_id": nivel_id,
-            "responsable_id": responsable_id,
+            "responsable_ids": responsable_ids,
             "solicitante_id": solicitante_id,
             "institucion_id": institucion_id,
             "edificios": Edificio.objects.all(),

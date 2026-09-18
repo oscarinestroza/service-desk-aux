@@ -42,10 +42,9 @@
                 </div>
                 <div class="col">
                     <label class="form-label small mb-1">Responsable de atención</label>
-                    <select name="responsable" class="form-select form-select-sm">
-                        <option value="">Todos</option>
+                    <select name="responsable" class="form-select form-select-sm ccg-select-busqueda ccg-select-multiple" multiple>
                         {% for r in responsables %}
-                        <option value="{{ r.pk }}" {% if responsable_id == r.pk %}selected{% endif %}>{{ r.nombre }}</option>
+                        <option value="{{ r.pk }}" {% if r.pk in responsable_ids %}selected{% endif %}>{{ r.nombre }}</option>
                         {% endfor %}
                     </select>
                 </div>
