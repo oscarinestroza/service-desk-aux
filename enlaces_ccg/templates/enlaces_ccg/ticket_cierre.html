@@ -24,7 +24,7 @@
 <div class="mx-auto" style="max-width: 760px;">
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h1 class="h3 mb-0">
-            <i class="fas fa-check-double me-2 text-success"></i>Cierre del ticket
+            <i class="fas fa-check-double me-2 text-success"></i>Atención del Ticket {{ ticket.numero_display }}
         </h1>
         {% if ticket.esta_cerrado %}
         <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
@@ -36,11 +36,19 @@
     {% if cierre and not ticket.cierre_sincronizado %}
     <div class="alert alert-warning d-flex align-items-center gap-2">
         <i class="fas fa-cloud-upload-alt fa-fw"></i>
+        {% if ticket.esta_cerrado %}
         <div>
             <strong>Cierre pendiente de actualizar en el SIG.</strong><br class="d-sm-none">
             <span class="small">El ticket se muestra cerrado en el sistema, pero el SIG aún no reporta los mismos datos
             (fecha, diagnóstico, actividades u observaciones).</span>
         </div>
+        {% else %}
+        <div>
+            <strong>Seguimiento pendiente de sincronizar en el SIG.</strong><br class="d-sm-none">
+            <span class="small">El ticket continúa en proceso de atención y el seguimiento registrado aún no se refleja
+            en el SIG.</span>
+        </div>
+        {% endif %}
     </div>
     {% elif cierre %}
     <div class="alert alert-success d-flex align-items-center gap-2">
@@ -56,34 +64,26 @@
         <div class="card-body">
             {% with c=ticket.raw_data %}
             <div class="row g-3 small">
-                <div class="col-sm-6">
+                <div class="col-12">
                     <dl class="row mb-0">
-                        <dt class="col-5 text-muted">Número</dt>
-                        <dd class="col-7">{{ ticket.numero_display }}</dd>
-                        <dt class="col-5 text-muted">Falla</dt>
-                        <dd class="col-7">{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</dd>
-                        <dt class="col-5 text-muted">Servicio</dt>
-                        <dd class="col-7">{{ ticket.servicio.nombre|default:c.servicio|default:"—" }}</dd>
+                        <dt class="col-sm-3 text-muted">Falla</dt>
+                        <dd class="col-sm-9">{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</dd>
                     </dl>
                 </div>
-                <div class="col-sm-6">
+                <div class="col-12">
                     <dl class="row mb-0">
-                        <dt class="col-5 text-muted">Solicitante</dt>
-                        <dd class="col-7">
-                            {% if ticket.solicitante %}
-                            <a href="{% url 'enlaces_ccg:enlace_detalle' ticket.solicitante.pk %}">{{ ticket.solicitante.nombre_sig }}</a>
-                            {% else %}{{ c.solicitud_solicitante|default:"—" }}{% endif %}
-                        </dd>
-                        <dt class="col-5 text-muted">Institución</dt>
-                        <dd class="col-7">
-                            {% if ticket.institucion %}
-                            <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.nombre_completo }}</a>
-                            {% else %}—{% endif %}
-                        </dd>
-                        <dt class="col-5 text-muted">Ubicación</dt>
-                        <dd class="col-7">
+                        <dt class="col-sm-3 text-muted">Servicio</dt>
+                        <dd class="col-sm-9">{{ ticket.servicio.nombre|default:c.servicio|default:"—" }}</dd>
+                        <dt class="col-sm-3 text-muted">Ubicación</dt>
+                        <dd class="col-sm-9">
                             {{ ticket.torre.nombre|default:c.nivel|default:"—" }}{% if ticket.nivel %}, {{ ticket.nivel.nombre }}{% elif c.grupo %}, {{ c.grupo }}{% endif %}
                         </dd>
+                    </dl>
+                </div>
+                <div class="col-12">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3 text-muted">Descripción</dt>
+                        <dd class="col-sm-9">{{ ticket.descripcion|default:c.solicitud_descripcion|default:"—" }}</dd>
                     </dl>
                 </div>
             </div>
@@ -91,55 +91,83 @@
         </div>
     </div>
 
-    <form method="post" action="{% url 'enlaces_ccg:ticket_cierre_guardar' ticket.pk %}" class="mb-3">
+    <form method="post" action="{% url 'enlaces_ccg:ticket_cierre_guardar' ticket.pk %}" class="mb-3" id="formCierre">
         {% csrf_token %}
 
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white py-2">
-                <strong><i class="fas fa-calendar me-1"></i>Fechas</strong>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" for="idFechaInicio">Fecha de inicio de atención</label>
-                        <input type="datetime-local" class="form-control form-control-lg" id="idFechaInicio"
-                               name="fecha_inicio"
-                               value="{{ cierre.fecha_inicio|date:'Y-m-d\TH:i'|default:'' }}">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" for="idFechaCierre">Fecha de cierre</label>
-                        <input type="datetime-local" class="form-control form-control-lg" id="idFechaCierre"
-                               name="fecha_cierre"
-                               value="{{ cierre.fecha_cierre|date:'Y-m-d\TH:i'|default:ticket.fecha_cierre|date:'Y-m-d\TH:i'|default:'' }}">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white py-2">
-                <strong><i class="fas fa-clipboard-list me-1"></i>Informe del cierre</strong>
+                <strong><i class="fas fa-clipboard-list me-1"></i>Informe de Atención</strong>
             </div>
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label" for="idDiagnostico">Diagnóstico</label>
                     <textarea class="form-control" id="idDiagnostico" name="diagnostico" rows="4"
-                              placeholder="Diagnóstico del caso">{{ cierre.diagnostico|default:"" }}</textarea>
+                              placeholder="Diagnóstico del caso">{{ diagnostico }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label class="form-label" for="idActividades">Actividades realizadas</label>
                     <textarea class="form-control" id="idActividades" name="actividades" rows="4"
-                              placeholder="Actividades realizadas para la atención">{{ cierre.actividades|default:"" }}</textarea>
+                              placeholder="Actividades realizadas para la atención">{{ actividades }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label class="form-label" for="idObservaciones">Observaciones</label>
                     <textarea class="form-control" id="idObservaciones" name="observaciones" rows="3"
-                              placeholder="Observaciones">{{ cierre.observaciones|default:"" }}</textarea>
+                              placeholder="Observaciones">{{ observaciones }}</textarea>
                 </div>
                 <div class="mb-0">
                     <label class="form-label" for="idObservacionesUsuario">Observaciones del usuario</label>
                     <textarea class="form-control" id="idObservacionesUsuario" name="observaciones_usuario" rows="3"
-                              placeholder="Observaciones del usuario">{{ cierre.observaciones_usuario|default:"" }}</textarea>
+                              placeholder="Observaciones del usuario">{{ observaciones_usuario }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <strong><i class="fas fa-calendar me-1"></i>Fechas de Atención</strong>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="chkIncluirFechas"
+                           name="incluir_fechas" value="1" {% if not ticket.esta_cerrado %}checked{% endif %}>
+                    <label class="form-check-label small" for="chkIncluirFechas">Incluir fechas de atención</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3" id="fechasAtencionCampos">
+                    <div class="col-md-6">
+                        <label class="form-label small" for="idFechaInicioFecha">Inicio de atención</label>
+                        <div class="row g-2">
+                            <div class="col-12 col-sm-6">
+                                <input type="date" class="form-control form-control-sm" id="idFechaInicioFecha"
+                                       name="fecha_inicio_fecha"
+                                       value="{{ inicio_fecha }}"
+                                       aria-label="Fecha de inicio de atención">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <input type="time" class="form-control form-control-sm" id="idFechaInicioHora"
+                                       name="fecha_inicio_hora"
+                                       value="{{ inicio_hora }}"
+                                       aria-label="Hora de inicio de atención">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small" for="idFechaCierreFecha">Fecha de cierre</label>
+                        <div class="row g-2">
+                            <div class="col-12 col-sm-6">
+                                <input type="date" class="form-control form-control-sm" id="idFechaCierreFecha"
+                                       name="fecha_cierre_fecha"
+                                       min="{{ cierre_min }}"
+                                       value="{{ cierre_fecha }}"
+                                       aria-label="Fecha de cierre">
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <input type="time" class="form-control form-control-sm" id="idFechaCierreHora"
+                                       name="fecha_cierre_hora"
+                                       value="{{ cierre_hora }}"
+                                       aria-label="Hora de cierre">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -152,15 +180,14 @@
                 <div id="listaAdjuntosCierre">
                     <p class="text-muted small mb-0">Cargando adjuntos…</p>
                 </div>
-                <form id="formSubirAdjuntoCierre" class="mt-3">
-                    {% csrf_token %}
+                <div id="formSubirAdjuntoCierre" class="mt-3">
                     <div class="input-group">
                         <input type="file" class="form-control" name="archivo" id="archivoCierre">
-                        <button type="submit" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
+                        <button type="button" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
                             <i class="fas fa-upload me-1"></i>Subir
                         </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
 
@@ -168,8 +195,8 @@
             <a href="{% url 'enlaces_ccg:ticket_detalle' ticket.pk %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i>Volver
             </a>
-            <button type="submit" class="btn btn-success btn-lg">
-                <i class="fas fa-check me-1"></i>{% if cierre %}Guardar cambios{% else %}Guardar cierre{% endif %}
+            <button type="submit" class="btn btn-success btn-lg" id="btnEnviar">
+                <i class="fas fa-check me-1"></i><span id="btnEnviarTexto">Enviar cierre</span>
             </button>
         </div>
     </form>
@@ -179,11 +206,13 @@
 (function() {
     const pk = {{ ticket.pk }};
     const cont = document.getElementById('listaAdjuntosCierre');
+    var tieneAdjuntos = false;
 
     function cargarAdjuntos() {
         fetch(`/tickets/cerrar/${pk}/adjuntos/`)
             .then(r => r.json())
             .then(d => {
+                tieneAdjuntos = d.adjuntos.length > 0;
                 if (!d.adjuntos.length) {
                     cont.innerHTML = '<p class="text-muted small mb-0">No hay adjuntos.</p>';
                     return;
@@ -216,8 +245,7 @@
             });
     }
 
-    document.getElementById('formSubirAdjuntoCierre').addEventListener('submit', function(e) {
-        e.preventDefault();
+    document.getElementById('btnSubirAdjuntoCierre').addEventListener('click', function() {
         const archivo = document.getElementById('archivoCierre');
         if (!archivo.files.length) return;
         const formData = new FormData();
@@ -247,6 +275,45 @@
             alert('Error de conexión');
         });
     });
+
+    // ── Fechas de atención + texto del botón ──
+    var chkFechas = document.getElementById('chkIncluirFechas');
+    var camposFechas = document.getElementById('fechasAtencionCampos');
+    var btnEnviarTexto = document.getElementById('btnEnviarTexto');
+
+    function actualizarEstadoFechas() {
+        var incluir = chkFechas ? chkFechas.checked : true;
+        if (camposFechas) {
+            camposFechas.querySelectorAll('input').forEach(function (i) {
+                i.disabled = !incluir;
+            });
+        }
+        if (btnEnviarTexto) {
+            btnEnviarTexto.textContent = incluir ? 'Enviar cierre' : 'Enviar seguimiento';
+        }
+    }
+
+    if (chkFechas) {
+        chkFechas.addEventListener('change', actualizarEstadoFechas);
+        actualizarEstadoFechas();
+    }
+
+    // ── Validación: debe enviarse algo ──
+    var formCierre = document.getElementById('formCierre');
+    if (formCierre) {
+        formCierre.addEventListener('submit', function (e) {
+            var idsInforme = ['idDiagnostico', 'idActividades', 'idObservaciones', 'idObservacionesUsuario'];
+            var tieneInforme = idsInforme.some(function (id) {
+                var el = document.getElementById(id);
+                return el && el.value.trim() !== '';
+            });
+            var incluirFechas = chkFechas ? chkFechas.checked : true;
+            if (!tieneInforme && !tieneAdjuntos && !incluirFechas) {
+                e.preventDefault();
+                alert('Debes completar el Informe de Atención, adjuntar un archivo o incluir las fechas de atención.');
+            }
+        });
+    }
 
     cargarAdjuntos();
 })();

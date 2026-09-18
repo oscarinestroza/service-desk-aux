@@ -22,7 +22,14 @@
         <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
     </div>
     {% else %}
-    <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if ticket.cierre and not ticket.cierre_sincronizado %}
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fs-6" title="Pendiente de sincronizar en el SIG">
+            <i class="fas fa-cloud-upload-alt me-1"></i>Pendiente SIG
+        </span>
+        {% endif %}
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
+    </div>
     {% endif %}
 </div>
 
@@ -285,7 +292,7 @@
                     <li class="ccg-termino ccg-termino-{{ fase.estado }}{% if fase.pendiente_sig %} ccg-termino-pendiente-sig{% endif %}">
                         <span class="ccg-termino-marca
                                    {% if fase.estado == 'completado' %}bg-success text-white
-                                   {% elif fase.estado == 'activo' %}bg-primary text-white
+                                   {% elif fase.estado == 'activo' %}{% if fase.pendiente_sig %}bg-warning text-dark{% else %}bg-primary text-white{% endif %}
                                    {% else %}bg-white border text-secondary{% endif %}">
                             {% if fase.estado == 'completado' %}<i class="fas fa-check"></i>
                             {% elif fase.estado == 'activo' %}<i class="fas fa-spinner fa-spin"></i>
@@ -300,7 +307,11 @@
                             <span class="badge bg-success-subtle text-success border border-success-subtle">Completado</span>
                             {% endif %}
                             {% elif fase.estado == 'activo' %}
+                            {% if fase.pendiente_sig %}
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Pendiente sincronizar SIG</span>
+                            {% else %}
                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle">En curso</span>
+                            {% endif %}
                             {% else %}
                             <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Pendiente</span>
                             {% endif %}

@@ -1247,6 +1247,7 @@ class Ticket(models.Model):
         ).strip()
         cerrado = self.esta_cerrado
         pendiente_sig = cierre_inst is not None and not self.cierre_sincronizado
+        seguimiento_pendiente = pendiente_sig and not cerrado
         fecha_cierre_mostrada = (
             cierre_inst.fecha_cierre
             if cierre_inst and cierre_inst.fecha_cierre
@@ -1282,7 +1283,17 @@ class Ticket(models.Model):
                 "clave": "proceso",
                 "nombre": "En proceso de atención",
                 "estado": "completado" if cerrado else "activo",
-                "detalle": "Atención terminada" if cerrado else "Trabajo en curso",
+                "pendiente_sig": seguimiento_pendiente,
+                "detalle": (
+                    "Atención terminada"
+                    if cerrado
+                    else (
+                        "Trabajo en curso · Seguimiento pendiente de "
+                        "sincronizar en el SIG"
+                        if seguimiento_pendiente
+                        else "Trabajo en curso"
+                    )
+                ),
             },
             {
                 "clave": "finalizado",
@@ -1401,12 +1412,15 @@ class Ticket(models.Model):
 
     @property
     def esta_cerrado(self):
-        """El ticket se muestra cerrado si el SIG lo cerró o hay un cierre local,
-        aunque el SIG aún no lo haya confirmado."""
-        return (
-            self.estatus == self.ESTATUS_CERRADO
-            or getattr(self, "cierre", None) is not None
-        )
+        """El ticket se muestra cerrado si el SIG lo cerró o hay un cierre local
+        con fecha de cierre, aunque el SIG aún no lo haya confirmado.
+
+        Un seguimiento (registro local sin fecha de cierre) no cierra el ticket.
+        """
+        cierre = getattr(self, "cierre", None)
+        if cierre is not None and cierre.fecha_cierre is not None:
+            return True
+        return self.estatus == self.ESTATUS_CERRADO
 
     @staticmethod
     def _fecha_sig_raw(valor):

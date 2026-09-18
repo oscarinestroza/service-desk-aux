@@ -642,13 +642,16 @@ def registrar_seguimiento(request, pk):
 # ---------------------------------------------------------------------------
 # Cierre de tickets (página móvil)
 # ---------------------------------------------------------------------------
-def _parsear_datetime_local(valor):
-    """Parsea `datetime-local` HTML (YYYY-MM-DDTHH:MM) → datetime o None."""
-    valor = (valor or "").strip()
-    if not valor:
+def _combinar_fecha_hora(fecha, hora):
+    """Combina campos fecha (YYYY-MM-DD) y hora (HH:MM) → datetime o None."""
+    fecha = (fecha or "").strip()
+    hora = (hora or "").strip()
+    if not fecha or not hora:
         return None
     try:
-        return timezone.make_aware(datetime.strptime(valor, "%Y-%m-%dT%H:%M"))
+        return timezone.make_aware(
+            datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+        )
     except ValueError:
         return None
 
@@ -658,17 +661,56 @@ def _parsear_datetime_local(valor):
 def guardar_cierre_ticket(request, pk):
     """Guarda (o actualiza) el cierre de un ticket."""
     ticket = get_object_or_404(Ticket, pk=pk)
-    fecha_inicio = _parsear_datetime_local(request.POST.get("fecha_inicio") or "")
-    fecha_cierre = _parsear_datetime_local(request.POST.get("fecha_cierre") or "")
-    cierre, creado = TicketCierre.objects.get_or_create(ticket=ticket)
-    cierre.fecha_inicio = fecha_inicio or cierre.fecha_inicio
-    cierre.fecha_cierre = fecha_cierre or cierre.fecha_cierre
-    cierre.diagnostico = request.POST.get("diagnostico", "").strip()
-    cierre.actividades = request.POST.get("actividades", "").strip()
-    cierre.observaciones = request.POST.get("observaciones", "").strip()
-    cierre.observaciones_usuario = request.POST.get(
+    incluir_fechas = request.POST.get("incluir_fechas") == "1"
+    diagnostico = request.POST.get("diagnostico", "").strip()
+    actividades = request.POST.get("actividades", "").strip()
+    observaciones = request.POST.get("observaciones", "").strip()
+    observaciones_usuario = request.POST.get(
         "observaciones_usuario", ""
     ).strip()
+
+    tiene_informe = any(
+        (diagnostico, actividades, observaciones, observaciones_usuario)
+    )
+    if (
+        not tiene_informe
+        and not incluir_fechas
+        and not ticket.cierre_adjuntos.exists()
+    ):
+        messages.error(
+            request,
+            "Debes completar el Informe de Atención, adjuntar un archivo "
+            "o incluir las fechas de atención.",
+        )
+        return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
+
+    fecha_inicio = None
+    fecha_cierre = None
+    if incluir_fechas:
+        fecha_inicio = _combinar_fecha_hora(
+            request.POST.get("fecha_inicio_fecha"),
+            request.POST.get("fecha_inicio_hora"),
+        )
+        fecha_cierre = _combinar_fecha_hora(
+            request.POST.get("fecha_cierre_fecha"),
+            request.POST.get("fecha_cierre_hora"),
+        )
+        if fecha_cierre and ticket.fecha and fecha_cierre < ticket.fecha:
+            messages.error(
+                request,
+                "La fecha de cierre no puede ser anterior a la fecha de creación "
+                "de la solicitud.",
+            )
+            return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
+    es_cierre = incluir_fechas and fecha_cierre is not None
+    cierre, creado = TicketCierre.objects.get_or_create(ticket=ticket)
+    if es_cierre:
+        cierre.fecha_inicio = fecha_inicio or cierre.fecha_inicio
+        cierre.fecha_cierre = fecha_cierre
+    cierre.diagnostico = diagnostico
+    cierre.actividades = actividades
+    cierre.observaciones = observaciones
+    cierre.observaciones_usuario = observaciones_usuario
     cierre.actualizado_por = request.user
     if creado:
         cierre.creado_por = request.user
@@ -679,15 +721,19 @@ def guardar_cierre_ticket(request, pk):
             ticket=ticket, archivo=archivo, subido_por=request.user
         )
 
-    ticket.estatus = Ticket.ESTATUS_CERRADO
-    if fecha_cierre:
+    if es_cierre:
+        ticket.estatus = Ticket.ESTATUS_CERRADO
         ticket.fecha_cierre = fecha_cierre
-    ticket.save(update_fields=["estatus", "fecha_cierre", "actualizado_en"])
-
-    if creado:
-        messages.success(request, "Cierre registrado correctamente.")
+        ticket.save(update_fields=["estatus", "fecha_cierre", "actualizado_en"])
     else:
-        messages.success(request, "Cierre actualizado correctamente.")
+        # Seguimiento: no modifica las fechas ni el estado del ticket.
+        ticket.save(update_fields=["actualizado_en"])
+
+    accion = "Cierre" if es_cierre else "Seguimiento"
+    messages.success(
+        request,
+        f"{accion} {'registrado' if creado else 'actualizado'} correctamente.",
+    )
     return redirect("enlaces_ccg:ticket_detalle", pk=pk)
 
 
@@ -696,10 +742,51 @@ def cerrar_ticket(request, pk):
     """Página de cierre de un ticket (crear o editar)."""
     ticket = get_object_or_404(Ticket, pk=pk)
     cierre = getattr(ticket, "cierre", None)
+    ahora = timezone.localtime(timezone.now())
+
+    def _fecha_hora(dt):
+        if not dt:
+            return "", ""
+        local = timezone.localtime(dt)
+        return local.strftime("%Y-%m-%d"), local.strftime("%H:%M")
+
+    inicio_dt = (
+        cierre.fecha_inicio if cierre and cierre.fecha_inicio else ticket.fecha
+    )
+    fin_dt = cierre.fecha_cierre if cierre and cierre.fecha_cierre else ahora
+    inicio_fecha, inicio_hora = _fecha_hora(inicio_dt)
+    cierre_fecha, cierre_hora = _fecha_hora(fin_dt)
+
+    raw = ticket.raw_data or {}
+
+    def _texto(campo_cierre, clave_raw):
+        valor = getattr(cierre, campo_cierre, "") if cierre else ""
+        if not valor:
+            valor = raw.get(clave_raw) or ""
+        return valor
+
     return render(
         request,
         "enlaces_ccg/ticket_cierre.html",
-        {"ticket": ticket, "cierre": cierre},
+        {
+            "ticket": ticket,
+            "cierre": cierre,
+            "inicio_fecha": inicio_fecha,
+            "inicio_hora": inicio_hora,
+            "cierre_fecha": cierre_fecha,
+            "cierre_hora": cierre_hora,
+            "cierre_min": (
+                timezone.localtime(ticket.fecha).strftime("%Y-%m-%d")
+                if ticket.fecha
+                else ""
+            ),
+            "diagnostico": _texto("diagnostico", "Diagnostico"),
+            "actividades": _texto("actividades", "Actividades"),
+            "observaciones": _texto("observaciones", "Observaciones"),
+            "observaciones_usuario": _texto(
+                "observaciones_usuario", "ObservacionesUsuario"
+            ),
+        },
     )
 
 

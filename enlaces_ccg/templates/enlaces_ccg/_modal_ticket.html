@@ -31,7 +31,7 @@
     <div class="mb-3 rounded d-flex align-items-center gap-2 px-3 py-2 flex-wrap"
          style="background:#fff8e1;border:1px solid #ffd54f;">
         <i class="fas fa-cloud-upload-alt" style="color:#b26a00;"></i>
-        <span class="small" style="color:#7a5b00;">Cierre pendiente de actualizar en el SIG: se cerró localmente, pero el SIG aún no reporta los mismos datos (fecha, diagnóstico, actividades u observaciones).</span>
+        <span class="small" style="color:#7a5b00;">{% if ticket.esta_cerrado %}Cierre pendiente de actualizar en el SIG: se cerró localmente, pero el SIG aún no reporta los mismos datos (fecha, diagnóstico, actividades u observaciones).{% else %}Seguimiento pendiente de sincronizar en el SIG.{% endif %}</span>
         {% if puede_atender %}
         <a href="{% url 'enlaces_ccg:ticket_cerrar' ticket.pk %}"
            class="btn btn-sm btn-outline-warning ms-sm-auto">Abrir cierre</a>

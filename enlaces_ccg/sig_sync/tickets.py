@@ -657,7 +657,9 @@ def aplicar_tickets(datos, modo, ahora=None):
                 existentes[t.ticket_id] = t
 
         con_cierre = set(
-            TicketCierre.objects.values_list("ticket_id", flat=True)
+            TicketCierre.objects.filter(fecha_cierre__isnull=False).values_list(
+                "ticket_id", flat=True
+            )
         )
 
         for d in datos:

@@ -1023,6 +1023,172 @@ class VinculacionVistasTests(TestCase):
         self.assertNotIn("Comentarios del servicio", html)
         self.assertNotIn("Registrar seguimiento", html)
 
+    def test_cierre_anterior_a_creacion_se_rechaza(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        anterior = creacion - timedelta(hours=1)
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "incluir_fechas": "1",
+                "fecha_inicio_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_inicio_hora": creacion.strftime("%H:%M"),
+                "fecha_cierre_fecha": anterior.strftime("%Y-%m-%d"),
+                "fecha_cierre_hora": anterior.strftime("%H:%M"),
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(TicketCierre.objects.filter(ticket=t).exists())
+
+    def test_cierre_sin_incluir_fechas_no_guarda_fechas(self):
+        t = Ticket.objects.get(ticket_id="1")
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {"diagnostico": "Dx", "actividades": "Act"},
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        self.assertIsNone(cierre.fecha_inicio)
+        self.assertIsNone(cierre.fecha_cierre)
+
+    def test_cierre_sin_datos_se_rechaza(self):
+        t = Ticket.objects.get(ticket_id="1")
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(TicketCierre.objects.filter(ticket=t).exists())
+
+    def test_seguimiento_no_cierra_ticket(self):
+        t = Ticket.objects.get(ticket_id="1")
+        self.assertEqual(t.estatus, Ticket.ESTATUS_ABIERTO)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {"diagnostico": "Dx"},
+        )
+        t.refresh_from_db()
+        self.assertEqual(t.estatus, Ticket.ESTATUS_ABIERTO)
+        self.assertFalse(t.esta_cerrado)
+        self.assertTrue(TicketCierre.objects.filter(ticket=t).exists())
+
+    def test_cierre_con_fechas_cierra_ticket(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "incluir_fechas": "1",
+                "fecha_inicio_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_inicio_hora": creacion.strftime("%H:%M"),
+                "fecha_cierre_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_cierre_hora": (creacion + timedelta(hours=1)).strftime(
+                    "%H:%M"
+                ),
+            },
+        )
+        t.refresh_from_db()
+        self.assertEqual(t.estatus, Ticket.ESTATUS_CERRADO)
+        self.assertTrue(t.esta_cerrado)
+
+    def test_detalle_seguimiento_muestra_pendiente_sig(self):
+        t = Ticket.objects.get(ticket_id="1")
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {"diagnostico": "Dx"},
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_detalle", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Pendiente sincronizar SIG", html)
+        self.assertIn(
+            "Trabajo en curso · Seguimiento pendiente de sincronizar en el SIG",
+            html,
+        )
+        self.assertIn("Abierto", html)
+
+    def test_check_fechas_desmarcado_si_cerrado(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "incluir_fechas": "1",
+                "fecha_inicio_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_inicio_hora": creacion.strftime("%H:%M"),
+                "fecha_cierre_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_cierre_hora": (creacion + timedelta(hours=1)).strftime(
+                    "%H:%M"
+                ),
+            },
+        )
+        t.refresh_from_db()
+        self.assertTrue(t.esta_cerrado)
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertNotIn('name="incluir_fechas" value="1" checked', html)
+
+    def test_seguimiento_en_cerrado_mantiene_fechas_y_estado(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "incluir_fechas": "1",
+                "fecha_inicio_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_inicio_hora": creacion.strftime("%H:%M"),
+                "fecha_cierre_fecha": creacion.strftime("%Y-%m-%d"),
+                "fecha_cierre_hora": (creacion + timedelta(hours=1)).strftime(
+                    "%H:%M"
+                ),
+            },
+        )
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {"diagnostico": "Nuevo seguimiento"},
+        )
+        t.refresh_from_db()
+        cierre = TicketCierre.objects.get(ticket=t)
+        self.assertTrue(t.esta_cerrado)
+        self.assertIsNotNone(cierre.fecha_cierre)
+        self.assertEqual(cierre.diagnostico, "Nuevo seguimiento")
+
+    def test_cierre_precarga_informe_desde_sig(self):
+        t = Ticket.objects.create(
+            ticket_id="B1",
+            numero="SS26-B1",
+            raw_data={
+                "Diagnostico": "Dx SIG",
+                "Actividades": "Act SIG",
+                "Observaciones": "Obs SIG",
+                "ObservacionesUsuario": "ObsU SIG",
+                "falla_descripcion": "",
+                "servicio": "",
+                "nivel": "",
+                "grupo": "",
+                "solicitud_solicitante": "",
+                "solicitud_descripcion": "",
+            },
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Dx SIG", html)
+        self.assertIn("Act SIG", html)
+        self.assertIn("Obs SIG", html)
+        self.assertIn("ObsU SIG", html)
+
+    def test_pagina_cierre_renderiza_hora(self):
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn('name="fecha_inicio_hora"', html)
+        self.assertIn('name="fecha_cierre_hora"', html)
+        self.assertIn('type="time"', html)
+        self.assertIn('name="incluir_fechas"', html)
+        self.assertIn("Atención del Ticket", html)
+
     def test_ficha_enlace_muestra_pestanas_y_tickets(self):
         html = self.client.get(
             reverse("enlaces_ccg:enlace_detalle", args=[self.enlace.pk])
