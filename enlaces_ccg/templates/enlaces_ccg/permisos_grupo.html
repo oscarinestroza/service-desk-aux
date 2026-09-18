@@ -45,7 +45,9 @@
                                    name="cap_{{ cap }}" id="cap_{{ cap }}"
                                    {% if cap in caps_actuales %}checked{% endif %}>
                             <label class="form-check-label" for="cap_{{ cap }}">
-                                {% if cap == 'editar' %}Editar{% else %}Ver{% endif %}
+                                {% if cap == 'editar' %}Editar
+                                {% elif cap == 'atender' %}Atender
+                                {% else %}Ver{% endif %}
                             </label>
                         </div>
                         {% endfor %}

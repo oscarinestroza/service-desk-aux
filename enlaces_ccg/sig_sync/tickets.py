@@ -477,6 +477,32 @@ def _chunks(secuencia, n=2500):
         yield secuencia[i:i + n]
 
 
+def _sig_confirma_cierre(raw, cierre):
+    """True si los datos del SIG ya coinciden con el cierre local.
+
+    Mismo criterio que `Ticket.cierre_sincronizado`: fecha de cierre por día
+    + campos Diagnóstico, Actividades y Observaciones idénticos.
+    """
+    from ..models import Ticket
+
+    if raw is None or cierre is None:
+        return False
+    sig_fecha = Ticket._fecha_sig_raw(raw.get("cerro_fecha"))
+    local_fecha = (
+        timezone.localtime(cierre.fecha_cierre).date()
+        if cierre.fecha_cierre
+        else None
+    )
+    if not sig_fecha or not local_fecha or sig_fecha != local_fecha:
+        return False
+    norm = lambda v: " ".join(str(v or "").split())
+    return (
+        norm(raw.get("Diagnostico")) == norm(cierre.diagnostico)
+        and norm(raw.get("Actividades")) == norm(cierre.actividades)
+        and norm(raw.get("Observaciones")) == norm(cierre.observaciones)
+    )
+
+
 def _normalizar_nombre(valor) -> str:
     """Normaliza texto para empates: sin acentos, espacios colapsados, MAYÚSCULAS.
 
@@ -612,13 +638,12 @@ def aplicar_tickets(datos, modo, ahora=None):
     y solo se reescriben las filas que realmente cambiaron (evita el
     re-update masivo en cada descarga completa de ~150 mil registros).
     """
-    from ..models import Ticket
+    from ..models import Ticket, TicketCierre
 
     if modo not in MODO_SYNC_VALORES:
         modo = MODO_SYNC_PARCIAL
     if ahora is None:
         ahora = timezone.now()
-
     creados = actualizados = 0
     with transaction.atomic():
         datos = list(datos)
@@ -630,6 +655,10 @@ def aplicar_tickets(datos, modo, ahora=None):
         for chunk in _chunks(list(db_ids & set(presentes))):
             for t in Ticket.objects.filter(ticket_id__in=list(chunk)):
                 existentes[t.ticket_id] = t
+
+        con_cierre = set(
+            TicketCierre.objects.values_list("ticket_id", flat=True)
+        )
 
         for d in datos:
             estatus = (
@@ -657,6 +686,15 @@ def aplicar_tickets(datos, modo, ahora=None):
                 Ticket.objects.create(ticket_id=d["ticket_id"], **defaults)
                 creados += 1
                 continue
+
+            if t.pk in con_cierre and not _sig_confirma_cierre(
+                defaults["raw_data"], getattr(t, "cierre", None)
+            ):
+                # Hay un cierre local que el SIG aún no confirma: se conservan
+                # el estatus CERRADO y la fecha de cierre locales (la fila se
+                # marca como pendiente de actualizar en el SIG).
+                defaults["estatus"] = Ticket.ESTATUS_CERRADO
+                defaults["fecha_cierre"] = t.fecha_cierre
 
             sin_cambios = (
                 t.numero == defaults["numero"]

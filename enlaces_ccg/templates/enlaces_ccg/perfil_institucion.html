@@ -387,7 +387,7 @@
                             <td>{{ c.Responsable_atencion|default:"—" }}</td>
                             <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
                             <td>
-                                {% if t.estatus == 'CERRADO' %}
+                                {% if t.esta_cerrado %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
                                 {% else %}
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
@@ -439,16 +439,16 @@
             {% for enlace in enlaces %}
             <tr{% if not enlace.sincronizado %} class="table-warning"{% endif %}>
                 <td class="ccg-actions">
+                    <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
+                            data-pk="{{ enlace.pk }}" title="Ver detalles">
+                        <i class="fas fa-eye"></i>
+                    </button>
                     {% if user.is_authenticated %}
                     <button class="btn btn-outline-primary btn-sm btn-editar-enlace"
                             data-pk="{{ enlace.pk }}" title="Editar">
                         <i class="fas fa-pen"></i>
                     </button>
                     {% endif %}
-                    <button class="btn btn-outline-info btn-sm btn-ver-enlace me-1"
-                            data-pk="{{ enlace.pk }}" title="Ver detalles">
-                        <i class="fas fa-eye"></i>
-                    </button>
                 </td>
                 <td>
                     <a href="{% url 'enlaces_ccg:enlace_detalle' enlace.pk %}" class="cell-name text-decoration-none">

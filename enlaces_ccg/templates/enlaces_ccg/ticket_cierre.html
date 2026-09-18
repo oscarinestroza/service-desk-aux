@@ -1,0 +1,254 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Cierre de {{ ticket.numero_display }} — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:seguimiento_tickets' %}">Seguimiento de tickets</a></li>
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:ticket_detalle' ticket.pk %}">{{ ticket.numero_display }}</a></li>
+<li class="breadcrumb-item active" aria-current="page">Cierre</li>
+{% endblock %}
+
+{% block contenido %}
+<style>
+    @media (max-width: 575.98px) {
+        .btn { min-height: 44px; }
+        .card-body { overflow-wrap: anywhere; }
+    }
+    .ccg-adjunto-item {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: .5rem;
+        padding: .5rem .75rem; margin-bottom: .5rem;
+    }
+</style>
+
+<div class="mx-auto" style="max-width: 760px;">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <h1 class="h3 mb-0">
+            <i class="fas fa-check-double me-2 text-success"></i>Cierre del ticket
+        </h1>
+        {% if ticket.esta_cerrado %}
+        <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
+        {% else %}
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
+        {% endif %}
+    </div>
+
+    {% if cierre and not ticket.cierre_sincronizado %}
+    <div class="alert alert-warning d-flex align-items-center gap-2">
+        <i class="fas fa-cloud-upload-alt fa-fw"></i>
+        <div>
+            <strong>Cierre pendiente de actualizar en el SIG.</strong><br class="d-sm-none">
+            <span class="small">El ticket se muestra cerrado en el sistema, pero el SIG aún no reporta los mismos datos
+            (fecha, diagnóstico, actividades u observaciones).</span>
+        </div>
+    </div>
+    {% elif cierre %}
+    <div class="alert alert-success d-flex align-items-center gap-2">
+        <i class="fas fa-check-circle fa-fw"></i>
+        <span>Cierre actualizado en el SIG.</span>
+    </div>
+    {% endif %}
+
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white py-2">
+            <strong><i class="fas fa-file-alt me-1"></i>Resumen del ticket</strong>
+        </div>
+        <div class="card-body">
+            {% with c=ticket.raw_data %}
+            <div class="row g-3 small">
+                <div class="col-sm-6">
+                    <dl class="row mb-0">
+                        <dt class="col-5 text-muted">Número</dt>
+                        <dd class="col-7">{{ ticket.numero_display }}</dd>
+                        <dt class="col-5 text-muted">Falla</dt>
+                        <dd class="col-7">{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</dd>
+                        <dt class="col-5 text-muted">Servicio</dt>
+                        <dd class="col-7">{{ ticket.servicio.nombre|default:c.servicio|default:"—" }}</dd>
+                    </dl>
+                </div>
+                <div class="col-sm-6">
+                    <dl class="row mb-0">
+                        <dt class="col-5 text-muted">Solicitante</dt>
+                        <dd class="col-7">
+                            {% if ticket.solicitante %}
+                            <a href="{% url 'enlaces_ccg:enlace_detalle' ticket.solicitante.pk %}">{{ ticket.solicitante.nombre_sig }}</a>
+                            {% else %}{{ c.solicitud_solicitante|default:"—" }}{% endif %}
+                        </dd>
+                        <dt class="col-5 text-muted">Institución</dt>
+                        <dd class="col-7">
+                            {% if ticket.institucion %}
+                            <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.nombre_completo }}</a>
+                            {% else %}—{% endif %}
+                        </dd>
+                        <dt class="col-5 text-muted">Ubicación</dt>
+                        <dd class="col-7">
+                            {{ ticket.torre.nombre|default:c.nivel|default:"—" }}{% if ticket.nivel %}, {{ ticket.nivel.nombre }}{% elif c.grupo %}, {{ c.grupo }}{% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            {% endwith %}
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'enlaces_ccg:ticket_cierre_guardar' ticket.pk %}" class="mb-3">
+        {% csrf_token %}
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-calendar me-1"></i>Fechas</strong>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="idFechaInicio">Fecha de inicio de atención</label>
+                        <input type="datetime-local" class="form-control form-control-lg" id="idFechaInicio"
+                               name="fecha_inicio"
+                               value="{{ cierre.fecha_inicio|date:'Y-m-d\TH:i'|default:'' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="idFechaCierre">Fecha de cierre</label>
+                        <input type="datetime-local" class="form-control form-control-lg" id="idFechaCierre"
+                               name="fecha_cierre"
+                               value="{{ cierre.fecha_cierre|date:'Y-m-d\TH:i'|default:ticket.fecha_cierre|date:'Y-m-d\TH:i'|default:'' }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-clipboard-list me-1"></i>Informe del cierre</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="idDiagnostico">Diagnóstico</label>
+                    <textarea class="form-control" id="idDiagnostico" name="diagnostico" rows="4"
+                              placeholder="Diagnóstico del caso">{{ cierre.diagnostico|default:"" }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="idActividades">Actividades realizadas</label>
+                    <textarea class="form-control" id="idActividades" name="actividades" rows="4"
+                              placeholder="Actividades realizadas para la atención">{{ cierre.actividades|default:"" }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="idObservaciones">Observaciones</label>
+                    <textarea class="form-control" id="idObservaciones" name="observaciones" rows="3"
+                              placeholder="Observaciones">{{ cierre.observaciones|default:"" }}</textarea>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label" for="idObservacionesUsuario">Observaciones del usuario</label>
+                    <textarea class="form-control" id="idObservacionesUsuario" name="observaciones_usuario" rows="3"
+                              placeholder="Observaciones del usuario">{{ cierre.observaciones_usuario|default:"" }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-paperclip me-1"></i>Adjuntos</strong>
+            </div>
+            <div class="card-body">
+                <div id="listaAdjuntosCierre">
+                    <p class="text-muted small mb-0">Cargando adjuntos…</p>
+                </div>
+                <form id="formSubirAdjuntoCierre" class="mt-3">
+                    {% csrf_token %}
+                    <div class="input-group">
+                        <input type="file" class="form-control" name="archivo" id="archivoCierre">
+                        <button type="submit" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
+                            <i class="fas fa-upload me-1"></i>Subir
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+            <a href="{% url 'enlaces_ccg:ticket_detalle' ticket.pk %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Volver
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-check me-1"></i>{% if cierre %}Guardar cambios{% else %}Guardar cierre{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function() {
+    const pk = {{ ticket.pk }};
+    const cont = document.getElementById('listaAdjuntosCierre');
+
+    function cargarAdjuntos() {
+        fetch(`/tickets/cerrar/${pk}/adjuntos/`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d.adjuntos.length) {
+                    cont.innerHTML = '<p class="text-muted small mb-0">No hay adjuntos.</p>';
+                    return;
+                }
+                cont.innerHTML = d.adjuntos.map(a => `
+                    <div class="ccg-adjunto-item">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="${a.icono} fa-lg text-primary"></i>
+                            <div>
+                                <a href="${a.archivo_url}" target="_blank" class="fw-semibold text-decoration-none">${a.nombre}</a>
+                                <div class="small text-muted">${a.tamano} &middot; ${a.subido_en}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-adjunto-cierre" data-id="${a.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `).join('');
+                cont.querySelectorAll('.btn-eliminar-adjunto-cierre').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        if (!confirm('¿Eliminar este archivo adjunto?')) return;
+                        fetch(`/tickets/cerrar/${pk}/adjuntos/${this.dataset.id}/eliminar/`, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                        })
+                        .then(r => r.json())
+                        .then(d => { if (d.ok) cargarAdjuntos(); });
+                    });
+                });
+            });
+    }
+
+    document.getElementById('formSubirAdjuntoCierre').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const archivo = document.getElementById('archivoCierre');
+        if (!archivo.files.length) return;
+        const formData = new FormData();
+        formData.append('archivo', archivo.files[0]);
+        const btn = document.getElementById('btnSubirAdjuntoCierre');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        fetch(`/tickets/cerrar/${pk}/adjuntos/subir/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        })
+        .then(r => r.json())
+        .then(d => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir';
+            if (d.ok) {
+                archivo.value = '';
+                cargarAdjuntos();
+            } else {
+                alert(d.error || 'Error al subir');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir';
+            alert('Error de conexión');
+        });
+    });
+
+    cargarAdjuntos();
+})();
+</script>
+{% endblock %}

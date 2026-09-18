@@ -197,11 +197,11 @@
                         <tr>
                             <th class="text-center">Acciones</th>
                             <th class="cell-name">Ticket</th>
-                            <th>Solicitante</th>
                             <th>Falla</th>
                             <th>Responsable de atención</th>
                             <th>Fecha de solicitud</th>
                             <th>Estatus</th>
+                            <th>Solicitante</th>
                             <th>Edificio</th>
                             <th>Nivel</th>
                             <th>Unidad Funcional</th>
@@ -210,7 +210,7 @@
                     <tbody>
                         {% for t in page_obj.object_list %}
                         {% with c=t.raw_data %}
-                        <tr>
+                        <tr{% if t.cierre and not t.cierre_sincronizado %} class="table-warning"{% endif %}>
                             <td class="text-center ccg-ticket-actions">
                                 <button type="button"
                                         class="btn btn-sm btn-outline-primary btn-ver-ticket"
@@ -219,15 +219,16 @@
                                         title="Ver detalle">
                                     <i class="fas fa-eye"></i>
                                 </button>
+                                {% if puede_atender %}
+                                <a class="btn btn-sm btn-outline-success"
+                                   href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}"
+                                   title="Atender">
+                                    <i class="fas fa-wrench"></i>
+                                </a>
+                                {% endif %}
                             </td>
                             <td class="cell-name">
                                 <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
-                            </td>
-                            <td>
-                                {% if t.solicitante %}
-                                    <a href="{% url 'enlaces_ccg:enlace_detalle' t.solicitante.pk %}"
-                                       title="Ver ficha del enlace">{{ t.solicitante.nombre_sig }}</a>
-                                {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
                             </td>
                             <td>
                                 {% if t.falla %}
@@ -241,11 +242,17 @@
                             </td>
                             <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
                             <td>
-                                {% if t.estatus == 'CERRADO' %}
+                                {% if t.esta_cerrado %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
                                 {% else %}
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
                                 {% endif %}
+                            </td>
+                            <td>
+                                {% if t.solicitante %}
+                                    <a href="{% url 'enlaces_ccg:enlace_detalle' t.solicitante.pk %}"
+                                       title="Ver ficha del enlace">{{ t.solicitante.nombre_sig }}</a>
+                                {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
                             </td>
                             <td>
                                 {% if t.torre %}
@@ -275,21 +282,33 @@
     </div>
 </div>
 
-<div class="modal fade" id="modalTicket" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
+<div class="modal fade modal-ccg" id="modalTicket" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-ticket-alt me-2 text-primary"></i>Detalle del ticket
+                    <i class="fas fa-ticket-alt me-2"></i>Detalle del Ticket
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body" id="modalTicketContenido"></div>
-            <div class="modal-footer">
-                <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                    <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
-                </a>
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            <div class="modal-body" id="modalTicketContenido" style="padding:16px;"></div>
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modalTicketAnterior" title="Ticket anterior" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modalTicketSiguiente" title="Siguiente ticket" disabled>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
+                    </a>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cerrar
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -407,53 +426,60 @@
     var modal = new bootstrap.Modal(modalEl);
     var cuerpo = document.getElementById('modalTicketContenido');
     var enlace = document.getElementById('modalTicketEnlace');
+    var btnAnterior = document.getElementById('modalTicketAnterior');
+    var btnSiguiente = document.getElementById('modalTicketSiguiente');
 
-    var esc = function (v) {
-        return (v === null || v === undefined ? '' : String(v)).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
+    // Tickets visibles en la tabla actual (orden de la página).
+    var pks = Array.prototype.map.call(
+        document.querySelectorAll('.btn-ver-ticket'),
+        function (b) { return b.dataset.pk; }
+    );
+    var indexActual = -1;
+
+    var pintarNavegacion = function () {
+        if (!btnAnterior || !btnSiguiente) return;
+        btnAnterior.disabled = indexActual <= 0;
+        btnSiguiente.disabled = indexActual < 0 || indexActual >= pks.length - 1;
     };
 
-    var render = function (d) {
-        var badge = d.estatus === 'CERRADO'
-            ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>'
-            : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>';
-        var filas = Object.keys(d.raw_data || {}).map(function (k) {
-            return '<tr><td class="text-muted" style="width: 38%">' + esc(k) + '</td><td>' +
-                esc(d.raw_data[k] === '' ? '—' : d.raw_data[k]) + '</td></tr>';
-        }).join('');
-        return '' +
-            '<div class="d-flex justify-content-between align-items-center mb-3">' +
-            '<h5 class="mb-0">Ticket ' + esc(d.numero) + '</h5>' + badge + '</div>' +
-            '<dl class="row small mb-3">' +
-            '<dt class="col-5 text-muted">ID de solicitud</dt><dd class="col-7">' + esc(d.ticket_id) + '</dd>' +
-            '<dt class="col-5 text-muted">Fecha de solicitud</dt><dd class="col-7">' + esc(d.fecha || '—') + '</dd>' +
-            '<dt class="col-5 text-muted">Fecha de cierre</dt><dd class="col-7">' + esc(d.fecha_cierre || '—') + '</dd>' +
-            '<dt class="col-5 text-muted">Tipo de solicitud</dt><dd class="col-7">' + esc(d.solicitud_tipo || '—') + '</dd>' +
-            '<dt class="col-5 text-muted">Descripción</dt><dd class="col-7">' + esc(d.descripcion || '—') + '</dd>' +
-            '</dl><hr>' +
-            '<h6 class="small text-muted">Datos del SIG</h6>' +
-            '<div style="max-height: 300px; overflow: auto;">' +
-            '<table class="table table-sm table-striped mb-0"><tbody>' + filas + '</tbody></table></div>';
+    var cargarTicket = function (pk) {
+        var btn = document.querySelector('.btn-ver-ticket[data-pk="' + pk + '"]');
+        if (!btn) return;
+        indexActual = pks.indexOf(pk);
+        pintarNavegacion();
+        cuerpo.innerHTML = '<div class="text-center py-4">' +
+            '<div class="spinner-border text-primary" role="status"></div></div>';
+        modal.show();
+        fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (d) {
+                cuerpo.innerHTML = d.html;
+                enlace.href = d.url_detalle;
+            })
+            .catch(function () {
+                cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
+                    'No se pudieron cargar los datos del ticket.</div>';
+            });
     };
 
     document.querySelectorAll('.btn-ver-ticket').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            cuerpo.innerHTML = '<div class="text-center py-4">' +
-                '<div class="spinner-border text-primary" role="status"></div></div>';
-            modal.show();
-            fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-                .then(function (d) {
-                    cuerpo.innerHTML = render(d);
-                    enlace.href = d.url_detalle;
-                })
-                .catch(function () {
-                    cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
-                        'No se pudieron cargar los datos del ticket.</div>';
-                });
+            cargarTicket(btn.dataset.pk);
         });
     });
+
+    if (btnAnterior) {
+        btnAnterior.addEventListener('click', function () {
+            if (indexActual > 0) cargarTicket(pks[indexActual - 1]);
+        });
+    }
+    if (btnSiguiente) {
+        btnSiguiente.addEventListener('click', function () {
+            if (indexActual >= 0 && indexActual < pks.length - 1) {
+                cargarTicket(pks[indexActual + 1]);
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}

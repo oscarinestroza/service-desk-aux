@@ -1240,11 +1240,21 @@ class Ticket(models.Model):
         servicio = str(r.get("servicio") or "").strip()
         responsable = str(r.get("Responsable_atencion") or "").strip()
         numero = self.numero_display or self.numero or self.ticket_id
-        actividades = str(r.get("Actividades") or "").strip()
-        cerrado = self.estatus == self.ESTATUS_CERRADO
+        cierre_inst = getattr(self, "cierre", None)
+        actividades = str(
+            (cierre_inst.actividades if cierre_inst and cierre_inst.actividades else "")
+            or (r.get("Actividades") or "")
+        ).strip()
+        cerrado = self.esta_cerrado
+        pendiente_sig = cierre_inst is not None and not self.cierre_sincronizado
+        fecha_cierre_mostrada = (
+            cierre_inst.fecha_cierre
+            if cierre_inst and cierre_inst.fecha_cierre
+            else self.fecha_cierre
+        )
         detalle_cierre = (
-            timezone.localtime(self.fecha_cierre).strftime("%d/%m/%Y %H:%M")
-            if self.fecha_cierre
+            timezone.localtime(fecha_cierre_mostrada).strftime("%d/%m/%Y %H:%M")
+            if fecha_cierre_mostrada
             else ""
         )
         if self.fecha:
@@ -1278,8 +1288,16 @@ class Ticket(models.Model):
                 "clave": "finalizado",
                 "nombre": "Finalizado",
                 "estado": "completado" if cerrado else "pendiente",
+                "pendiente_sig": pendiente_sig,
                 "detalle": (
-                    f"Cerrado el {detalle_cierre}" if cerrado else "Pendiente de cierre"
+                    f"Cerrado el {detalle_cierre}"
+                    + (
+                        " · Pendiente de sincronizar en el SIG"
+                        if pendiente_sig
+                        else ""
+                    )
+                    if cerrado
+                    else "Pendiente de cierre"
                 ),
             },
             {
@@ -1291,6 +1309,23 @@ class Ticket(models.Model):
                 ),
             },
         ]
+
+    def accion_atencion(self):
+        """Etiqueta del botón principal según la fase en la que esté el ticket.
+
+        - En proceso de atención → "Atender"
+        - Finalizado (cerrado sin actividades) → "Completar"
+        - Completado (con actividades) → "Modificar"
+        """
+        fases = {f["clave"]: f for f in self.fases_proceso()}
+        if fases.get("proceso", {}).get("estado") == "activo":
+            return "Atender"
+        if (
+            fases.get("finalizado", {}).get("estado") == "completado"
+            and fases.get("completado", {}).get("estado") != "completado"
+        ):
+            return "Completar"
+        return "Modificar"
 
     def comentarios_servicio(self):
         """Observaciones del SIG y una respuesta sugerida para el enlace.
@@ -1332,6 +1367,62 @@ class Ticket(models.Model):
             "observaciones_usuario": observaciones_usuario,
             "sugerencia": sugerencia,
         }
+
+    @property
+    def cierre_sincronizado(self):
+        """True si el cierre local ya coincide con lo reportado por el SIG.
+
+        Análogo a `EnlaceAutorizado.sincronizado`: el cierre quedó capturado
+        localmente (el ticket se muestra cerrado), pero para considerarlo
+        actualizado en el SIG la fecha de cierre del sistema debe coincidir
+        (por día) con el `cerro_fecha` del SIG y los campos Diagnóstico,
+        Actividades y Observaciones deben ser idénticos a los reportados.
+        """
+        cierre = getattr(self, "cierre", None)
+        if cierre is None:
+            return True
+        r = self.raw_data or {}
+        sig_fecha = self._fecha_sig_raw(r.get("cerro_fecha"))
+        local_fecha = (
+            timezone.localtime(cierre.fecha_cierre).date()
+            if cierre.fecha_cierre
+            else None
+        )
+        if not sig_fecha or not local_fecha or sig_fecha != local_fecha:
+            return False
+        norm = lambda v: " ".join(str(v or "").split())
+        return all(
+            (
+                norm(r.get("Diagnostico")) == norm(cierre.diagnostico),
+                norm(r.get("Actividades")) == norm(cierre.actividades),
+                norm(r.get("Observaciones")) == norm(cierre.observaciones),
+            )
+        )
+
+    @property
+    def esta_cerrado(self):
+        """El ticket se muestra cerrado si el SIG lo cerró o hay un cierre local,
+        aunque el SIG aún no lo haya confirmado."""
+        return (
+            self.estatus == self.ESTATUS_CERRADO
+            or getattr(self, "cierre", None) is not None
+        )
+
+    @staticmethod
+    def _fecha_sig_raw(valor):
+        """Normaliza el valor crudo de `cerro_fecha` del SIG a una fecha."""
+        from datetime import date, datetime
+
+        if isinstance(valor, datetime):
+            return valor.date()
+        if isinstance(valor, date):
+            return valor
+        if valor:
+            try:
+                return datetime.strptime(str(valor)[:10], "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        return None
 
 
 class TicketLog(models.Model):
@@ -1404,6 +1495,143 @@ class TicketRegistro(models.Model):
 
     def __str__(self):
         return f"{self.ticket_id} · {self.creado_en:%d/%m/%Y %H:%M}"
+
+
+# ---------------------------------------------------------------------------
+# Cierre de tickets (captura local, se valida contra el SIG)
+# ---------------------------------------------------------------------------
+def ruta_ticket_adjunto(instance, filename):
+    """Ruta de almacenamiento: tickets_adjuntos/<ticket_id>/<archivo>"""
+    return f"tickets_adjuntos/{instance.ticket_id}/{filename}"
+
+
+class TicketCierre(models.Model):
+    """Cierre de un ticket capturado localmente (página de cierre).
+
+    Guarda los datos que después se reflejan en el SIG (Diagnóstico,
+    Actividades, Observaciones y fechas). Se muestra como CERRADO aunque el
+    SIG aún no lo confirme; `Ticket.cierre_sincronizado` indica si el SIG ya
+    reporta los mismos valores.
+    """
+
+    ticket = models.OneToOneField(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="cierre",
+        verbose_name="Ticket",
+    )
+    fecha_inicio = models.DateTimeField(
+        null=True, blank=True, verbose_name="Fecha de inicio de atención"
+    )
+    fecha_cierre = models.DateTimeField(
+        null=True, blank=True, verbose_name="Fecha de cierre"
+    )
+    diagnostico = models.TextField(
+        blank=True, default="", verbose_name="Diagnóstico"
+    )
+    actividades = models.TextField(
+        blank=True, default="", verbose_name="Actividades realizadas"
+    )
+    observaciones = models.TextField(
+        blank=True, default="", verbose_name="Observaciones"
+    )
+    observaciones_usuario = models.TextField(
+        blank=True, default="", verbose_name="Observaciones del usuario"
+    )
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cierres_creados",
+        verbose_name="Creado por",
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cierres_actualizados",
+        verbose_name="Actualizado por",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Creado en")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Actualizado en")
+
+    class Meta:
+        verbose_name = "Cierre de ticket"
+        verbose_name_plural = "Cierres de ticket"
+
+    def __str__(self):
+        return f"Cierre de {self.ticket_id}"
+
+
+class TicketAdjunto(models.Model):
+    """Adjunto del cierre de un ticket."""
+
+    ticket = models.ForeignKey(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="cierre_adjuntos",
+        verbose_name="Ticket",
+    )
+    archivo = models.FileField(
+        upload_to=ruta_ticket_adjunto,
+        help_text="Archivo adjunto (PDF, imagen, documento, etc.)",
+        verbose_name="Archivo",
+    )
+    nombre = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Nombre descriptivo del adjunto",
+        verbose_name="Nombre",
+    )
+    subido_en = models.DateTimeField(auto_now_add=True, verbose_name="Subido en")
+    subido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="adjuntos_tickets",
+        verbose_name="Subido por",
+    )
+
+    class Meta:
+        ordering = ("-subido_en",)
+        verbose_name = "Adjunto de cierre"
+        verbose_name_plural = "Adjuntos de cierre"
+
+    def __str__(self):
+        return self.nombre or self.archivo.name
+
+    @property
+    def tamano_legible(self):
+        """Devuelve el tamaño del archivo en formato legible."""
+        try:
+            bytes_val = self.archivo.size
+        except Exception:
+            return "—"
+        if bytes_val < 1024:
+            return f"{bytes_val} B"
+        elif bytes_val < 1024 * 1024:
+            return f"{bytes_val / 1024:.1f} KB"
+        return f"{bytes_val / (1024 * 1024):.1f} MB"
+
+    @property
+    def icono(self):
+        """Icono FA según tipo de archivo."""
+        nombre = (self.archivo.name or "").lower()
+        if nombre.endswith((".pdf",)):
+            return "fas fa-file-pdf"
+        if nombre.endswith((".doc", ".docx", ".odt")):
+            return "fas fa-file-word"
+        if nombre.endswith((".xls", ".xlsx", ".ods")):
+            return "fas fa-file-excel"
+        if nombre.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+            return "fas fa-file-image"
+        if nombre.endswith((".mp4", ".avi", ".mov")):
+            return "fas fa-file-video"
+        return "fas fa-file"
 
 
 # ---------------------------------------------------------------------------

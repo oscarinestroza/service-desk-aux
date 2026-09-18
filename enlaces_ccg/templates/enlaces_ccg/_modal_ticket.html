@@ -1,0 +1,168 @@
+{% with c=ticket.raw_data %}
+<div class="ccg-modal-ticket">
+
+    <div class="text-center p-3 mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;">
+        <h4 class="mb-2">Ticket {{ ticket.numero_display }}</h4>
+        <div class="row g-2 mt-1 text-center d-flex align-items-center justify-content-center" style="margin:0;">
+            <div class="col-3 d-flex justify-content-center align-items-center gap-1">
+                <span class="small text-muted">ID solicitud:</span>
+                <span style="color:#495057;">{{ ticket.ticket_id|default:"—" }}</span>
+            </div>
+            <div class="col-3 d-flex justify-content-center align-items-center gap-1">
+                <span class="small text-muted">Solicitud:</span>
+                <span style="color:#495057;">{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="col-3 d-flex justify-content-center align-items-center gap-1">
+                <span class="small text-muted">Cierre:</span>
+                <span style="color:#495057;">{% if ticket.cierre.fecha_cierre %}{{ ticket.cierre.fecha_cierre|date:"d/m/Y H:i" }}{% elif ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="col-3 d-flex justify-content-center align-items-center gap-1">
+                <span class="small text-muted">Estado:</span>
+                {% if ticket.esta_cerrado %}
+                <span class="badge bg-success fs-6">CERRADO</span>
+                {% else %}
+                <span class="badge bg-danger fs-6">ABIERTO</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if ticket.cierre and not ticket.cierre_sincronizado %}
+    <div class="mb-3 rounded d-flex align-items-center gap-2 px-3 py-2 flex-wrap"
+         style="background:#fff8e1;border:1px solid #ffd54f;">
+        <i class="fas fa-cloud-upload-alt" style="color:#b26a00;"></i>
+        <span class="small" style="color:#7a5b00;">Cierre pendiente de actualizar en el SIG: se cerró localmente, pero el SIG aún no reporta los mismos datos (fecha, diagnóstico, actividades u observaciones).</span>
+        {% if puede_atender %}
+        <a href="{% url 'enlaces_ccg:ticket_cerrar' ticket.pk %}"
+           class="btn btn-sm btn-outline-warning ms-sm-auto">Abrir cierre</a>
+        {% endif %}
+    </div>
+    {% elif ticket.cierre %}
+    <div class="mb-3 rounded d-flex align-items-center gap-2 px-3 py-2"
+         style="background:#e9f7ef;border:1px solid #82d6ac;">
+        <i class="fas fa-check-circle" style="color:#198754;"></i>
+        <span class="small" style="color:#14532d;">Cierre actualizado en el SIG.</span>
+    </div>
+    {% endif %}
+
+    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+            <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-file-alt me-1"></i>Información general</h6>
+        </div>
+        <div style="padding:12px 14px;">
+            <table class="table table-sm table-borderless align-middle mb-0">
+                <tr><td class="text-muted" style="width:35%">Responsable de atención</td><td>
+                    {% if ticket.responsable_atencion %}{{ ticket.responsable_atencion.nombre }}{% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}
+                </td></tr>
+                <tr><td class="text-muted">Falla</td><td>{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Servicio</td><td>
+                    {% if ticket.servicio %}{{ ticket.servicio.nombre }}{% else %}{{ c.servicio|default:"—" }}{% endif %}
+                </td></tr>
+            </table>
+            <hr style="border-top:1px solid #d5d8dc;margin:10px 0;">
+            <div class="small text-muted mb-1">Descripción</div>
+            <div>{{ ticket.descripcion|default:"—" }}</div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <div class="mb-3 rounded h-100" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+                    <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-door-open me-1"></i>Apertura</h6>
+                </div>
+                <div style="padding:12px 14px;">
+                    <table class="table table-sm table-borderless align-middle mb-0">
+                        <tr><td class="text-muted" style="width:35%">Tipo de recepción</td><td>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ c.TipoRecepcion|default:"—" }}</span>
+                        </td></tr>
+                        <tr><td class="text-muted">Hora de recepción</td><td>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ c.Fecha_TipoRecepcion|default:"—" }}</span>
+                        </td></tr>
+                        <tr><td class="text-muted">Hora de apertura</td><td>{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="mb-3 rounded h-100" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+                    <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-user me-1"></i>Solicitante</h6>
+                </div>
+                <div style="padding:12px 14px;">
+                    <table class="table table-sm table-borderless align-middle mb-0">
+                        <tr><td class="text-muted" style="width:35%">Solicitante</td><td>
+                            {% if ticket.solicitante %}
+                            <a href="{% url 'enlaces_ccg:enlace_detalle' ticket.solicitante.pk %}"
+                               title="Ver ficha del enlace" class="text-decoration-none">{{ ticket.solicitante.nombre_sig }}</a>
+                            {% else %}{{ ticket.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                        </td></tr>
+                        <tr><td class="text-muted">Institución</td><td>
+                            {% if ticket.institucion %}
+                            <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}"
+                               class="text-decoration-none">{{ ticket.institucion.nombre_completo }}</a>
+                            {% else %}—{% endif %}
+                        </td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+            <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-map-marker-alt me-1"></i>Ubicación</h6>
+        </div>
+        <div style="padding:12px 14px;">
+            <div class="row g-3 text-center">
+                <div class="col-4">
+                    <div class="small text-muted">Edificio</div>
+                    <div class="fw-medium">
+                        {% if ticket.torre %}{{ ticket.torre.nombre }}{% else %}{{ c.nivel|default:"—" }}{% endif %}
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">Nivel</div>
+                    <div class="fw-medium">
+                        {% if ticket.nivel %}{{ ticket.nivel.nombre }}{% else %}{{ c.grupo|default:"—" }}{% endif %}
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">Unidad funcional</div>
+                    <div class="fw-medium">{{ c.unidad|default:"—" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+            <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-user-cog me-1"></i>Detalle de atención</h6>
+        </div>
+        <div style="padding:12px 14px;">
+            <table class="table table-sm table-borderless align-middle mb-0">
+                <tr><td class="text-muted" style="width:35%">Diagnóstico</td><td>{{ ticket.cierre.diagnostico|default:c.Diagnostico|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Actividades</td><td>{{ ticket.cierre.actividades|default:c.Actividades|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Observaciones</td><td>{{ ticket.cierre.observaciones|default:c.Observaciones|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Observaciones del usuario</td><td>{{ ticket.cierre.observaciones_usuario|default:c.ObservacionesUsuario|default:"—" }}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+            <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-lock me-1"></i>Detalle de cierre</h6>
+        </div>
+        <div style="padding:12px 14px;">
+            <table class="table table-sm table-borderless align-middle mb-0">
+                <tr><td class="text-muted" style="width:35%">Fecha de inicio</td><td>
+                    {% if ticket.cierre.fecha_inicio %}{{ ticket.cierre.fecha_inicio|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+                </td></tr>
+                <tr><td class="text-muted">Fecha de cierre</td><td>
+                    {% if ticket.cierre.fecha_cierre %}{{ ticket.cierre.fecha_cierre|date:"d/m/Y H:i" }}{% elif ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+                </td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+{% endwith %}

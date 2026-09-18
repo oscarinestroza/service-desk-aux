@@ -36,13 +36,14 @@ CAP_DIRECTORIO = "directorio"
 CAP_EDITAR = "editar"
 CAP_IMPORTAR = "importar"
 CAP_TICKETS = "tickets"
+CAP_ATENDER = "atender"
 CAP_REVISIONES = "revisiones"
 CAP_ADMIN = "admin"
 
 CAPACIDADES_POR_ROL = {
-    ROL_ADMIN: {CAP_DIRECTORIO, CAP_EDITAR, CAP_IMPORTAR, CAP_TICKETS, CAP_REVISIONES, CAP_ADMIN},
+    ROL_ADMIN: {CAP_DIRECTORIO, CAP_EDITAR, CAP_IMPORTAR, CAP_TICKETS, CAP_ATENDER, CAP_REVISIONES, CAP_ADMIN},
     ROL_OPERADOR: {CAP_DIRECTORIO, CAP_EDITAR, CAP_TICKETS, CAP_REVISIONES},
-    ROL_ENCARGADO: {CAP_DIRECTORIO, CAP_TICKETS},
+    ROL_ENCARGADO: {CAP_DIRECTORIO, CAP_TICKETS, CAP_ATENDER},
 }
 
 # Roles con acceso de staff (is_staff) — p. ej. que ven el panel admin
@@ -187,6 +188,7 @@ def nombres_capacidades():
         CAP_DIRECTORIO: "Directorio de Enlaces",
         CAP_EDITAR: "Editar directorio",
         CAP_TICKETS: "Seguimiento de tickets",
+        CAP_ATENDER: "Atender tickets",
         CAP_IMPORTAR: "Importaciones",
         CAP_REVISIONES: "Modulo Operativo MAO",
         CAP_ADMIN: "Panel de administración",

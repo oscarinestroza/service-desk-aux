@@ -12,8 +12,15 @@
     <h1 class="h3 mb-0">
         <i class="fas fa-ticket-alt me-2 text-primary"></i>Ticket {{ ticket.numero_display }}
     </h1>
-    {% if ticket.estatus == 'CERRADO' %}
-    <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
+    {% if ticket.esta_cerrado %}
+    <div class="d-flex gap-2 flex-wrap">
+        {% if ticket.cierre and not ticket.cierre_sincronizado %}
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fs-6" title="Pendiente de actualizar en el SIG">
+            <i class="fas fa-cloud-upload-alt me-1"></i>Pendiente SIG
+        </span>
+        {% endif %}
+        <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
+    </div>
     {% else %}
     <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
     {% endif %}
@@ -32,6 +39,14 @@
     .ccg-termino.ccg-termino-completado { --termino-rail: #198754; }
     .ccg-termino.ccg-termino-activo { --termino-rail: #0d6efd; }
     .ccg-termino.ccg-termino-pendiente { --termino-rail: #e2e8f0; }
+    .ccg-termino.ccg-termino-pendiente-sig { --termino-rail: #f59e0b; }
+    .ccg-termino-pendiente-sig .ccg-termino-marca {
+        animation: ccg-pulso-ambre 1.6s ease-out infinite;
+    }
+    @keyframes ccg-pulso-ambre {
+        0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .45); }
+        100% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+    }
     .ccg-termino-marca {
         position: absolute; left: 0; top: 0; z-index: 1;
         width: 33px; height: 33px; border-radius: 50%;
@@ -47,6 +62,20 @@
     }
     .ccg-termino-nombre { font-weight: 600; color: #1e293b; }
     .ccg-termino-detalle { font-size: .82rem; color: #64748b; white-space: pre-line; }
+
+    @media (max-width: 575.98px) {
+        .card-body { overflow-wrap: anywhere; }
+        .card-body dl.row > dt,
+        .card-body dl.row > dd {
+            flex: 0 0 100%;
+            max-width: 100%;
+        }
+        .card-body dl.row > dt { margin-bottom: .1rem; }
+        .card-body dl.row > dd { margin-bottom: .6rem; }
+        .card-body dl.row > dd:last-child { margin-bottom: 0; }
+        .card-body .badge { white-space: normal; text-align: left; }
+        .btn { min-height: 44px; }
+    }
 </style>
 
 <div class="row g-3 align-items-start">
@@ -201,30 +230,48 @@
                     <dt class="col-sm-3 text-muted">Responsable de atención</dt>
                     <dd class="col-sm-9">{% if ticket.responsable_atencion %}{{ ticket.responsable_atencion.nombre }}{% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}</dd>
                     <dt class="col-sm-3 text-muted">Diagnóstico</dt>
-                    <dd class="col-sm-9">{{ c.Diagnostico|default:"—" }}</dd>
+                    <dd class="col-sm-9">{{ ticket.cierre.diagnostico|default:c.Diagnostico|default:"—" }}</dd>
                     <dt class="col-sm-3 text-muted">Actividades</dt>
-                    <dd class="col-sm-9">{{ c.Actividades|default:"—" }}</dd>
+                    <dd class="col-sm-9">{{ ticket.cierre.actividades|default:c.Actividades|default:"—" }}</dd>
                     <dt class="col-sm-3 text-muted">Observaciones</dt>
-                    <dd class="col-sm-9">{{ c.Observaciones|default:"—" }}</dd>
+                    <dd class="col-sm-9">{{ ticket.cierre.observaciones|default:c.Observaciones|default:"—" }}</dd>
                     <dt class="col-sm-3 text-muted">Observaciones del usuario</dt>
-                    <dd class="col-sm-9">{{ c.ObservacionesUsuario|default:"—" }}</dd>
+                    <dd class="col-sm-9">{{ ticket.cierre.observaciones_usuario|default:c.ObservacionesUsuario|default:"—" }}</dd>
                 </dl>
                 {% endwith %}
             </div>
         </div>
-        <div class="card border-0 shadow-sm mt-3">
+<div class="card border-0 shadow-sm mt-3">
             <div class="card-header bg-white py-2">
                 <strong><i class="fas fa-lock me-1"></i>Detalle de cierre</strong>
+                {% if ticket.cierre and ticket.cierre_sincronizado %}
+                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                    <i class="fas fa-check-circle me-1"></i>Actualizado
+                </span>
+                {% endif %}
             </div>
             <div class="card-body">
+                {% with co=ticket.cierre %}
                 <dl class="row mb-0 small">
+                    <dt class="col-sm-3 text-muted">Fecha de inicio</dt>
+                    <dd class="col-sm-9">
+                        {% if co %}{{ co.fecha_inicio|date:"d/m/Y H:i" }}{% endif %}
+                        {% if not co.fecha_inicio %}—{% endif %}
+                    </dd>
                     <dt class="col-sm-3 text-muted">Fecha de cierre</dt>
-                    <dd class="col-sm-9">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                    <dd class="col-sm-9">
+                        {% if co %}{{ co.fecha_cierre|date:"d/m/Y H:i" }}{% endif %}
+                        {% if not co %}{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}{% endif %}
+                    </dd>
                 </dl>
+                {% if co %}
+                <div class="small text-muted mt-4 pt-2 border-top">
+                    <strong>Actualizado por</strong>
+                    <div class="mt-1">{{ co.actualizado_por.get_full_name|default:co.actualizado_por|default:"—" }} · {{ co.actualizado_en|date:"d/m/Y H:i" }}</div>
+                </div>
+                {% endif %}
+                {% endwith %}
             </div>
-        </div>
-        <div class="d-grid mt-3">
-            <button type="button" class="btn btn-success">Atender</button>
         </div>
     </div>
     <div class="col-lg-4">
@@ -235,7 +282,7 @@
             <div class="card-body py-3">
                 <ol class="ccg-timeline mb-0">
                     {% for fase in ticket.fases_proceso %}
-                    <li class="ccg-termino ccg-termino-{{ fase.estado }}">
+                    <li class="ccg-termino ccg-termino-{{ fase.estado }}{% if fase.pendiente_sig %} ccg-termino-pendiente-sig{% endif %}">
                         <span class="ccg-termino-marca
                                    {% if fase.estado == 'completado' %}bg-success text-white
                                    {% elif fase.estado == 'activo' %}bg-primary text-white
@@ -247,7 +294,11 @@
                         <div class="d-flex align-items-center gap-2">
                             <span class="ccg-termino-nombre">{{ fase.nombre }}</span>
                             {% if fase.estado == 'completado' %}
+                            {% if fase.pendiente_sig %}
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Pendiente sincronizar SIG</span>
+                            {% else %}
                             <span class="badge bg-success-subtle text-success border border-success-subtle">Completado</span>
+                            {% endif %}
                             {% elif fase.estado == 'activo' %}
                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle">En curso</span>
                             {% else %}
@@ -262,33 +313,10 @@
                 </ol>
             </div>
         </div>
-        <div class="card border-0 shadow-sm mt-3">
-            <div class="card-header bg-white py-2">
-                <strong><i class="fas fa-clipboard-check me-1"></i>Registrar seguimiento</strong>
-            </div>
-            <div class="card-body py-3">
-                <form method="post" action="{% url 'enlaces_ccg:ticket_registrar' ticket.pk %}">
-                    {% csrf_token %}
-                    <textarea name="descripcion" class="form-control form-control-sm mb-2" rows="3"
-                              placeholder="Breve descripción de lo que pasó…"></textarea>
-                    <button type="submit" class="btn btn-sm btn-primary w-100">
-                        <i class="fas fa-save me-1"></i>Guardar seguimiento
-                    </button>
-                </form>
-                <hr class="my-3">
-                <div class="small text-muted mb-2"><strong>Consultas recientes</strong></div>
-                {% for r in registros %}
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">{{ r.usuario.get_full_name|default:r.usuario.username }}</span>
-                        <span class="small text-muted">{{ r.creado_en|date:"d/m/Y H:i" }}</span>
-                    </div>
-                    <div class="small">{{ r.descripcion|default:"—" }}</div>
-                </div>
-                {% empty %}
-                <p class="small text-muted mb-0">Aún no hay consultas registradas.</p>
-                {% endfor %}
-            </div>
+        <div class="d-grid mt-3">
+            <a href="{% url 'enlaces_ccg:ticket_cerrar' ticket.pk %}" class="btn btn-success">
+                <i class="fas fa-wrench me-1"></i>{% if ticket.cierre %}Editar cierre{% else %}{{ ticket.accion_atencion }} — Abrir cierre{% endif %}
+            </a>
         </div>
     </div>
 </div>

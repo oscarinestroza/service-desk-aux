@@ -21,6 +21,7 @@ from .models import (
     Nivel,
     Servicio,
     Ticket,
+    TicketCierre,
     TicketLog,
 )
 from .sig_sync.tickets import (
@@ -69,6 +70,17 @@ def _fila(tid, numero, fecha="2026-09-01 10:00:00", cierro="", desc="Falla",
         "tel", "", "", cierro, tipo, "No atendida", "", "", "", "", "",
         "", "", "", "", "",
     ]
+
+
+def _fila_con_cierre(tid, numero, cierro, diagnostico="Dx", actividades="Act",
+                     observaciones="Obs", **kwargs):
+    """Fila del Excel con los campos del informe de cierre rellenados."""
+    fila = _fila(tid, numero, **kwargs)
+    fila[21] = diagnostico
+    fila[23] = actividades
+    fila[25] = observaciones
+    fila[17] = cierro
+    return fila
 
 
 class ParsearFechasTests(TestCase):
@@ -205,6 +217,148 @@ class AplicarTicketsTests(TestCase):
         aplicar_tickets(datos, MODO_SYNC_PARCIAL)
         self.assertEqual(Ticket.objects.get(ticket_id="100").numero_display, "SS26-0400")
         self.assertEqual(Ticket.objects.get(ticket_id="101").numero_display, "SS26-0400-2")
+
+    def test_cierre_local_no_se_pisoteca_si_sig_sigue_abierto(self):
+        datos = self._filas_basicas([_fila(1, "SS26-0401", cierro="")])
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+        ticket = Ticket.objects.get(ticket_id="1")
+        fecha_cierre = timezone.make_aware(datetime(2026, 9, 2, 15, 30, 0))
+        TicketCierre.objects.create(
+            ticket=ticket,
+            fecha_inicio=timezone.make_aware(datetime(2026, 9, 1, 8, 0, 0)),
+            fecha_cierre=fecha_cierre,
+            diagnostico="Dx local",
+            actividades="Act local",
+            observaciones="Obs local",
+        )
+        ticket.estatus = Ticket.ESTATUS_CERRADO
+        ticket.fecha_cierre = fecha_cierre
+        ticket.save(update_fields=["estatus", "fecha_cierre"])
+
+        # El SIG vuelve a reportar el ticket SIN fecha de cierre (sigue abierto).
+        aplicar_tickets(self._filas_basicas([_fila(1, "SS26-0401", cierro="")]),
+                        MODO_SYNC_PARCIAL)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.estatus, Ticket.ESTATUS_CERRADO)
+        self.assertEqual(ticket.fecha_cierre, fecha_cierre)
+        self.assertFalse(ticket.cierre_sincronizado)
+
+    def test_cierre_local_se_libera_cuando_sig_confirma(self):
+        datos = self._filas_basicas([_fila(1, "SS26-0402", cierro="")])
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+        ticket = Ticket.objects.get(ticket_id="1")
+        fecha_cierre = timezone.make_aware(datetime(2026, 9, 2, 15, 30, 0))
+        TicketCierre.objects.create(
+            ticket=ticket,
+            fecha_inicio=timezone.make_aware(datetime(2026, 9, 1, 8, 0, 0)),
+            fecha_cierre=fecha_cierre,
+            diagnostico="Dx local",
+            actividades="Act local",
+            observaciones="Obs local",
+        )
+        ticket.estatus = Ticket.ESTATUS_CERRADO
+        ticket.fecha_cierre = fecha_cierre
+        ticket.save(update_fields=["estatus", "fecha_cierre"])
+
+        # El SIG ya reporta el mismo cierre (fecha + campos).
+        aplicar_tickets(self._filas_basicas([
+            _fila_con_cierre(1, "SS26-0402", cierro="2026-09-02 12:00:00",
+                             diagnostico="Dx local", actividades="Act local",
+                             observaciones="Obs local"),
+        ]), MODO_SYNC_PARCIAL)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.estatus, Ticket.ESTATUS_CERRADO)
+        self.assertTrue(ticket.cierre_sincronizado)
+
+
+class CierreSincronizadoTests(TestCase):
+    def setUp(self):
+        self.ticket = Ticket.objects.create(ticket_id="SIG-1", numero="SS26-0900")
+
+    def _con_cierre(self, **campos):
+        TicketCierre.objects.get_or_create(
+            ticket=self.ticket,
+            defaults={
+                "fecha_inicio": timezone.make_aware(datetime(2026, 9, 1, 8, 0, 0)),
+                "fecha_cierre": timezone.make_aware(datetime(2026, 9, 2, 15, 30, 0)),
+                **campos,
+            },
+        )
+        self.ticket.estatus = Ticket.ESTATUS_CERRADO
+        self.ticket.save(update_fields=["estatus"])
+
+    def test_sin_cierre_local_es_sincronizado(self):
+        self.assertTrue(self.ticket.cierre_sincronizado)
+
+    def test_esta_cerrado_solo_por_estatus_sig(self):
+        self.ticket.estatus = Ticket.ESTATUS_CERRADO
+        self.assertTrue(self.ticket.esta_cerrado)
+        self.ticket.estatus = Ticket.ESTATUS_ABIERTO
+        self.ticket.save(update_fields=["estatus"])
+        self.assertFalse(self.ticket.esta_cerrado)
+
+    def test_esta_cerrado_con_cierre_local_pendiente_de_sig(self):
+        TicketCierre.objects.create(
+            ticket=self.ticket,
+            fecha_inicio=timezone.make_aware(datetime(2026, 9, 1, 8, 0, 0)),
+            fecha_cierre=timezone.make_aware(datetime(2026, 9, 2, 15, 30, 0)),
+            diagnostico="Dx", actividades="Act", observaciones="Obs",
+        )
+        self.ticket.estatus = Ticket.ESTATUS_ABIERTO
+        self.ticket.save(update_fields=["estatus"])
+        self.assertTrue(self.ticket.esta_cerrado)
+        self.assertFalse(self.ticket.cierre_sincronizado)
+
+    def test_empate_completo_por_dia(self):
+        self._con_cierre(
+            diagnostico="Dx", actividades="Act", observaciones="Obs",
+        )
+        self.ticket.raw_data = {
+            "cerro_fecha": "2026-09-02 12:00:00",
+            "Diagnostico": "Dx",
+            "Actividades": "Act",
+            "Observaciones": "Obs",
+        }
+        self.ticket.save(update_fields=["raw_data"])
+        self.assertTrue(self.ticket.cierre_sincronizado)
+
+    def test_sig_sin_cerro_fecha_queda_pendiente(self):
+        self._con_cierre(
+            diagnostico="Dx", actividades="Act", observaciones="Obs",
+        )
+        self.ticket.raw_data = {
+            "Diagnostico": "Dx",
+            "Actividades": "Act",
+            "Observaciones": "Obs",
+        }
+        self.ticket.save(update_fields=["raw_data"])
+        self.assertFalse(self.ticket.cierre_sincronizado)
+
+    def test_campos_diferentes_quedan_pendiente(self):
+        self._con_cierre(
+            diagnostico="Dx local", actividades="Act", observaciones="Obs",
+        )
+        self.ticket.raw_data = {
+            "cerro_fecha": "2026-09-02 12:00:00",
+            "Diagnostico": "Dx SIG",
+            "Actividades": "Act",
+            "Observaciones": "Obs",
+        }
+        self.ticket.save(update_fields=["raw_data"])
+        self.assertFalse(self.ticket.cierre_sincronizado)
+
+    def test_fecha_diferente_queda_pendiente(self):
+        self._con_cierre(
+            diagnostico="Dx", actividades="Act", observaciones="Obs",
+        )
+        self.ticket.raw_data = {
+            "cerro_fecha": "2026-09-03 12:00:00",
+            "Diagnostico": "Dx",
+            "Actividades": "Act",
+            "Observaciones": "Obs",
+        }
+        self.ticket.save(update_fields=["raw_data"])
+        self.assertFalse(self.ticket.cierre_sincronizado)
 
 
 class VistaTicketsTests(TestCase):
@@ -482,7 +636,7 @@ class FasesProcesoTests(TestCase):
         self.assertEqual(respuesta.status_code, 302)
         self.assertEqual(t.registros.count(), 0)
 
-    def test_registrar_seguimiento_guarda_y_muestra(self):
+    def test_registrar_seguimiento_guarda(self):
         t = self._crear(1, "SS26-0609")
         respuesta = self.client.post(
             reverse("enlaces_ccg:ticket_registrar", args=[t.pk]),
@@ -493,14 +647,6 @@ class FasesProcesoTests(TestCase):
         self.assertIsNotNone(registro)
         self.assertEqual(registro.usuario, self.usuario)
         self.assertEqual(registro.descripcion, "Avancé con la atención")
-
-        detalle = self.client.get(
-            reverse("enlaces_ccg:ticket_detalle", args=[t.pk])
-        )
-        html = detalle.content.decode("utf-8", "replace")
-        self.assertIn("Avancé con la atención", html)
-        self.assertIn("Registrar seguimiento", html)
-        self.assertIn("Comentarios del servicio", html)
 
 
 class ProximaSincronizacionTests(TestCase):
@@ -851,7 +997,9 @@ class VinculacionVistasTests(TestCase):
         self.assertIn("Falla Uno", html)
         self.assertIn("?nivel=", html)
         self.assertIn("?servicio=", html)
-        self.assertIn("Detalle del SIG", html)
+        self.assertNotIn("Detalle del SIG", html)
+        self.assertNotIn("Comentarios del servicio", html)
+        self.assertNotIn("Registrar seguimiento", html)
 
     def test_ficha_enlace_muestra_pestanas_y_tickets(self):
         html = self.client.get(

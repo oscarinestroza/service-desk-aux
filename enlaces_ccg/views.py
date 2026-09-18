@@ -19,8 +19,10 @@ from django.db import models
 from django.db.models import Count, F, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from urllib.parse import quote
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 from openpyxl import load_workbook
 from openpyxl import Workbook
@@ -33,10 +35,12 @@ from .models import (
     Falla,
     Institucion, InstitucionEdificio, Nivel, ResponsableAtencion, Seccion,
     Servicio, Ticket,
+    TicketAdjunto, TicketCierre,
     TicketRegistro,
 )
 from .roles import (
     CAP_ADMIN,
+    CAP_ATENDER,
     CAP_DIRECTORIO,
     CAP_EDITAR,
     CAP_IMPORTAR,
@@ -566,7 +570,7 @@ def ticket_detalle(request, pk):
 
 @requiere(CAP_TICKETS)
 def ticket_json(request, pk):
-    """Datos del ticket para el modal de acciones (JSON)."""
+    """Datos del ticket para el modal de acciones (JSON + HTML renderizado)."""
     t = get_object_or_404(Ticket, pk=pk)
     return JsonResponse(
         {
@@ -586,7 +590,13 @@ def ticket_json(request, pk):
                 t.ultima_sync.strftime("%d/%m/%Y %H:%M") if t.ultima_sync else ""
             ),
             "raw_data": t.raw_data,
+            "puede_atender": tiene(request.user, CAP_ATENDER),
             "url_detalle": reverse("enlaces_ccg:ticket_detalle", args=[t.pk]),
+            "html": render_to_string(
+                "enlaces_ccg/_modal_ticket.html",
+                {"ticket": t},
+                request=request,
+            ),
         }
     )
 
@@ -622,6 +632,133 @@ def registrar_seguimiento(request, pk):
         )
         messages.success(request, "Seguimiento registrado correctamente.")
     return redirect("enlaces_ccg:ticket_detalle", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Cierre de tickets (página móvil)
+# ---------------------------------------------------------------------------
+def _parsear_datetime_local(valor):
+    """Parsea `datetime-local` HTML (YYYY-MM-DDTHH:MM) → datetime o None."""
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    try:
+        return timezone.make_aware(datetime.strptime(valor, "%Y-%m-%dT%H:%M"))
+    except ValueError:
+        return None
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def guardar_cierre_ticket(request, pk):
+    """Guarda (o actualiza) el cierre de un ticket."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    fecha_inicio = _parsear_datetime_local(request.POST.get("fecha_inicio") or "")
+    fecha_cierre = _parsear_datetime_local(request.POST.get("fecha_cierre") or "")
+    cierre, creado = TicketCierre.objects.get_or_create(ticket=ticket)
+    cierre.fecha_inicio = fecha_inicio or cierre.fecha_inicio
+    cierre.fecha_cierre = fecha_cierre or cierre.fecha_cierre
+    cierre.diagnostico = request.POST.get("diagnostico", "").strip()
+    cierre.actividades = request.POST.get("actividades", "").strip()
+    cierre.observaciones = request.POST.get("observaciones", "").strip()
+    cierre.observaciones_usuario = request.POST.get(
+        "observaciones_usuario", ""
+    ).strip()
+    cierre.actualizado_por = request.user
+    if creado:
+        cierre.creado_por = request.user
+    cierre.save()
+
+    for archivo in request.FILES.getlist("adjuntos"):
+        TicketAdjunto.objects.create(
+            ticket=ticket, archivo=archivo, subido_por=request.user
+        )
+
+    ticket.estatus = Ticket.ESTATUS_CERRADO
+    if fecha_cierre:
+        ticket.fecha_cierre = fecha_cierre
+    ticket.save(update_fields=["estatus", "fecha_cierre", "actualizado_en"])
+
+    if creado:
+        messages.success(request, "Cierre registrado correctamente.")
+    else:
+        messages.success(request, "Cierre actualizado correctamente.")
+    return redirect("enlaces_ccg:ticket_detalle", pk=pk)
+
+
+@requiere(CAP_ATENDER)
+def cerrar_ticket(request, pk):
+    """Página de cierre de un ticket (crear o editar)."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    cierre = getattr(ticket, "cierre", None)
+    return render(
+        request,
+        "enlaces_ccg/ticket_cierre.html",
+        {"ticket": ticket, "cierre": cierre},
+    )
+
+
+@requiere(CAP_ATENDER)
+def ticket_adjuntos_json(request, pk):
+    """Lista los adjuntos del cierre de un ticket."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    adjuntos = []
+    for adj in ticket.cierre_adjuntos.all():
+        adjuntos.append({
+            "id": adj.pk,
+            "nombre": adj.nombre or adj.archivo.name.split("/")[-1],
+            "archivo_url": adj.archivo.url,
+            "archivo_nombre": adj.archivo.name.split("/")[-1],
+            "tamano": adj.tamano_legible,
+            "icono": adj.icono,
+            "subido_en": adj.subido_en.strftime("%d/%m/%Y %H:%M"),
+        })
+    return JsonResponse({"adjuntos": adjuntos})
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def subir_ticket_adjunto(request, pk):
+    """Sube un adjunto al cierre de un ticket."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "No autenticado"}, status=403)
+    ticket = get_object_or_404(Ticket, pk=pk)
+    archivo = request.FILES.get("archivo")
+    if not archivo:
+        return JsonResponse(
+            {"ok": False, "error": "No se envió ningún archivo"}, status=400
+        )
+    adjunto = TicketAdjunto.objects.create(
+        ticket=ticket, archivo=archivo, subido_por=request.user
+    )
+    return JsonResponse({
+        "ok": True,
+        "adjunto": {
+            "id": adjunto.pk,
+            "nombre": adjunto.nombre or adjunto.archivo.name.split("/")[-1],
+            "archivo_url": adjunto.archivo.url,
+            "archivo_nombre": adjunto.archivo.name.split("/")[-1],
+            "tamano": adjunto.tamano_legible,
+            "icono": adjunto.icono,
+            "subido_en": adjunto.subido_en.strftime("%d/%m/%Y %H:%M"),
+        },
+    })
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def eliminar_ticket_adjunto(request, pk, adjunto_id):
+    """Elimina un adjunto del cierre de un ticket."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "No autenticado"}, status=403)
+    adjunto = get_object_or_404(TicketAdjunto, pk=adjunto_id, ticket__pk=pk)
+    archivo = adjunto.archivo
+    adjunto.delete()
+    try:
+        archivo.delete(save=False)
+    except Exception:
+        pass
+    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -789,7 +926,7 @@ def permisos_grupo(request, pk):
 
     caps_por_seccion = {
         "directorio": ["directorio", "editar"],
-        "tickets": ["tickets"],
+        "tickets": ["tickets", "atender"],
         "importar": ["importar"],
         "revisiones": ["revisiones"],
     }

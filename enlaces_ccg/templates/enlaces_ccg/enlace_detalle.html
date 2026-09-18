@@ -475,7 +475,7 @@
                                     <td>{{ c.Responsable_atencion|default:"—" }}</td>
                                     <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
                                     <td>
-                                        {% if t.estatus == 'CERRADO' %}
+                                        {% if t.esta_cerrado %}
                                         <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
                                         {% else %}
                                         <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
@@ -514,21 +514,23 @@
 </div>
 {% endwith %}
 
-<div class="modal fade" id="modalTicket" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
+<div class="modal fade modal-ccg" id="modalTicket" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-ticket-alt me-2 text-primary"></i>Detalle del ticket
+                    <i class="fas fa-ticket-alt me-2"></i>Detalle del Ticket
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body" id="modalTicketContenido"></div>
+            <div class="modal-body" id="modalTicketContenido" style="padding:16px;"></div>
             <div class="modal-footer">
                 <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
                     <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
                 </a>
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
             </div>
         </div>
     </div>
@@ -596,7 +598,7 @@ document.querySelectorAll('.nav-tabs button[data-bs-toggle="tab"]').forEach(func
             fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(function (d) {
-                    cuerpo.innerHTML = render(d);
+                    cuerpo.innerHTML = d.html || render(d);
                     enlace.href = d.url_detalle;
                 })
                 .catch(function () {

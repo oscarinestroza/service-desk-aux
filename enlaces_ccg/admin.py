@@ -26,6 +26,8 @@ from .models import (
     Servicio,
     SyncLog,
     Ticket,
+    TicketAdjunto,
+    TicketCierre,
     TicketLog,
     TicketRegistro,
 )
@@ -649,6 +651,27 @@ class TicketRegistroAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(TicketCierre)
+class TicketCierreAdmin(admin.ModelAdmin):
+    list_display = (
+        "ticket",
+        "fecha_inicio",
+        "fecha_cierre",
+        "actualizado_por",
+        "actualizado_en",
+    )
+    list_filter = ("actualizado_en",)
+    search_fields = ("ticket__numero_display", "ticket__numero", "ticket__ticket_id")
+    readonly_fields = ("creado_en", "actualizado_en", "creado_por", "actualizado_por")
+
+
+@admin.register(TicketAdjunto)
+class TicketAdjuntoAdmin(admin.ModelAdmin):
+    list_display = ("ticket", "nombre", "subido_en", "subido_por")
+    search_fields = ("ticket__numero_display", "ticket__numero", "nombre")
+    readonly_fields = ("subido_en", "subido_por")
 
 
 # ---------------------------------------------------------------------------

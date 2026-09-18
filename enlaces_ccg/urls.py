@@ -174,6 +174,31 @@ urlpatterns = [
         name="ticket_registrar",
     ),
     path(
+        "tickets/cerrar/<int:pk>/",
+        views.cerrar_ticket,
+        name="ticket_cerrar",
+    ),
+    path(
+        "tickets/cerrar/<int:pk>/guardar/",
+        views.guardar_cierre_ticket,
+        name="ticket_cierre_guardar",
+    ),
+    path(
+        "tickets/cerrar/<int:pk>/adjuntos/",
+        views.ticket_adjuntos_json,
+        name="ticket_adjuntos_json",
+    ),
+    path(
+        "tickets/cerrar/<int:pk>/adjuntos/subir/",
+        views.subir_ticket_adjunto,
+        name="ticket_subir_adjunto",
+    ),
+    path(
+        "tickets/cerrar/<int:pk>/adjuntos/<int:adjunto_id>/eliminar/",
+        views.eliminar_ticket_adjunto,
+        name="ticket_eliminar_adjunto",
+    ),
+    path(
         "tickets/<str:numero>/",
         views.ticket_por_numero,
         name="ticket_por_numero",
