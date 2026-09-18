@@ -56,102 +56,175 @@
                 <strong><i class="fas fa-file-alt me-1"></i>Información general</strong>
             </div>
             <div class="card-body">
+                {% with c=ticket.raw_data %}
                 <div class="row g-3 small">
-                    <div class="col-md-4">
+                    <div class="col-md-6">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Número</dt>
+                            <dd class="col-7">{{ ticket.numero }}</dd>
+                            <dt class="col-5 text-muted">Falla</dt>
+                            <dd class="col-7">{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
                         <dl class="row mb-0">
                             <dt class="col-5 text-muted">ID de solicitud</dt>
                             <dd class="col-7">{{ ticket.ticket_id }}</dd>
-                            <dt class="col-5 text-muted">Número</dt>
-                            <dd class="col-7">{{ ticket.numero }}</dd>
-                            <dt class="col-5 text-muted">Fecha</dt>
-                            <dd class="col-7">{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
-                            <dt class="col-5 text-muted">Fecha de cierre</dt>
-                            <dd class="col-7">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
-                        </dl>
-                    </div>
-                    <div class="col-md-4">
-                        <dl class="row mb-0">
-                            <dt class="col-5 text-muted">Edificio</dt>
-                            <dd class="col-7">
-                                {% if ticket.torre %}
-                                <a href="{% url 'enlaces_ccg:detalle_edificio' ticket.torre.pk %}">{{ ticket.torre.nombre }}</a>
-                                {% else %}{{ ticket.raw_data.nivel|default:"—" }}{% endif %}
-                            </dd>
-                            <dt class="col-5 text-muted">Nivel</dt>
-                            <dd class="col-7">
-                                {% if ticket.nivel %}
-                                <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}?nivel={{ ticket.nivel_id }}">{{ ticket.nivel.nombre }}</a>
-                                {% else %}{{ ticket.raw_data.grupo|default:"—" }}{% endif %}
-                            </dd>
                             <dt class="col-5 text-muted">Servicio</dt>
                             <dd class="col-7">
                                 {% if ticket.servicio %}
                                 <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}?servicio={{ ticket.servicio_id }}">{{ ticket.servicio.nombre }}</a>
-                                {% else %}{{ ticket.raw_data.servicio|default:"—" }}{% endif %}
+                                {% else %}{{ c.servicio|default:"—" }}{% endif %}
                             </dd>
-                            <dt class="col-5 text-muted">Falla</dt>
-                            <dd class="col-7">{{ ticket.falla.descripcion|default:ticket.raw_data.falla_descripcion|default:"—" }}</dd>
-                        </dl>
-                    </div>
-                    <div class="col-md-4">
-                        <dl class="row mb-0">
-                            <dt class="col-5 text-muted">Solicitante</dt>
-                            <dd class="col-7">
-                                {% if ticket.solicitante %}
-                                    {{ ticket.solicitante.nombre_sig }}
-                                    {% if ticket.institucion %}
-                                    (<a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.siglas|default:ticket.institucion.nombre }}</a>)
-                                    {% endif %}
-                                {% else %}{{ ticket.solicitante_nombre|default:ticket.raw_data.solicitud_solicitante|default:"—" }}{% endif %}
-                            </dd>
-                            <dt class="col-5 text-muted">Institución</dt>
-                            <dd class="col-7">
-                                {% if ticket.institucion %}
-                                <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.nombre_completo }}</a>
-                                {% else %}—{% endif %}
-                            </dd>
-                            <dt class="col-5 text-muted">Archivado</dt>
-                            <dd class="col-7">{{ ticket.archivado|yesno:"Sí,No" }}</dd>
-                            <dt class="col-5 text-muted">Última sync</dt>
-                            <dd class="col-7">{% if ticket.ultima_sync %}{{ ticket.ultima_sync|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
                         </dl>
                     </div>
                 </div>
                 <hr class="my-2">
                 <strong class="small">Descripción</strong>
                 <p class="mb-0 mt-1">{{ ticket.descripcion|default:"—" }}</p>
+                {% endwith %}
             </div>
         </div>
         <div class="card border-0 shadow-sm mt-3">
             <div class="card-header bg-white py-2">
-                <strong><i class="fas fa-clipboard-list me-1"></i>Detalle del SIG</strong>
+                <strong><i class="fas fa-door-open me-1"></i>Detalle de apertura</strong>
+            </div>
+            <div class="card-body">
+                {% with c=ticket.raw_data %}
+                <div class="row g-3 small">
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Tipo de recepción</dt>
+                            <dd class="col-7">
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                {{ c.TipoRecepcion|default:"—" }}
+                                </span>
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Hora de recepción</dt>
+                            <dd class="col-7">
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                {% if c.Fecha_TipoRecepcion %}{{ c.Fecha_TipoRecepcion }}{% else %}—{% endif %}
+                                </span>
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Hora de apertura</dt>
+                            <dd class="col-7">{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                        </dl>
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-user me-1"></i>Detalle de solicitante</strong>
+            </div>
+            <div class="card-body">
+                {% with c=ticket.raw_data %}
+                <div class="row g-3 small">
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Solicitante</dt>
+                            <dd class="col-7">
+                                {% if ticket.solicitante %}
+                                <a href="{% url 'enlaces_ccg:enlace_detalle' ticket.solicitante.pk %}"
+                                   title="Ver ficha del enlace">{{ ticket.solicitante.nombre_sig }}</a>
+                                {% else %}{{ ticket.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-8">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Institución</dt>
+                            <dd class="col-7">
+                                {% if ticket.institucion %}
+                                <a href="{% url 'enlaces_ccg:perfil_institucion' ticket.institucion.pk %}">{{ ticket.institucion.nombre_completo }}</a>
+                                {% else %}—{% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-map-marker-alt me-1"></i>Detalle de ubicación</strong>
+            </div>
+            <div class="card-body">
+                {% with c=ticket.raw_data %}
+                <div class="row g-3 small">
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Edificio</dt>
+                            <dd class="col-7">
+                                {% if ticket.torre %}
+                                <a href="{% url 'enlaces_ccg:detalle_edificio' ticket.torre.pk %}">{{ ticket.torre.nombre }}</a>
+                                {% else %}{{ c.nivel|default:"—" }}{% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Nivel</dt>
+                            <dd class="col-7">
+                                {% if ticket.nivel %}
+                                <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}?nivel={{ ticket.nivel_id }}">{{ ticket.nivel.nombre }}</a>
+                                {% else %}{{ c.grupo|default:"—" }}{% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-4">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Unidad funcional</dt>
+                            <dd class="col-7">{{ c.unidad|default:"—" }}</dd>
+                        </dl>
+                    </div>
+                </div>
+                {% endwith %}
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-user-cog me-1"></i>Detalle de atención</strong>
             </div>
             <div class="card-body">
                 {% with c=ticket.raw_data %}
                 <dl class="row mb-0 small">
-                    <dt class="col-sm-3 text-muted">Área</dt>
-                    <dd class="col-sm-9">{{ c.area|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Fecha de cierre</dt>
-                    <dd class="col-sm-9">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i:s" }}{% else %}{{ c.cerro_fecha|default:"—" }}{% endif %}</dd>
-                    <dt class="col-sm-3 text-muted">Subservicio</dt>
-                    <dd class="col-sm-9">{{ c.subservicio|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Tipo de recepción</dt>
-                    <dd class="col-sm-9">{{ c.TipoRecepcion|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Observaciones</dt>
-                    <dd class="col-sm-9">{{ c.Observaciones|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Categoría de falla</dt>
-                    <dd class="col-sm-9">{{ c.Categoria_Falla|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Clasificación de falla</dt>
-                    <dd class="col-sm-9">{{ c.Clasificacion_Falla|default:"—" }}</dd>
-                    <dt class="col-sm-3 text-muted">Observaciones del usuario</dt>
-                    <dd class="col-sm-9">{{ c.ObservacionesUsuario|default:"—" }}</dd>
+                    <dt class="col-sm-3 text-muted">Responsable de atención</dt>
+                    <dd class="col-sm-9">{% if ticket.responsable_atencion %}{{ ticket.responsable_atencion.nombre }}{% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}</dd>
                     <dt class="col-sm-3 text-muted">Diagnóstico</dt>
                     <dd class="col-sm-9">{{ c.Diagnostico|default:"—" }}</dd>
                     <dt class="col-sm-3 text-muted">Actividades</dt>
                     <dd class="col-sm-9">{{ c.Actividades|default:"—" }}</dd>
+                    <dt class="col-sm-3 text-muted">Observaciones</dt>
+                    <dd class="col-sm-9">{{ c.Observaciones|default:"—" }}</dd>
+                    <dt class="col-sm-3 text-muted">Observaciones del usuario</dt>
+                    <dd class="col-sm-9">{{ c.ObservacionesUsuario|default:"—" }}</dd>
                 </dl>
                 {% endwith %}
             </div>
+        </div>
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-lock me-1"></i>Detalle de cierre</strong>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-sm-3 text-muted">Fecha de cierre</dt>
+                    <dd class="col-sm-9">{% if ticket.fecha_cierre %}{{ ticket.fecha_cierre|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="d-grid mt-3">
+            <button type="button" class="btn btn-success">Atender</button>
         </div>
     </div>
     <div class="col-lg-4">
@@ -191,34 +264,6 @@
         </div>
         <div class="card border-0 shadow-sm mt-3">
             <div class="card-header bg-white py-2">
-                <strong><i class="fas fa-comment-dots me-1"></i>Comentarios del servicio</strong>
-            </div>
-            <div class="card-body py-3">
-                {% with co=ticket.comentarios_servicio %}
-                <dl class="row small mb-2">
-                    <dt class="col-5 text-muted">Observaciones</dt>
-                    <dd class="col-7">{{ co.observaciones|default:"—" }}</dd>
-                    <dt class="col-5 text-muted">Observaciones del usuario</dt>
-                    <dd class="col-7">{{ co.observaciones_usuario|default:"—" }}</dd>
-                </dl>
-                <div class="alert alert-info border-0 py-2 mb-0 small">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
-                        <div>
-                            <i class="fas fa-lightbulb me-1"></i>
-                            <strong>Sugerencia de respuesta al enlace:</strong>
-                            <span id="sugerenciaTexto">{{ co.sugerencia }}</span>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0"
-                                id="btnCopiarSugerencia" title="Copiar sugerencia">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                    </div>
-                </div>
-                {% endwith %}
-            </div>
-        </div>
-        <div class="card border-0 shadow-sm mt-3">
-            <div class="card-header bg-white py-2">
                 <strong><i class="fas fa-clipboard-check me-1"></i>Registrar seguimiento</strong>
             </div>
             <div class="card-body py-3">
@@ -247,34 +292,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-    var boton = document.getElementById('btnCopiarSugerencia');
-    var textoEl = document.getElementById('sugerenciaTexto');
-    if (!boton || !textoEl) return;
-    boton.addEventListener('click', function () {
-        var texto = textoEl.textContent.trim();
-        var listo = function () {
-            boton.innerHTML = '<i class="fas fa-check"></i>';
-            setTimeout(function () {
-                boton.innerHTML = '<i class="fas fa-copy"></i>';
-            }, 1500);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(texto).then(listo);
-            return;
-        }
-        var area = document.createElement('textarea');
-        area.value = texto;
-        document.body.appendChild(area);
-        area.select();
-        document.execCommand('copy');
-        document.body.removeChild(area);
-        listo();
-    });
-})();
-</script>
 {% endblock %}

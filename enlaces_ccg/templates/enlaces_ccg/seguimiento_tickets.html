@@ -225,10 +225,8 @@
                             </td>
                             <td>
                                 {% if t.solicitante %}
-                                    {% if t.institucion %}
-                                    <a href="{% url 'enlaces_ccg:perfil_institucion' t.institucion.pk %}"
-                                       title="Institución: {{ t.institucion.nombre }}">{{ t.solicitante.nombre_sig }}</a>
-                                    {% else %}{{ t.solicitante.nombre_sig }}{% endif %}
+                                    <a href="{% url 'enlaces_ccg:enlace_detalle' t.solicitante.pk %}"
+                                       title="Ver ficha del enlace">{{ t.solicitante.nombre_sig }}</a>
                                 {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
                             </td>
                             <td>
