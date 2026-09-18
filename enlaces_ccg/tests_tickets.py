@@ -32,6 +32,7 @@ from .sig_sync.tickets import (
     _registrar_resultado,
     aplicar_tickets,
     parsear_excel_tickets,
+    tick_sync_tickets_task,
 )
 
 ENCABEZADOS = [
@@ -585,6 +586,93 @@ class RegistroResultadoTests(TestCase):
         self.assertEqual(self.cfg.ultimo_estado, "ERROR")
         self.assertEqual(TicketLog.objects.count(), 1)
         log_mock.assert_called_once()
+
+
+class EnHorarioTests(TestCase):
+    """`ConfiguracionTickets.en_horario` / `proximo_inicio_horario`."""
+
+    def setUp(self):
+        self.cfg = ConfiguracionTickets.cargar()
+        self.cfg.hora_inicio = time(7, 0)
+        self.cfg.hora_fin = time(19, 0)
+        self.cfg.dias_semana = []
+
+    def _local(self, *args):
+        return timezone.make_aware(datetime(*args), timezone.get_current_timezone())
+
+    def test_dentro(self):
+        # 2026-09-18 es viernes; 12:00 local
+        self.assertTrue(self.cfg.en_horario(self._local(2026, 9, 18, 12, 0)))
+
+    def test_fuera_antes(self):
+        self.assertFalse(self.cfg.en_horario(self._local(2026, 9, 18, 6, 59)))
+
+    def test_fuera_despues(self):
+        self.assertFalse(self.cfg.en_horario(self._local(2026, 9, 18, 19, 0)))
+
+    def test_sin_limites(self):
+        self.cfg.hora_inicio = None
+        self.cfg.hora_fin = None
+        self.assertTrue(self.cfg.en_horario(self._local(2026, 9, 18, 3, 0)))
+
+    def test_dia_no_permitido(self):
+        self.cfg.dias_semana = [0, 1, 2, 3, 4]  # lunes a viernes
+        # 2026-09-19 es sábado
+        self.assertFalse(self.cfg.en_horario(self._local(2026, 9, 19, 12, 0)))
+        # 2026-09-18 es viernes
+        self.assertTrue(self.cfg.en_horario(self._local(2026, 9, 18, 12, 0)))
+
+    def test_proximo_inicio_hoy(self):
+        ahora = self._local(2026, 9, 18, 6, 0)
+        prox = self.cfg.proximo_inicio_horario(ahora)
+        self.assertEqual(prox, self._local(2026, 9, 18, 7, 0))
+
+    def test_proximo_inicio_manana(self):
+        ahora = self._local(2026, 9, 18, 20, 0)
+        prox = self.cfg.proximo_inicio_horario(ahora)
+        self.assertEqual(prox, self._local(2026, 9, 19, 7, 0))
+
+
+class TickHorarioTests(TestCase):
+    """El tick solo sincroniza el parcial dentro del horario."""
+
+    def setUp(self):
+        self.cfg = ConfiguracionTickets.cargar()
+        self.cfg.habilitado = True
+        self.cfg.intervalo_minutos = 5
+        self.cfg.descarga_completa_horas = []
+        self.cfg.hora_inicio = time(7, 0)
+        self.cfg.hora_fin = time(19, 0)
+        self.cfg.dias_semana = []
+        self.cfg.save()
+
+    def _local(self, *args):
+        return timezone.make_aware(datetime(*args), timezone.get_current_timezone())
+
+    def test_parcial_fuera_de_horario(self):
+        fijo = self._local(2026, 9, 18, 21, 0)  # 21:00 local, fuera de horario
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets.timezone.now", return_value=fijo
+        ):
+            res = tick_sync_tickets_task()
+        self.assertFalse(res["sincronizado"])
+        self.assertEqual(res["motivo"], "fuera_horario")
+
+    def test_completa_fuera_de_horario_si_corre(self):
+        self.cfg.descarga_completa_horas = ["21:00"]
+        self.cfg.save(update_fields=["descarga_completa_horas"])
+        fijo = self._local(2026, 9, 18, 21, 0)  # coincide con la hora completa
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets.timezone.now", return_value=fijo
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets._adquirir_lock", return_value=None
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets.sincronizar_tickets",
+            return_value={"creados": 0, "actualizados": 0, "archivados": 0},
+        ) as sync_mock:
+            res = tick_sync_tickets_task()
+        self.assertTrue(res["sincronizado"])
+        sync_mock.assert_called_once_with(modo=MODO_SYNC_COMPLETO)
 
 
 def _fila_v(tid, numero, solicitante="Cesar Augusto Zavala",

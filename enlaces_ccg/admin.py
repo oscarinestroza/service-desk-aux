@@ -475,8 +475,39 @@ class ConfiguracionSIGAdmin(admin.ModelAdmin):
         )
 
 
+DIAS_SEMANA_CHOICES = [
+    (0, "Lunes"), (1, "Martes"), (2, "Miércoles"), (3, "Jueves"),
+    (4, "Viernes"), (5, "Sábado"), (6, "Domingo"),
+]
+
+
+class ConfiguracionTicketsForm(forms.ModelForm):
+    """Form del singleton de tickets: `dias_semana` como checkboxes."""
+
+    dias_semana = forms.MultipleChoiceField(
+        choices=DIAS_SEMANA_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Días permitidos (parcial)",
+        help_text="Días en que corre la sincronización parcial. Vacío = todos.",
+    )
+
+    class Meta:
+        model = ConfiguracionTickets
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        valor = getattr(self.instance, "dias_semana", None) or []
+        self.initial["dias_semana"] = [str(x) for x in valor]
+
+    def clean_dias_semana(self):
+        return [int(x) for x in self.cleaned_data.get("dias_semana", [])]
+
+
 @admin.register(ConfiguracionTickets)
 class ConfiguracionTicketsAdmin(admin.ModelAdmin):
+    form = ConfiguracionTicketsForm
     list_display = (
         "habilitado", "modo_default", "intervalo_minutos", "url_reporte",
         "total_tickets", "ultima_sincronizacion",
@@ -499,11 +530,14 @@ class ConfiguracionTicketsAdmin(admin.ModelAdmin):
         ("Sincronización automática", {
             "fields": (
                 "habilitado", "modo_default", "intervalo_minutos",
+                "hora_inicio", "hora_fin", "dias_semana",
                 "descarga_completa_horas",
             ),
             "description": (
-                "El tick de Celery sincroniza parcial (rápida) cada "
-                "intervalo_minutos y completa en las horas indicadas."
+                "La sincronización PARCIAL (cada intervalo_minutos) solo corre "
+                "dentro del horario y días indicados (hora local). Vacío = sin "
+                "límite. La descarga COMPLETA usa sus horas configuradas y no "
+                "depende del horario. El botón 'Sincronizar ahora' funciona siempre."
             ),
         }),
         ("Última sincronización", {

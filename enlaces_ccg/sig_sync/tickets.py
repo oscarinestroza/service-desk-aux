@@ -852,6 +852,11 @@ def tick_sync_tickets_task():
     if es_hora_completa:
         modo = MODO_SYNC_COMPLETO
     else:
+        # La sincronización parcial solo corre dentro del horario/días
+        # configurados. La completa (arriba) no depende del horario, y el
+        # botón "Sincronizar ahora" tampoco (usa sincronizar_tickets directo).
+        if not cfg.en_horario(ahora):
+            return {"sincronizado": False, "motivo": "fuera_horario"}
         # El intervalo se mide desde el último INTENTO (aunque haya fallado),
         # para no reintentar en cada tick de 60 s tras un error.
         referencia = cfg.ultimo_intento or cfg.ultima_sincronizacion

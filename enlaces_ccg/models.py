@@ -847,6 +847,33 @@ class ConfiguracionTickets(models.Model):
         help_text="Horas del día para la descarga completa, ej. [\"07:00\", \"19:00\"].",
         verbose_name="Horas de descarga completa",
     )
+    hora_inicio = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name="Hora inicio (parcial)",
+        help_text=(
+            "Inicio del horario en que corre la sincronización parcial (hora local). "
+            "Vacío = sin límite. La descarga completa no usa este horario."
+        ),
+    )
+    hora_fin = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name="Hora fin (parcial)",
+        help_text=(
+            "Fin del horario en que corre la sincronización parcial (hora local). "
+            "Vacío = sin límite."
+        ),
+    )
+    dias_semana = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Días permitidos (parcial)",
+        help_text=(
+            "Días en que corre la sincronización parcial: 0=lunes … 6=domingo. "
+            "Vacío = todos los días."
+        ),
+    )
 
     # --- Última sincronización (información) ---
     ultima_sincronizacion = models.DateTimeField(
@@ -923,27 +950,70 @@ class ConfiguracionTickets(models.Model):
             candidatas.append(candidata)
         return candidatas
 
+    def en_horario(self, ahora=None) -> bool:
+        """True si la hora local cae dentro del horario/días configurados.
+
+        Sin `hora_inicio`/`hora_fin` devuelve True (sin límite). Soporta
+        ventanas que cruzan medianoche (p. ej. 22:00 → 06:00).
+        """
+        if self.hora_inicio is None or self.hora_fin is None:
+            return True
+        if ahora is None:
+            ahora = timezone.now()
+        local = timezone.localtime(ahora)
+        if self.dias_semana and local.weekday() not in self.dias_semana:
+            return False
+        t = local.time()
+        if self.hora_inicio <= self.hora_fin:
+            return self.hora_inicio <= t < self.hora_fin
+        return t >= self.hora_inicio or t < self.hora_fin
+
+    def proximo_inicio_horario(self, ahora=None):
+        """Próximo datetime (aware) en que arranca la ventana de sincronización."""
+        if ahora is None:
+            ahora = timezone.now()
+        if self.hora_inicio is None or self.hora_fin is None:
+            return ahora
+        tz = timezone.get_current_timezone()
+        local = timezone.localtime(ahora)
+        for delta in range(0, 8):
+            fecha = (local + timedelta(days=delta)).date()
+            if self.dias_semana and fecha.weekday() not in self.dias_semana:
+                continue
+            candidata = timezone.make_aware(
+                datetime.combine(fecha, self.hora_inicio), tz
+            )
+            if candidata > ahora:
+                return candidata
+        return ahora
+
     def proxima_sincronizacion(self, ahora=None):
         """Momento previsto de la próxima sincronización automática (o None).
 
         Refleja la lógica de tick_sync_tickets_task: descarga completa cuando
-        coincida una hora de descarga_completa_horas; si no, parcial cada
-        intervalo_minutos desde la última sincronización.
+        coincida una hora de descarga_completa_horas (sin horario); si no,
+        parcial cada intervalo_minutos, solo dentro del horario configurado.
         """
         if not self.habilitado:
             return None
         if ahora is None:
             ahora = timezone.now()
-        referencia = self.ultimo_intento or self.ultima_sincronizacion
-        if referencia:
-            parcial = referencia + timedelta(minutes=self.intervalo_minutos or 5)
+        candidatas = []
+        if self.en_horario(ahora):
+            referencia = self.ultimo_intento or self.ultima_sincronizacion
+            if referencia:
+                parcial = referencia + timedelta(
+                    minutes=self.intervalo_minutos or 5
+                )
+            else:
+                parcial = ahora
+            # Si el parcial ya venció, la próxima es inmediata.
+            if parcial < ahora:
+                parcial = ahora
+            candidatas.append(parcial)
         else:
-            parcial = ahora
-        # Si el parcial ya venció, la próxima es inmediata (no saltar a la
-        # hora de descarga completa, que puede estar a horas de distancia).
-        if parcial < ahora:
-            parcial = ahora
-        candidatas = [parcial]
+            candidatas.append(self.proximo_inicio_horario(ahora))
+        # Las horas de descarga completa no dependen del horario.
         candidatas.extend(self._siguiente_hora(self.descarga_completa_horas, ahora))
         return min(candidatas) if candidatas else ahora
 

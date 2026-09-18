@@ -661,6 +661,7 @@ def sincronizacion_estado(request):
             "proxima_sincronizacion": proxima_ts,
             "sincronizando": _lock_activo(),
             "habilitado": cfg.habilitado,
+            "en_horario": cfg.en_horario(),
             "ultimo_estado": cfg.ultimo_estado or "",
             "ultimo_mensaje": cfg.ultimo_mensaje or "",
         }

@@ -317,6 +317,7 @@
 
     var estadoServidor = '';
     var sincronizando = false;
+    var enHorario = true;
     var ultimaConsulta = 0;
 
     var formatearHace = function (seg) {
@@ -347,15 +348,18 @@
 
     // Círculo de estado:
     //   - pulsante azul: actualización en progreso.
+    //   - gris: fuera de horario (se puede sincronizar manualmente).
+    //   - gris: la BD tiene registros más nuevos; hay que refrescar.
     //   - verde: esta página ya tiene los últimos registros de la BD.
-    //   - gris: la BD tiene registros más nuevos; hay que refrescar la página.
     var pintarDot = function () {
         if (!dot) return;
         var clase = 'ccg-sync-dot';
         var texto = '';
         if (sincronizando) {
             clase += ' ccg-dot-sync';
-            texto = 'Actualización en Progreso';
+            texto = 'Actualización en progreso';
+        } else if (!enHorario) {
+            texto = 'Fuera de Horario (Puedes realizar la sincronización manual)';
         } else if (ultimaServidor === null) {
             texto = 'Sin sincronizar';
         } else if (ultimaServidor > baselineUltima) {
@@ -382,6 +386,7 @@
                     ? null : Math.floor(s.ultima_sincronizacion);
                 estadoServidor = s.ultimo_estado || '';
                 sincronizando = (s.sincronizando === true);
+                enHorario = (s.en_horario !== false);
                 pintarBadge();
                 pintarDot();
             })
