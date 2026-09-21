@@ -106,7 +106,7 @@
                     <select name="institucion" class="form-select form-select-sm ccg-select-busqueda">
                         <option value="">Todas</option>
                         {% for inst in instituciones %}
-                        <option value="{{ inst.pk }}" {% if institucion_id == inst.pk %}selected{% endif %}>{{ inst.nombre }}</option>
+                        <option value="{{ inst.pk }}" {% if institucion_id == inst.pk %}selected{% endif %} data-siglas="{{ inst.siglas|default:'' }}">{{ inst.nombre }}</option>
                         {% endfor %}
                     </select>
                 </div>

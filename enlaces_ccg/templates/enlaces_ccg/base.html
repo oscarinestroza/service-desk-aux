@@ -2094,7 +2094,22 @@ let contactoContenido = `
                 var b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'list-group-item list-group-item-action py-1 px-2 small';
-                b.textContent = opt.textContent.trim() || 'Todos';
+                var base = opt.textContent.trim();
+                var siglas = (opt.dataset.siglas || '').trim();
+                if (siglas) {
+                    var fila = document.createElement('div');
+                    fila.className = 'd-flex align-items-center justify-content-between gap-2';
+                    var etiqueta = document.createElement('span');
+                    etiqueta.textContent = base || 'Todos';
+                    fila.appendChild(etiqueta);
+                    var badge = document.createElement('span');
+                    badge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle';
+                    badge.textContent = siglas;
+                    fila.appendChild(badge);
+                    b.appendChild(fila);
+                } else {
+                    b.textContent = base || 'Todos';
+                }
                 if (multiple) {
                     if (opt.selected) b.classList.add('active');
                     b.addEventListener('click', function () {
@@ -2111,7 +2126,7 @@ let contactoContenido = `
                     });
                 }
                 lista.appendChild(b);
-                items.push({ el: b, texto: normalizar(opt.textContent) });
+                items.push({ el: b, texto: normalizar(base + ' ' + siglas) });
             });
             modal.show();
         };

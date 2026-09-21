@@ -524,13 +524,23 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body" id="modalTicketContenido" style="padding:16px;"></div>
-            <div class="modal-footer">
-                <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                    <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
-                </a>
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cerrar
-                </button>
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modalTicketAnterior" title="Ticket anterior" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="modalTicketSiguiente" title="Siguiente ticket" disabled>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                        <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
+                    </a>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cerrar
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -560,6 +570,20 @@ document.querySelectorAll('.nav-tabs button[data-bs-toggle="tab"]').forEach(func
     var modal = new bootstrap.Modal(modalEl);
     var cuerpo = document.getElementById('modalTicketContenido');
     var enlace = document.getElementById('modalTicketEnlace');
+    var btnAnterior = document.getElementById('modalTicketAnterior');
+    var btnSiguiente = document.getElementById('modalTicketSiguiente');
+
+    var pks = Array.prototype.map.call(
+        document.querySelectorAll('.btn-ver-ticket'),
+        function (b) { return b.dataset.pk; }
+    );
+    var indexActual = -1;
+
+    var pintarNavegacion = function () {
+        if (!btnAnterior || !btnSiguiente) return;
+        btnAnterior.disabled = indexActual <= 0;
+        btnSiguiente.disabled = indexActual < 0 || indexActual >= pks.length - 1;
+    };
 
     var esc = function (v) {
         return (v === null || v === undefined ? '' : String(v)).replace(/[&<>"']/g, function (c) {
@@ -590,23 +614,44 @@ document.querySelectorAll('.nav-tabs button[data-bs-toggle="tab"]').forEach(func
             '<table class="table table-sm table-striped mb-0"><tbody>' + filas + '</tbody></table></div>';
     };
 
+    var cargarTicket = function (pk) {
+        var btn = document.querySelector('.btn-ver-ticket[data-pk="' + pk + '"]');
+        if (!btn) return;
+        indexActual = pks.indexOf(pk);
+        pintarNavegacion();
+        cuerpo.innerHTML = '<div class="text-center py-4">' +
+            '<div class="spinner-border text-primary" role="status"></div></div>';
+        modal.show();
+        fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (d) {
+                cuerpo.innerHTML = d.html || render(d);
+                enlace.href = d.url_detalle;
+            })
+            .catch(function () {
+                cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
+                    'No se pudieron cargar los datos del ticket.</div>';
+            });
+    };
+
     document.querySelectorAll('.btn-ver-ticket').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            cuerpo.innerHTML = '<div class="text-center py-4">' +
-                '<div class="spinner-border text-primary" role="status"></div></div>';
-            modal.show();
-            fetch(btn.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-                .then(function (d) {
-                    cuerpo.innerHTML = d.html || render(d);
-                    enlace.href = d.url_detalle;
-                })
-                .catch(function () {
-                    cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +
-                        'No se pudieron cargar los datos del ticket.</div>';
-                });
+            cargarTicket(btn.dataset.pk);
         });
     });
+
+    if (btnAnterior) {
+        btnAnterior.addEventListener('click', function () {
+            if (indexActual > 0) cargarTicket(pks[indexActual - 1]);
+        });
+    }
+    if (btnSiguiente) {
+        btnSiguiente.addEventListener('click', function () {
+            if (indexActual >= 0 && indexActual < pks.length - 1) {
+                cargarTicket(pks[indexActual + 1]);
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}
