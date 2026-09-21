@@ -9,6 +9,7 @@ Rutas:
 """
 
 import json
+import re
 from io import BytesIO
 from datetime import datetime, timedelta
 
@@ -32,7 +33,7 @@ from .models import (
     Adjunto, ComunicadoCC, ConfiguracionTickets, Documento, DocumentoCarpeta,
     Edificio,
     EnlaceAutorizado,
-    Falla,
+    Falla, extraer_kpi_falla,
     Institucion, InstitucionEdificio, Nivel, ResponsableAtencion, Seccion,
     Servicio, Ticket,
     TicketAdjunto, TicketCierre,
@@ -959,47 +960,198 @@ def aprendizaje(request):
 
 @requiere(CAP_ADMIN)
 def grupos(request):
-    """Lista los grupos (roles) y permite crear uno nuevo."""
+    """Lista los grupos (roles) y permite crear, editar y eliminar."""
+    from django.contrib.auth.models import Group
+
+    from .models import PermisoGrupo
+    from .roles import ROL_ADMIN
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "crear":
+            nombre = request.POST.get("nombre", "").strip()
+            descripcion = request.POST.get("descripcion", "").strip()
+            seccion = request.POST.get("seccion", "").strip()
+            indice = _indice_desde_post(request.POST.get("indice", ""))
+            if not nombre:
+                messages.error(request, "El nombre del grupo no puede estar vacío.")
+            elif Group.objects.filter(name__iexact=nombre).exists():
+                messages.error(request, f"Ya existe un grupo llamado «{nombre}».")
+            else:
+                g = Group.objects.create(name=nombre)
+                PermisoGrupo.objects.create(
+                    grupo=g, capacidades=[], descripcion=descripcion,
+                    seccion=seccion, indice=indice,
+                )
+                messages.success(request, f"Grupo «{g.name}» creado.")
+        elif accion == "editar":
+            grupo = Group.objects.filter(pk=request.POST.get("pk")).first()
+            if grupo is None:
+                messages.error(request, "El grupo no existe.")
+            else:
+                nombre = request.POST.get("nombre", "").strip()
+                descripcion = request.POST.get("descripcion", "").strip()
+                seccion = request.POST.get("seccion", "").strip()
+                indice = _indice_desde_post(request.POST.get("indice", ""))
+                if not nombre:
+                    messages.error(request, "El nombre del grupo no puede estar vacío.")
+                elif (
+                    Group.objects.filter(name__iexact=nombre)
+                    .exclude(pk=grupo.pk)
+                    .exists()
+                ):
+                    messages.error(request, f"Ya existe un grupo llamado «{nombre}».")
+                else:
+                    grupo.name = nombre
+                    grupo.save(update_fields=["name"])
+                    permiso, _ = PermisoGrupo.objects.get_or_create(
+                        grupo=grupo, defaults={"capacidades": []}
+                    )
+                    permiso.descripcion = descripcion
+                    permiso.seccion = seccion
+                    permiso.indice = indice
+                    permiso.save(update_fields=["descripcion", "seccion", "indice"])
+                    messages.success(request, f"Grupo «{grupo.name}» actualizado.")
+        elif accion == "eliminar":
+            grupo = Group.objects.filter(pk=request.POST.get("pk")).first()
+            if grupo is None:
+                messages.error(request, "El grupo no existe.")
+            elif grupo.name == ROL_ADMIN:
+                messages.error(
+                    request,
+                    "No se puede eliminar el grupo «Administrador» porque controla el "
+                    "acceso al panel de administración.",
+                )
+            elif grupo.user_set.exists():
+                messages.error(
+                    request,
+                    f"El grupo «{grupo.name}» tiene usuarios asignados. "
+                    "Reasigna o elimina primero a sus usuarios.",
+                )
+            else:
+                nombre = grupo.name
+                grupo.delete()
+                messages.success(request, f"Grupo «{nombre}» eliminado.")
+        return redirect("enlaces_ccg:grupos")
+
+    grupo_editar = grupo_editar_descripcion = grupo_editar_seccion = grupo_editar_indice = ""
+    if request.GET.get("editar_grupo"):
+        grupo_editar = Group.objects.filter(
+            pk=request.GET.get("editar_grupo")
+        ).first()
+        if grupo_editar:
+            permiso = getattr(grupo_editar, "permiso_grupo", None)
+            grupo_editar_descripcion = (
+                permiso.descripcion if permiso is not None else ""
+            ) or ""
+            grupo_editar_seccion = (permiso.seccion if permiso is not None else "") or ""
+            grupo_editar_indice = (
+                permiso.indice if permiso is not None else 0
+            )
+
+    grupos = list(
+        Group.objects.prefetch_related("permiso_grupo", "user_set").order_by("name")
+    )
+
+    filas = []
+    for g in grupos:
+        permiso = getattr(g, "permiso_grupo", None)
+        seccion = (permiso.seccion if permiso is not None else "") or ""
+        filas.append(
+            {
+                "grupo": g,
+                "descripcion": (permiso.descripcion if permiso else "") or "",
+                "num_usuarios": g.user_set.count(),
+                "seccion": seccion,
+                "indice": (permiso.indice if permiso is not None else 0) or 0,
+            }
+        )
+
+    filas.sort(
+        key=lambda f: (
+            (f["seccion"] or "zzz").lower(),
+            f["indice"],
+            f["grupo"].name.lower(),
+        )
+    )
+    secciones_existentes = sorted(
+        dict.fromkeys(f["seccion"] for f in filas if f["seccion"])
+    )
+
+    return render(
+        request,
+        "enlaces_ccg/grupos.html",
+        {
+            "filas": filas,
+            "total_grupos": len(filas),
+            "secciones_existentes": secciones_existentes,
+            "grupo_editar": grupo_editar,
+            "grupo_editar_descripcion": grupo_editar_descripcion,
+            "grupo_editar_seccion": grupo_editar_seccion,
+            "grupo_editar_indice": grupo_editar_indice,
+        },
+    )
+
+
+def _indice_desde_post(valor):
+    """Convierte el valor POST del índice a entero no negativo."""
+    try:
+        return max(0, int(str(valor).strip() or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+@requiere(CAP_ADMIN)
+def grupo_detalle(request, pk):
+    """Detalle de un grupo: datos generales y usuarios asignados en pestañas."""
     from django.contrib.auth.models import Group
 
     from .models import PermisoGrupo
     from .roles import CAP_ADMIN, ROL_ADMIN, SECCIONES, capacidades_de
 
-    if request.method == "POST":
-        nombre = request.POST.get("nombre", "").strip()
-        if not nombre:
-            messages.error(request, "El nombre del grupo no puede estar vacío.")
-        elif Group.objects.filter(name__iexact=nombre).exists():
-            messages.error(request, f"Ya existe un grupo llamado «{nombre}».")
-        else:
-            g = Group.objects.create(name=nombre)
-            PermisoGrupo.objects.get_or_create(grupo=g, defaults={"capacidades": []})
-            messages.success(request, f"Grupo «{g.name}» creado.")
+    grupo = Group.objects.filter(pk=pk).prefetch_related(
+        "permiso_grupo", "user_set"
+    ).first()
+    if grupo is None:
+        messages.error(request, "El grupo no existe.")
         return redirect("enlaces_ccg:grupos")
 
-    grupos = list(
-        Group.objects.prefetch_related("permiso_grupo").order_by("name")
-    )
+    vista = request.GET.get("vista", "activos")
+    if vista not in ("activos", "inactivos", "todos"):
+        vista = "activos"
 
-    # Etiquetas de capacidad por sección para mostrar el resumen
+    usuarios = grupo.user_set.all().order_by("username")
+    if vista == "activos":
+        usuarios = usuarios.filter(is_active=True)
+    elif vista == "inactivos":
+        usuarios = usuarios.filter(is_active=False)
+
+    caps = capacidades_de(grupo)
     etiqueta_seccion = {sec["clave"]: sec["etiqueta"] for sec in SECCIONES}
-    filas = []
-    for g in grupos:
-        caps = capacidades_de(g)
-        etiquetas = []
-        if CAP_ADMIN in caps or g.name == ROL_ADMIN:
-            etiquetas.append("Admin")
-        for clave, etiq in etiqueta_seccion.items():
-            if clave in caps:
-                etiquetas.append(etiq)
-                if clave == "directorio" and "editar" in caps and "Editar" not in etiquetas:
-                    etiquetas.append("Editar")
-        filas.append({"grupo": g, "etiquetas": etiquetas})
+    etiquetas = []
+    if CAP_ADMIN in caps or grupo.name == ROL_ADMIN:
+        etiquetas.append("Admin")
+    for clave, etiq in etiqueta_seccion.items():
+        if clave in caps:
+            etiquetas.append(etiq)
+
+    permiso = getattr(grupo, "permiso_grupo", None)
+    seccion_etiqueta = (permiso.seccion if permiso is not None else "") or ""
 
     return render(
         request,
-        "enlaces_ccg/grupos.html",
-        {"filas": filas},
+        "enlaces_ccg/grupo_detalle.html",
+        {
+            "grupo": grupo,
+            "descripcion": (permiso.descripcion if permiso else "") or "",
+            "etiquetas": etiquetas,
+            "seccion_etiqueta": seccion_etiqueta,
+            "usuarios": usuarios,
+            "vista": vista,
+            "n_activos": grupo.user_set.filter(is_active=True).count(),
+            "n_inactivos": grupo.user_set.filter(is_active=False).count(),
+            "n_todos": grupo.user_set.count(),
+        },
     )
 
 
@@ -1057,6 +1209,277 @@ def permisos_grupo(request, pk):
             "grupo": grupo,
             "secciones": secciones,
             "caps_actuales": caps_actuales,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Catálogo de Fallas
+# ---------------------------------------------------------------------------
+FALLA_CLASIFICACION_CHOICES = ("Programada", "No Programada")
+FALLA_CATEGORIA_CHOICES = ("Mayor", "Media", "Menor", "No aplica")
+
+
+@requiere(CAP_ADMIN)
+def catalogo_fallas(request):
+    """Catálogo de fallas del sistema (solo administradores)."""
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion in ("crear_falla", "editar_falla"):
+            descripcion = request.POST.get("descripcion", "").strip()
+            clasificacion = request.POST.get("clasificacion", "").strip()
+            categoria = request.POST.get("categoria", "").strip()
+            activo = request.POST.get("activo") == "1"
+            servicio = Servicio.objects.filter(
+                pk=request.POST.get("servicio")
+            ).first()
+            falla = None
+            if accion == "editar_falla":
+                falla = Falla.objects.filter(pk=request.POST.get("pk")).first()
+                if falla is None:
+                    messages.error(request, "La falla no existe.")
+            if falla is not None:
+                if not descripcion:
+                    messages.error(request, "La descripción de la falla no puede estar vacía.")
+                elif (
+                    Falla.objects.filter(descripcion__iexact=descripcion)
+                    .exclude(pk=falla.pk)
+                    .exists()
+                ):
+                    messages.error(request, f"Ya existe una falla «{descripcion}».")
+                else:
+                    falla.descripcion = descripcion
+                    falla.kpi = extraer_kpi_falla(descripcion)
+                    falla.clasificacion = clasificacion
+                    falla.categoria = categoria
+                    falla.servicio = servicio
+                    falla.activo = activo
+                    falla.save(
+                        update_fields=[
+                            "descripcion", "kpi", "clasificacion", "categoria",
+                            "servicio", "activo",
+                        ]
+                    )
+                    messages.success(request, f"Falla «{descripcion}» actualizada.")
+            elif accion == "crear_falla":
+                if not descripcion:
+                    messages.error(request, "La descripción de la falla no puede estar vacía.")
+                elif Falla.objects.filter(descripcion__iexact=descripcion).exists():
+                    messages.error(request, f"Ya existe una falla «{descripcion}».")
+                else:
+                    Falla.objects.create(
+                        descripcion=descripcion,
+                        kpi=extraer_kpi_falla(descripcion),
+                        clasificacion=clasificacion,
+                        categoria=categoria,
+                        servicio=servicio,
+                        activo=activo,
+                    )
+                    messages.success(request, f"Falla «{descripcion}» creada.")
+        elif accion == "toggle_falla":
+            falla = Falla.objects.filter(pk=request.POST.get("pk")).first()
+            if falla:
+                falla.activo = not falla.activo
+                falla.save(update_fields=["activo"])
+                messages.success(
+                    request,
+                    f"Falla «{falla.descripcion}» "
+                    f"{'activada' if falla.activo else 'desactivada'}.",
+                )
+        elif accion == "actualizar_fallas":
+            from .sig_sync.tickets import sincronizar_datos_fallas
+
+            n = sincronizar_datos_fallas()
+            messages.success(
+                request,
+                f"Datos de fallas actualizados desde tickets ({n} cambiaron).",
+            )
+        return redirect("enlaces_ccg:catalogo_fallas")
+
+    falla_editar = None
+    if request.GET.get("editar_falla"):
+        falla_editar = Falla.objects.filter(pk=request.GET.get("editar_falla")).first()
+
+    q = request.GET.get("q", "").strip()
+    filtro_kpi = request.GET.get("kpi", "").strip()
+    filtro_clasificacion = request.GET.get("clasificacion", "").strip()
+    filtro_categoria = request.GET.get("categoria", "").strip()
+    filtro_servicio = request.GET.get("servicio", "").strip()
+    vista = request.GET.get("vista", "activas")
+    if vista not in ("activas", "inactivas", "todas"):
+        vista = "activas"
+
+    fallas = Falla.objects.select_related("servicio")
+    if q:
+        fallas = fallas.filter(descripcion__icontains=q)
+    if filtro_kpi:
+        kpi_norm = re.sub(r"\D", "", filtro_kpi)
+        if kpi_norm:
+            fallas = fallas.filter(kpi__icontains=kpi_norm)
+    if filtro_clasificacion:
+        fallas = fallas.filter(clasificacion__iexact=filtro_clasificacion)
+    if filtro_categoria:
+        fallas = fallas.filter(categoria__iexact=filtro_categoria)
+    if filtro_servicio.isdigit():
+        fallas = fallas.filter(servicio_id=int(filtro_servicio))
+    if vista == "activas":
+        fallas = fallas.filter(activo=True)
+    elif vista == "inactivas":
+        fallas = fallas.filter(activo=False)
+    fallas = fallas.order_by("descripcion")
+
+    partes = []
+    if q:
+        partes.append("q=" + quote(q))
+    if filtro_kpi:
+        partes.append("kpi=" + quote(filtro_kpi))
+    if filtro_clasificacion:
+        partes.append("clasificacion=" + quote(filtro_clasificacion))
+    if filtro_categoria:
+        partes.append("categoria=" + quote(filtro_categoria))
+    if filtro_servicio.isdigit():
+        partes.append("servicio=" + filtro_servicio)
+    qs_columnas = "&".join(partes)
+
+    return render(
+        request,
+        "enlaces_ccg/catalogo_fallas.html",
+        {
+            "fallas": fallas,
+            "servicios": Servicio.objects.order_by("nombre"),
+            "clasificaciones": FALLA_CLASIFICACION_CHOICES,
+            "categorias": FALLA_CATEGORIA_CHOICES,
+            "q": q,
+            "filtro_kpi": filtro_kpi,
+            "filtro_clasificacion": filtro_clasificacion,
+            "filtro_categoria": filtro_categoria,
+            "filtro_servicio": filtro_servicio,
+            "vista": vista,
+            "qs_columnas": qs_columnas,
+            "n_activas": Falla.objects.filter(activo=True).count(),
+            "n_inactivas": Falla.objects.filter(activo=False).count(),
+            "n_todas": Falla.objects.count(),
+            "falla_editar": falla_editar,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Catálogo de Usuarios
+# ---------------------------------------------------------------------------
+def _usuario_desde_post(request, usuario=None):
+    """Valida y crea/actualiza un usuario a partir de un POST del catálogo."""
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Group
+
+    User = get_user_model()
+    username = request.POST.get("username", "").strip()
+    password = request.POST.get("password", "")
+    first_name = request.POST.get("first_name", "").strip()
+    last_name = request.POST.get("last_name", "").strip()
+    email = request.POST.get("email", "").strip()
+    is_staff = request.POST.get("is_staff") == "1"
+    is_active = request.POST.get("is_active") == "1"
+    grupos_ids = [int(x) for x in request.POST.getlist("grupos") if x.isdigit()]
+
+    if not username:
+        messages.error(request, "El nombre de usuario no puede estar vacío.")
+        return None
+    if usuario is None:
+        if User.objects.filter(username__iexact=username).exists():
+            messages.error(request, f"Ya existe un usuario «{username}».")
+            return None
+        if not password:
+            messages.error(request, "La contraseña es obligatoria al crear un usuario.")
+            return None
+        usuario = User(username=username)
+    elif (
+        User.objects.filter(username__iexact=username)
+        .exclude(pk=usuario.pk)
+        .exists()
+    ):
+        messages.error(request, f"Ya existe un usuario «{username}».")
+        return None
+
+    usuario.username = username
+    usuario.first_name = first_name
+    usuario.last_name = last_name
+    usuario.email = email
+    usuario.is_staff = is_staff
+    usuario.is_active = is_active
+    if password:
+        usuario.set_password(password)
+    usuario.save()
+    usuario.groups.set(Group.objects.filter(pk__in=grupos_ids))
+    return usuario
+
+
+@requiere(CAP_ADMIN)
+def catalogo_usuarios(request):
+    """Catálogo de usuarios del sistema (solo administradores)."""
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Group
+
+    User = get_user_model()
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion in ("crear_usuario", "editar_usuario"):
+            usuario_editar = None
+            if accion == "editar_usuario":
+                usuario_editar = User.objects.filter(
+                    pk=request.POST.get("pk")
+                ).first()
+            usuario = _usuario_desde_post(request, usuario_editar)
+            if usuario:
+                messages.success(
+                    request,
+                    f"Usuario «{usuario.username}» "
+                    f"{'actualizado' if accion == 'editar_usuario' else 'creado'}.",
+                )
+        elif accion == "toggle_usuario":
+            user_obj = User.objects.filter(pk=request.POST.get("pk")).first()
+            if user_obj:
+                if user_obj.pk == request.user.pk:
+                    messages.error(
+                        request, "No puedes desactivar tu propio usuario."
+                    )
+                else:
+                    user_obj.is_active = not user_obj.is_active
+                    user_obj.save(update_fields=["is_active"])
+                    messages.success(
+                        request,
+                        f"Usuario «{user_obj.username}» "
+                        f"{'activado' if user_obj.is_active else 'desactivado'}.",
+                    )
+        return redirect("enlaces_ccg:catalogo_usuarios")
+
+    usuario_editar = None
+    if request.GET.get("editar_usuario"):
+        usuario_editar = User.objects.filter(
+            pk=request.GET.get("editar_usuario")
+        ).first()
+
+    vista = request.GET.get("vista", "activos")
+    if vista not in ("activos", "inactivos", "todos"):
+        vista = "activos"
+    usuarios = User.objects.prefetch_related("groups").order_by("username")
+    if vista == "activos":
+        usuarios = usuarios.filter(is_active=True)
+    elif vista == "inactivos":
+        usuarios = usuarios.filter(is_active=False)
+
+    return render(
+        request,
+        "enlaces_ccg/catalogo_usuarios.html",
+        {
+            "usuarios": usuarios,
+            "grupos": Group.objects.order_by("name"),
+            "usuario_editar": usuario_editar,
+            "vista": vista,
+            "n_activos": User.objects.filter(is_active=True).count(),
+            "n_inactivos": User.objects.filter(is_active=False).count(),
+            "n_todos": User.objects.count(),
         },
     )
 

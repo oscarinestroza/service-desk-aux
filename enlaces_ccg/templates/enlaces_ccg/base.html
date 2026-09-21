@@ -697,6 +697,18 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'enlaces_ccg:catalogo_fallas' %}"
+                   class="{% if request.resolver_match.url_name == 'catalogo_fallas' %}active{% endif %}">
+                    <i class="fas fa-bug"></i> Catálogo de Fallas
+                </a>
+            </li>
+            <li>
+                <a href="{% url 'enlaces_ccg:catalogo_usuarios' %}"
+                   class="{% if request.resolver_match.url_name == 'catalogo_usuarios' %}active{% endif %}">
+                    <i class="fas fa-users"></i> Catálogo de Usuarios
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'enlaces_ccg:importar_deductivas' %}"
                    class="{% if request.resolver_match.url_name == 'importar_deductivas' %}active{% endif %}">
                     <i class="fas fa-file-import"></i> Importar deductivas
@@ -2060,16 +2072,17 @@ let contactoContenido = `
         var actualizarBoton = function (sel) {
             if (!sel._ccgBtn) return;
             var span = sel._ccgBtn.querySelector('.ccg-picker-label');
+            var vacio = sel.dataset.vacio || 'Todos';
             var txt;
             if (sel.multiple) {
                 var n = sel.selectedOptions.length;
-                if (!n) txt = 'Todos';
+                if (!n) txt = vacio;
                 else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
                 else txt = n + ' seleccionados';
             } else {
                 txt = textoSeleccionado(sel);
             }
-            span.textContent = txt || 'Todos';
+            span.textContent = txt || vacio;
             sel._ccgBtn.classList.toggle('text-muted', !sel.value);
         };
 

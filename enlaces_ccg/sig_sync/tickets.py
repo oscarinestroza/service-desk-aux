@@ -558,9 +558,72 @@ def cargar_caches_vinculos():
     return caches
 
 
+def _actualizar_falla_desde_ticket(falla, raw, servicio):
+    """Completa clasificación/categoría/servicio de una falla con la fila más reciente.
+
+    Gana la fila con mayor `solicitud_fecha`, comparada contra
+    `Falla.fecha_ultima` para que un ticket antiguo no sobreescriba lo
+    actualizado por uno más reciente.
+    """
+    from ..models import Falla
+
+    clasificacion = str(
+        raw.get("Clasificacion_Falla") or raw.get("falla_clasificacion") or ""
+    ).strip()
+    categoria = str(raw.get("Categoria_Falla") or "").strip()
+    if not (clasificacion or categoria):
+        return
+    fecha = _parsear_fecha(raw.get("solicitud_fecha"))
+    if falla.fecha_ultima is not None and not (
+        fecha and fecha >= falla.fecha_ultima
+    ):
+        return
+    cambios = {"clasificacion": clasificacion, "categoria": categoria}
+    if servicio is not None:
+        cambios["servicio"] = servicio
+    cambios["fecha_ultima"] = fecha
+    if (
+        falla.clasificacion == clasificacion
+        and falla.categoria == categoria
+        and (servicio is None or falla.servicio_id == servicio.pk)
+        and falla.fecha_ultima == fecha
+    ):
+        return
+    Falla.objects.filter(pk=falla.pk).update(**cambios)
+    for k, v in cambios.items():
+        setattr(falla, k, v)
+
+
+def sincronizar_datos_fallas():
+    """Completa clasificación/categoría/servicio de las fallas con su ticket más reciente.
+
+    Devuelve el número de fallas cuyos datos cambiaron.
+    """
+    from ..models import Falla, Ticket, extraer_kpi_falla
+
+    actualizadas = 0
+    for falla in Falla.objects.all():
+        kpi = extraer_kpi_falla(falla.descripcion)
+        if kpi != falla.kpi:
+            Falla.objects.filter(pk=falla.pk).update(kpi=kpi)
+            falla.kpi = kpi
+            actualizadas += 1
+        ultimo = Ticket.objects.filter(falla=falla).order_by("fecha").last()
+        if ultimo is None or not ultimo.raw_data:
+            continue
+        antes = (falla.clasificacion, falla.categoria, falla.servicio_id, falla.fecha_ultima)
+        _actualizar_falla_desde_ticket(falla, ultimo.raw_data, ultimo.servicio)
+        despues = (falla.clasificacion, falla.categoria, falla.servicio_id, falla.fecha_ultima)
+        if antes != despues:
+            actualizadas += 1
+    return actualizadas
+
+
 def _resolver_vinculos(raw, caches):
     """Resuelve los vínculos de un ticket a partir de su raw_data (Fase 3)."""
-    from ..models import Edificio, Falla, Nivel, ResponsableAtencion, Servicio
+    from ..models import (
+        Edificio, Falla, Nivel, ResponsableAtencion, Servicio, extraer_kpi_falla,
+    )
 
     raw = raw or {}
     edificio_nombre = str(raw.get("nivel") or "").strip()
@@ -596,6 +659,11 @@ def _resolver_vinculos(raw, caches):
         if falla is None:
             falla, _ = Falla.objects.get_or_create(descripcion=falla_desc)
             caches["fallas"][clave] = falla
+        kpi = extraer_kpi_falla(falla.descripcion)
+        if kpi != falla.kpi:
+            Falla.objects.filter(pk=falla.pk).update(kpi=kpi)
+            falla.kpi = kpi
+        _actualizar_falla_desde_ticket(falla, raw, servicio)
 
     nivel = None
     if nivel_nombre:

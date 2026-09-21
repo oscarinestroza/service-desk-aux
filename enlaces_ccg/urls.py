@@ -144,6 +144,21 @@ urlpatterns = [
         name="permisos_grupo",
     ),
     path(
+        "grupos/<int:pk>/",
+        views.grupo_detalle,
+        name="grupo_detalle",
+    ),
+    path(
+        "catalogos/fallas/",
+        views.catalogo_fallas,
+        name="catalogo_fallas",
+    ),
+    path(
+        "catalogos/usuarios/",
+        views.catalogo_usuarios,
+        name="catalogo_usuarios",
+    ),
+    path(
         "tickets/",
         views.seguimiento_tickets,
         name="seguimiento_tickets",

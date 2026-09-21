@@ -1,0 +1,416 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Catálogo de Usuarios — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Catálogo de Usuarios</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-users me-2 text-primary"></i>Catálogo de Usuarios
+    </h1>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">{{ usuarios|length }} usuario{{ usuarios|length|pluralize }}</span>
+        <button type="button" class="btn btn-primary" id="btnNuevoUsuario">
+            <i class="fas fa-plus me-1"></i>Nuevo usuario
+        </button>
+    </div>
+</div>
+
+<!-- Pestañas por estado -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activos' %}active{% endif %}"
+           href="?vista=activos">Activos <span class="badge bg-success-subtle text-success ms-1">{{ n_activos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivos' %}active{% endif %}"
+           href="?vista=inactivos">Inactivos <span class="badge bg-danger-subtle text-danger ms-1">{{ n_inactivos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todos' %}active{% endif %}"
+           href="?vista=todos">Mostrar todos <span class="badge bg-primary-subtle text-primary ms-1">{{ n_todos }}</span></a>
+    </li>
+</ul>
+
+{% if usuarios %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Usuario</th>
+                <th>Nombre completo</th>
+                <th>Correo</th>
+                <th>Roles</th>
+                <th>Estado</th>
+                <th>Última sesión</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in usuarios %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button class="btn btn-outline-info btn-sm btn-ver-usuario" title="Ver detalles"
+                            data-username="{{ u.username }}"
+                            data-full="{{ u.get_full_name }}"
+                            data-email="{{ u.email }}"
+                            data-active="{% if u.is_active %}1{% else %}0{% endif %}"
+                            data-superuser="{% if u.is_superuser %}1{% else %}0{% endif %}"
+                            data-staff="{% if u.is_staff %}1{% else %}0{% endif %}"
+                            data-grupos="{{ u.groups.all|join:',' }}"
+                            data-lastlogin="{{ u.last_login|date:'d/m/Y H:i'|default:'' }}"
+                            data-datejoined="{{ u.date_joined|date:'d/m/Y'|default:'' }}">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm btn-editar-usuario" title="Editar"
+                            data-pk="{{ u.pk }}"
+                            data-username="{{ u.username }}"
+                            data-first="{{ u.first_name }}"
+                            data-last="{{ u.last_name }}"
+                            data-email="{{ u.email }}"
+                            data-staff="{% if u.is_staff %}1{% else %}0{% endif %}"
+                            data-active="{% if u.is_active %}1{% else %}0{% endif %}"
+                            data-superuser="{% if u.is_superuser %}1{% else %}0{% endif %}"
+                            data-grupos="{{ u.groups.all|join:',' }}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <form method="post" action="{% url 'enlaces_ccg:catalogo_usuarios' %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="toggle_usuario">
+                        <input type="hidden" name="pk" value="{{ u.pk }}">
+                        <button type="submit"
+                                class="btn btn-outline-{% if u.is_active %}success{% else %}danger{% endif %} btn-sm"
+                                title="{% if u.is_active %}Desactivar{% else %}Activar{% endif %}">
+                            <i class="fas fa-{% if u.is_active %}check{% else %}ban{% endif %}"></i>
+                        </button>
+                    </form>
+                </td>
+                <td>
+                    <span class="cell-name">{{ u.username }}</span>
+                    {% if u.is_superuser %}
+                    <span class="badge bg-warning text-dark mt-1">Superusuario</span>
+                    {% elif u.is_staff %}
+                    <span class="badge bg-secondary mt-1">Staff</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted">{% if u.get_full_name %}{{ u.get_full_name }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if u.email %}
+                    <a href="mailto:{{ u.email }}" class="cell-link">{{ u.email }}</a>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% for g in u.groups.all %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">{{ g.name }}</span>
+                    {% empty %}
+                    <span class="text-muted small">—</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if u.is_active %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                    {% else %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted">{{ u.last_login|date:"d/m/Y H:i"|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-users fa-3x mb-3 d-block opacity-50"></i>
+        No hay usuarios registrados. Crea uno con el botón «Nuevo usuario».
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Modal: ver usuario ── -->
+<div class="modal fade modal-ccg" id="modalVerUsuario" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user me-2"></i>Detalle de usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="section-title">Datos</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="field-label text-muted small">Usuario</div>
+                        <strong id="verUsername">—</strong>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="field-label text-muted small">Nombre completo</div>
+                        <span id="verFull">—</span>
+                    </div>
+                    <div class="col-12">
+                        <div class="field-label text-muted small">Correo</div>
+                        <span id="verEmail">—</span>
+                    </div>
+                </div>
+                <div class="section-title">Roles y estado</div>
+                <div id="verGrupos" class="mb-2"></div>
+                <div class="mb-1">
+                    Estado: <span id="verEstado"></span>
+                    <span id="verRol"></span>
+                </div>
+                <div class="section-title">Sesión</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="field-label text-muted small">Última sesión</div>
+                        <span id="verLastLogin">—</span>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="field-label text-muted small">Miembro desde</div>
+                        <span id="verDateJoined">—</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: crear/editar usuario ── -->
+<div class="modal fade modal-ccg" id="modalEditarUsuario" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalUsuarioTitulo">
+                    <i class="fas fa-user-plus me-2"></i><span id="modalUsuarioTituloTexto">Nuevo usuario</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:catalogo_usuarios' %}" id="formUsuario">
+                {% csrf_token %}
+                <input type="hidden" name="accion" id="userAccion" value="crear_usuario">
+                <input type="hidden" name="pk" id="userPk" value="">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="userUsername" class="form-label">Usuario</label>
+                            <input type="text" class="form-control" id="userUsername" name="username" required>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" id="userReset">
+                                <label class="form-check-label" id="userResetLabel" for="userReset">Reestablecer contraseña</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="d-none" id="userPasswordWrap">
+                                <label for="userPassword" class="form-label" id="userPasswordLabel">Nueva contraseña</label>
+                                <input type="password" class="form-control" id="userPassword" name="password"
+                                       autocomplete="new-password">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="userFirst" class="form-label">Nombre(s)</label>
+                            <input type="text" class="form-control" id="userFirst" name="first_name">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="userLast" class="form-label">Apellido(s)</label>
+                            <input type="text" class="form-control" id="userLast" name="last_name">
+                        </div>
+                        <div class="col-12">
+                            <label for="userEmail" class="form-label">Correo</label>
+                            <input type="email" class="form-control" id="userEmail" name="email">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-block">Roles (grupos)</label>
+                            <select name="grupos" multiple size="0"
+                                    class="form-select ccg-select-busqueda ccg-select-multiple"
+                                    data-vacio="Sin roles">
+                                {% for g in grupos %}
+                                <option value="{{ g.pk }}">{{ g.name }}</option>
+                                {% empty %}
+                                <option value="0" disabled>No hay grupos creados</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Elige uno o varios roles para el usuario. Se abre una ventana con buscador y selección múltiple.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-block">Estado y accesos</label>
+                            <div class="d-flex flex-wrap gap-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="is_active" value="1" id="userActive">
+                                    <label class="form-check-label" for="userActive">Activo</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="is_staff" value="1" id="userStaff">
+                                    <label class="form-check-label" for="userStaff">Es staff (panel admin)</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="userSuper" disabled>
+                                    <label class="form-check-label" for="userSuper">Superusuario</label>
+                                </div>
+                            </div>
+                            <div class="form-text">
+                                <ul class="mb-0 ps-3">
+                                    <li><strong>Activo:</strong> si está marcado, el usuario puede iniciar sesión en el sistema; si está desmarcado, su acceso queda bloqueado.</li>
+                                    <li><strong>Es staff (panel admin):</strong> concede acceso al panel de administración de Django (/admin).</li>
+                                    <li><strong>Superusuario:</strong> acceso total al sistema y al panel. No se cambia desde aquí; este interruptor solo muestra el estado actual del usuario.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    if (!window.bootstrap) return;
+    var verModal = document.getElementById('modalVerUsuario');
+    var editarModal = document.getElementById('modalEditarUsuario');
+
+    function abrirVer(b) {
+        if (!verModal) return;
+        var v = new bootstrap.Modal(verModal);
+        document.getElementById('verUsername').textContent = b.dataset.username || '—';
+        document.getElementById('verFull').textContent = b.dataset.full || '—';
+        document.getElementById('verEmail').textContent = b.dataset.email || '—';
+        document.getElementById('verLastLogin').textContent = b.dataset.lastlogin || '—';
+        document.getElementById('verDateJoined').textContent = b.dataset.datejoined || '—';
+
+        var cont = document.getElementById('verGrupos');
+        cont.innerHTML = '';
+        (b.dataset.grupos || '').split(',').filter(Boolean).forEach(function (n) {
+            var s = document.createElement('span');
+            s.className = 'badge bg-primary-subtle text-primary me-1';
+            s.textContent = n;
+            cont.appendChild(s);
+        });
+        if (!cont.children.length) {
+            cont.innerHTML = '<span class="text-muted small">Sin roles asignados</span>';
+        }
+
+        var estado = document.getElementById('verEstado');
+        estado.className = b.dataset.active === '1'
+            ? 'badge bg-success-subtle text-success'
+            : 'badge bg-danger-subtle text-danger';
+        estado.textContent = b.dataset.active === '1' ? 'Activo' : 'Inactivo';
+
+        var rol = document.getElementById('verRol');
+        rol.className = '';
+        if (b.dataset.superuser === '1') {
+            rol.className = 'badge bg-warning text-dark ms-1';
+            rol.textContent = 'Superusuario';
+        } else if (b.dataset.staff === '1') {
+            rol.className = 'badge bg-secondary ms-1';
+            rol.textContent = 'Staff';
+        } else {
+            rol.textContent = '';
+        }
+        v.show();
+    }
+
+    function abrirEditar(pk, username, first, last, email, staff, active, superuser, grupos) {
+        if (!editarModal) return;
+        var m = new bootstrap.Modal(editarModal);
+        document.getElementById('userAccion').value = pk ? 'editar_usuario' : 'crear_usuario';
+        document.getElementById('userPk').value = pk || '';
+        document.getElementById('userUsername').value = username || '';
+        document.getElementById('userFirst').value = first || '';
+        document.getElementById('userLast').value = last || '';
+        document.getElementById('userEmail').value = email || '';
+        document.getElementById('userStaff').checked = staff === '1';
+        document.getElementById('userActive').checked = active !== '0';
+        document.getElementById('userSuper').checked = superuser === '1';
+        document.getElementById('modalUsuarioTituloTexto').textContent = pk ? 'Editar usuario' : 'Nuevo usuario';
+
+        // Contraseña: al crear es obligatoria; al editar solo si se marca "Reestablecer"
+        var reset = document.getElementById('userReset');
+        var wrap = document.getElementById('userPasswordWrap');
+        var pass = document.getElementById('userPassword');
+        pass.value = '';
+        reset.checked = !pk;
+        wrap.classList.toggle('d-none', !!pk);
+        pass.required = !pk;
+        document.getElementById('userResetLabel').textContent = pk ? 'Reestablecer contraseña' : 'Contraseña';
+
+        // Roles: select múltiple convertido en picker con buscador
+        var selGrupos = document.querySelector('#formUsuario select[name="grupos"]');
+        var ids = (grupos || '').split(',').filter(Boolean).map(Number);
+        if (selGrupos) {
+            Array.prototype.forEach.call(selGrupos.options, function (opt) {
+                opt.selected = opt.value && ids.indexOf(Number(opt.value)) !== -1;
+            });
+            actualizarBotonGrupos(selGrupos);
+        }
+        m.show();
+        document.getElementById('userUsername').focus();
+    }
+
+    function actualizarBotonGrupos(sel) {
+        var btn = sel._ccgBtn;
+        if (!btn) return;
+        var n = sel.selectedOptions.length;
+        var txt;
+        if (!n) txt = sel.dataset.vacio || 'Sin roles';
+        else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
+        else txt = n + ' seleccionados';
+        btn.querySelector('.ccg-picker-label').textContent = txt;
+        btn.classList.toggle('text-muted', !n);
+    }
+
+    var resetChk = document.getElementById('userReset');
+    if (resetChk) {
+        resetChk.addEventListener('change', function () {
+            var on = this.checked;
+            document.getElementById('userPasswordWrap').classList.toggle('d-none', !on);
+            document.getElementById('userPassword').required = on;
+        });
+    }
+
+    document.querySelectorAll('.btn-ver-usuario').forEach(function (b) {
+        b.addEventListener('click', function () { abrirVer(b); });
+    });
+    document.querySelectorAll('.btn-editar-usuario').forEach(function (b) {
+        b.addEventListener('click', function () {
+            abrirEditar(b.dataset.pk, b.dataset.username, b.dataset.first, b.dataset.last,
+                        b.dataset.email, b.dataset.staff, b.dataset.active,
+                        b.dataset.superuser, b.dataset.grupos);
+        });
+    });
+    var btnNuevo = document.getElementById('btnNuevoUsuario');
+    if (btnNuevo) {
+        btnNuevo.addEventListener('click', function () { abrirEditar(''); });
+    }
+
+    // Si se llega desde "editar usuario" de otro módulo (?editar_usuario=<pk>), abrir prellenado
+    {% if usuario_editar %}
+    abrirEditar({{ usuario_editar.pk }}, '{{ usuario_editar.username|escapejs }}',
+                '{{ usuario_editar.first_name|escapejs }}', '{{ usuario_editar.last_name|escapejs }}',
+                '{{ usuario_editar.email|escapejs }}',
+                {{ usuario_editar.is_staff|yesno:"1,0" }}, {{ usuario_editar.is_active|yesno:"1,0" }},
+                {{ usuario_editar.is_superuser|yesno:"1,0" }},
+                '{{ usuario_editar.groups.all|join:","|escapejs }}');
+    {% endif %}
+})();
+</script>
+{% endblock %}

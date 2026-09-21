@@ -5,6 +5,7 @@ Relación jerárquica:
     Edificio ↔ Institución (M2M through InstitucionEdificio) → EnlaceAutorizado
 """
 
+import re
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
@@ -698,6 +699,26 @@ class PermisoGrupo(models.Model):
         verbose_name="Capacidades",
         help_text="Lista de claves de capacidad (directorio, editar, importar, tickets, revisiones, admin).",
     )
+    descripcion = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Descripción",
+        help_text="Descripción opcional del rol.",
+    )
+    seccion = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="Sección",
+        help_text="Sección en la que se agrupa este rol en la lista de grupos. "
+        "Puedes escribir una nueva o elegir una existente.",
+    )
+    indice = models.IntegerField(
+        default=0,
+        verbose_name="Índice",
+        help_text="Orden del grupo dentro de su sección (menor primero).",
+    )
 
     class Meta:
         verbose_name = "Permisos de grupo"
@@ -1040,11 +1061,49 @@ class Servicio(models.Model):
         return self.nombre
 
 
+_PATRON_KPI_FALLA = re.compile(r"\bIE\s*[-–]\s*(\d+)\b", re.IGNORECASE)
+
+
+def extraer_kpi_falla(descripcion):
+    """Extrae el número KPI (patrón «IE-##») del nombre de la falla.
+
+    Devuelve el número capturado (p. ej. "27" de "… (IE-27)") o "" si el
+    nombre no lo menciona.
+    """
+    if not descripcion:
+        return ""
+    m = _PATRON_KPI_FALLA.search(str(descripcion))
+    return m.group(1) if m else ""
+
+
 class Falla(models.Model):
     """Catálogo de fallas (columna `falla_descripcion` del SIG)."""
 
     descripcion = models.CharField(
         max_length=400, unique=True, verbose_name="Descripción"
+    )
+    kpi = models.CharField(
+        max_length=10, blank=True, default="", verbose_name="KPI"
+    )
+    clasificacion = models.CharField(
+        max_length=120, blank=True, default="", verbose_name="Clasificación"
+    )
+    categoria = models.CharField(
+        max_length=120, blank=True, default="", verbose_name="Categoría"
+    )
+    servicio = models.ForeignKey(
+        "Servicio",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fallas",
+        verbose_name="Servicio",
+    )
+    fecha_ultima = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última actualización desde tickets",
+        help_text="Fecha de la solicitud más reciente que definió los datos de la falla.",
     )
     activo = models.BooleanField(default=True, verbose_name="Activo")
     creado_en = models.DateTimeField(auto_now_add=True)

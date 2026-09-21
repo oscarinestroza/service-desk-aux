@@ -74,6 +74,10 @@ MEMORIA_TICKETS.txt
 sig_debug/
 # Muestra del reporte del SIG (datos, no se sube)
 Sig_Solicitudes_Seguimiento.xlsx
+# Listado de fallas activas (solo lectura, no se sube)
+Fallas_activas.xlsx
+# Listado de enlaces no vinculados (datos, no se sube)
+listado_no_vinculados.xlsx
 # Archivos del scheduler de Celery Beat local
 celerybeat-schedule*
 # Script local para levantar el entorno (no se sube a git)

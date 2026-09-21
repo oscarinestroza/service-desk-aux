@@ -1,0 +1,314 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Catálogo de Fallas — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Catálogo de Fallas</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-bug me-2 text-primary"></i>Catálogo de Fallas
+    </h1>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge bg-primary">{{ fallas|length }} falla{{ fallas|length|pluralize }}</span>
+        <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_fallas">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="fas fa-file-excel me-1"></i>Actualizar desde tickets
+            </button>
+        </form>
+        <button type="button" class="btn btn-primary" id="btnNuevaFalla">
+            <i class="fas fa-plus me-1"></i>Nueva falla
+        </button>
+    </div>
+</div>
+
+<!-- Filtros por columna -->
+<form method="get" class="ccg-well mb-3">
+    <input type="hidden" name="vista" value="{{ vista }}">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-6 col-xl-2">
+            <label class="form-label small text-muted mb-1" for="filtroFallaNombre">Falla</label>
+            <input type="text" class="form-control form-control-sm" id="filtroFallaNombre"
+                   name="q" value="{{ q }}" placeholder="Buscar por nombre...">
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <label class="form-label small text-muted mb-1" for="filtroFallaKPI">KPI</label>
+            <input type="text" class="form-control form-control-sm" id="filtroFallaKPI"
+                   name="kpi" value="{{ filtro_kpi }}" placeholder="Ej. 27 o IE-27">
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <label class="form-label small text-muted mb-1" for="filtroFallaClasificacion">Clasificación</label>
+            <select class="form-select form-select-sm" id="filtroFallaClasificacion" name="clasificacion">
+                <option value="">Todas</option>
+                {% for c in clasificaciones %}
+                <option value="{{ c }}" {% if filtro_clasificacion == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <label class="form-label small text-muted mb-1" for="filtroFallaCategoria">Categoría</label>
+            <select class="form-select form-select-sm" id="filtroFallaCategoria" name="categoria">
+                <option value="">Todas</option>
+                {% for c in categorias %}
+                <option value="{{ c }}" {% if filtro_categoria == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <label class="form-label small text-muted mb-1" for="filtroFallaServicio">Servicio</label>
+            <select class="form-select form-select-sm" id="filtroFallaServicio" name="servicio">
+                <option value="">Todos</option>
+                {% for s in servicios %}
+                <option value="{{ s.pk }}" {% if filtro_servicio == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6 col-xl-1">
+            <button type="submit" class="btn btn-sm btn-primary w-100">
+                <i class="fas fa-filter me-1"></i>Filtrar
+            </button>
+        </div>
+        <div class="col-md-6 col-xl-1">
+            <a href="{% url 'enlaces_ccg:catalogo_fallas' %}"
+               class="btn btn-sm btn-outline-secondary w-100" title="Quitar filtros">
+                <i class="fas fa-times me-1"></i>Limpiar
+            </a>
+        </div>
+    </div>
+</form>
+
+<!-- Pestañas por estado -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activas' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=activas">Activas <span class="badge bg-success-subtle text-success ms-1">{{ n_activas }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivas' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=inactivas">Inactivas <span class="badge bg-danger-subtle text-danger ms-1">{{ n_inactivas }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todas' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=todas">Todas <span class="badge bg-primary-subtle text-primary ms-1">{{ n_todas }}</span></a>
+    </li>
+</ul>
+
+{% if fallas %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Falla</th>
+                <th>KPI</th>
+                <th>Clasificación</th>
+                <th>Categoría</th>
+                <th>Servicio</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in fallas %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <button class="btn btn-outline-primary btn-sm btn-editar-falla" title="Editar"
+                            data-pk="{{ f.pk }}"
+                            data-descripcion="{{ f.descripcion }}"
+                            data-clasificacion="{{ f.clasificacion }}"
+                            data-categoria="{{ f.categoria }}"
+                            data-servicio="{{ f.servicio_id|default:'' }}"
+                            data-activo="{% if f.activo %}1{% else %}0{% endif %}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="toggle_falla">
+                        <input type="hidden" name="pk" value="{{ f.pk }}">
+                        <button type="submit"
+                                class="btn btn-outline-{% if f.activo %}success{% else %}danger{% endif %} btn-sm"
+                                title="{% if f.activo %}Desactivar{% else %}Activar{% endif %}">
+                            <i class="fas fa-{% if f.activo %}check{% else %}ban{% endif %}"></i>
+                        </button>
+                    </form>
+                </td>
+                <td>
+                    <span class="cell-name">{{ f.descripcion }}</span>
+                </td>
+                <td>
+                    {% if f.kpi %}
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">IE-{{ f.kpi }}</span>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted">{% if f.clasificacion %}{{ f.clasificacion }}{% else %}—{% endif %}</td>
+                <td class="text-muted">{% if f.categoria %}{{ f.categoria }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if f.servicio %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ f.servicio.nombre }}</span>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if f.activo %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Activa</span>
+                    {% else %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactiva</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-bug fa-3x mb-3 d-block opacity-50"></i>
+        {% if q or filtro_kpi or filtro_clasificacion or filtro_categoria or filtro_servicio %}
+        No hay fallas que coincidan con los filtros.
+        {% else %}
+        No hay fallas registradas. Crea una con el botón «Nueva falla».
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Modal: crear/editar falla ── -->
+<div class="modal fade modal-ccg" id="modalEditarFalla" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalFallaTitulo">
+                    <i class="fas fa-bug me-2"></i><span id="modalFallaTituloTexto">Nueva falla</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" id="formFalla">
+                {% csrf_token %}
+                <input type="hidden" name="accion" id="fallaAccion" value="crear_falla">
+                <input type="hidden" name="pk" id="fallaPk" value="">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="fallaDescripcion" class="form-label">Descripción de la falla</label>
+                            <textarea class="form-control" id="fallaDescripcion" name="descripcion" rows="2"
+                                      required placeholder="Describe la falla"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fallaKPI" class="form-label">KPI</label>
+                            <input type="text" class="form-control" id="fallaKPI" disabled
+                                   placeholder="Automático (IE-##)">
+                            <div class="form-text">Se detecta solo: si el nombre contiene «IE-##» se captura el número; si no, queda en blanco.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fallaClasificacion" class="form-label">Clasificación</label>
+                            <select class="form-select" id="fallaClasificacion" name="clasificacion">
+                                <option value="">— Sin clasificar —</option>
+                                {% for c in clasificaciones %}
+                                <option value="{{ c }}">{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="fallaCategoria" class="form-label">Categoría</label>
+                            <select class="form-select" id="fallaCategoria" name="categoria">
+                                <option value="">— Sin categoría —</option>
+                                {% for c in categorias %}
+                                <option value="{{ c }}">{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="fallaServicio" class="form-label">Servicio</label>
+                            <select class="form-select" id="fallaServicio" name="servicio">
+                                <option value="">— Sin asignar —</option>
+                                {% for s in servicios %}
+                                <option value="{{ s.pk }}">{{ s.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="activo" value="1" id="fallaActivo">
+                                <label class="form-check-label" for="fallaActivo">Activa</label>
+                            </div>
+                            <div class="form-text">
+                                Clasificación, categoría y servicio pueden actualizarse desde el Excel de
+                                tickets (botón «Actualizar desde tickets»); se toma la fila más reciente por fecha.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    if (!window.bootstrap) return;
+    var editarModal = document.getElementById('modalEditarFalla');
+    var inpDescripcion = document.getElementById('fallaDescripcion');
+    var inpKPI = document.getElementById('fallaKPI');
+
+    function calcularKPI() {
+        var m = (inpDescripcion.value || '').match(/\bIE\s*[-–]?\s*(\d+)\b/i);
+        inpKPI.value = m ? m[1] : '';
+    }
+    if (inpDescripcion) {
+        inpDescripcion.addEventListener('input', calcularKPI);
+    }
+
+    function abrirEditar(pk, descripcion, clasificacion, categoria, servicio, activo) {
+        if (!editarModal) return;
+        var m = new bootstrap.Modal(editarModal);
+        document.getElementById('fallaAccion').value = pk ? 'editar_falla' : 'crear_falla';
+        document.getElementById('fallaPk').value = pk || '';
+        document.getElementById('fallaDescripcion').value = descripcion || '';
+        document.getElementById('fallaClasificacion').value = clasificacion || '';
+        document.getElementById('fallaCategoria').value = categoria || '';
+        document.getElementById('fallaServicio').value = servicio || '';
+        document.getElementById('fallaActivo').checked = activo !== '0';
+        document.getElementById('modalFallaTituloTexto').textContent = pk ? 'Editar falla' : 'Nueva falla';
+        calcularKPI();
+        m.show();
+        document.getElementById('fallaDescripcion').focus();
+    }
+
+    document.querySelectorAll('.btn-editar-falla').forEach(function (b) {
+        b.addEventListener('click', function () {
+            abrirEditar(b.dataset.pk, b.dataset.descripcion, b.dataset.clasificacion,
+                        b.dataset.categoria, b.dataset.servicio, b.dataset.activo);
+        });
+    });
+    var btnNueva = document.getElementById('btnNuevaFalla');
+    if (btnNueva) {
+        btnNueva.addEventListener('click', function () { abrirEditar(''); });
+    }
+
+    {% if falla_editar %}
+    abrirEditar({{ falla_editar.pk }}, '{{ falla_editar.descripcion|escapejs }}',
+                '{{ falla_editar.clasificacion|escapejs }}', '{{ falla_editar.categoria|escapejs }}',
+                {{ falla_editar.servicio_id|default:"''" }},
+                {{ falla_editar.activo|yesno:"1,0" }});
+    {% endif %}
+})();
+</script>
+{% endblock %}

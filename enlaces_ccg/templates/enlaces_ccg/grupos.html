@@ -8,60 +8,71 @@
 {% endblock %}
 
 {% block contenido %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <h1 class="h3 mb-0">
         <i class="fas fa-user-shield me-2 text-primary"></i>Grupos y permisos
     </h1>
-</div>
-
-<!-- Crear grupo -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-white">
-        <i class="fas fa-plus-circle me-1 text-primary"></i> Crear grupo
-    </div>
-    <div class="card-body">
-        <form method="post" class="row g-3 align-items-center">
-            {% csrf_token %}
-            <div class="col-md-5">
-                <label for="nombreGrupo" class="form-label">Nombre del grupo</label>
-                <input type="text" class="form-control" id="nombreGrupo" name="nombre"
-                       placeholder="Ej. Supervisor" required>
-            </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-1"></i>Crear grupo
-                </button>
-            </div>
-        </form>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">{{ total_grupos }} grupo{{ total_grupos|pluralize }}</span>
+        <button type="button" class="btn btn-primary" id="btnNuevoGrupo">
+            <i class="fas fa-plus me-1"></i>Nuevo grupo
+        </button>
     </div>
 </div>
 
-<!-- Lista de grupos -->
 {% if filas %}
-<div class="table-responsive">
-    <table class="table table-bordered table-hover table-sm align-middle bg-white">
-        <thead class="table-light">
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
             <tr>
-                <th style="width: 25%;">Grupo</th>
-                <th>Permisos actuales</th>
-                <th class="text-center" style="width: 15%;">Acciones</th>
+                <th class="ps-3">Acciones</th>
+                <th class="text-center">Índice</th>
+                <th>Grupo</th>
+                <th>Descripción</th>
+                <th>Sección</th>
+                <th class="text-center">Usuarios</th>
             </tr>
         </thead>
         <tbody>
             {% for f in filas %}
             <tr>
-                <td><strong>{{ f.grupo.name }}</strong></td>
+                <td class="ps-3 ccg-actions">
+                    <a href="{% url 'enlaces_ccg:grupo_detalle' f.grupo.pk %}" class="btn btn-outline-info btn-sm" title="Ver">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    <button type="button" class="btn btn-outline-primary btn-sm" title="Editar"
+                            data-editar-grupo data-pk="{{ f.grupo.pk }}"
+                            data-nombre="{{ f.grupo.name }}" data-descripcion="{{ f.descripcion }}"
+                            data-seccion="{{ f.seccion }}" data-indice="{{ f.indice }}">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <a href="{% url 'enlaces_ccg:permisos_grupo' f.grupo.pk %}" class="btn btn-outline-secondary btn-sm" title="Asignar permisos">
+                        <i class="fas fa-check-double"></i>
+                    </a>
+                    <form method="post" action="{% url 'enlaces_ccg:grupos' %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="eliminar">
+                        <input type="hidden" name="pk" value="{{ f.grupo.pk }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar"
+                                onclick="return confirm('¿Eliminar el grupo «{{ f.grupo.name }}»? Esta acción no se puede deshacer.');">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </td>
+                <td class="text-center">{{ f.indice }}</td>
                 <td>
-                    {% for etiq in f.etiquetas %}
-                    <span class="badge bg-secondary me-1">{{ etiq }}</span>
-                    {% empty %}
-                    <span class="text-muted small">Sin permisos</span>
-                    {% endfor %}
+                    <a href="{% url 'enlaces_ccg:grupo_detalle' f.grupo.pk %}" class="cell-name text-decoration-none">
+                        {{ f.grupo.name }}
+                    </a>
+                </td>
+                <td class="text-muted">{% if f.descripcion %}{{ f.descripcion }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if f.seccion %}
+                    <span class="badge bg-light text-dark border">{{ f.seccion }}</span>
+                    {% else %}—{% endif %}
                 </td>
                 <td class="text-center">
-                    <a href="{% url 'enlaces_ccg:permisos_grupo' f.grupo.pk %}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-check-double me-1"></i>Asignar permisos
-                    </a>
+                    <span class="badge bg-primary-subtle text-primary">{{ f.num_usuarios }}</span>
                 </td>
             </tr>
             {% endfor %}
@@ -69,9 +80,114 @@
     </table>
 </div>
 {% else %}
-<div class="text-center py-5 text-muted">
-    <i class="fas fa-users fa-3x mb-3 d-block opacity-50"></i>
-    No hay grupos creados.
+<div class="card border-0 shadow-sm">
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-users fa-3x mb-3 d-block opacity-50"></i>
+        No hay grupos creados. Crea uno con el botón «Nuevo grupo».
+    </div>
 </div>
 {% endif %}
+
+<div class="modal fade" id="modalGrupo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalGrupoTitulo">
+                    <i class="fas fa-users me-2 text-primary"></i><span id="modalGrupoTituloTexto">Nuevo grupo</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:grupos' %}" id="formGrupo">
+                {% csrf_token %}
+                <input type="hidden" name="accion" id="grupoAccion" value="crear">
+                <input type="hidden" name="pk" id="grupoPk" value="">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="grupoNombre" class="form-label">Nombre del grupo</label>
+                        <input type="text" class="form-control" id="grupoNombre" name="nombre" required
+                               placeholder="Ej. Supervisor">
+                    </div>
+                    <div class="mb-3">
+                        <label for="grupoIndice" class="form-label">Índice</label>
+                        <input type="number" class="form-control" id="grupoIndice" name="indice" min="0" value="0">
+                        <div class="form-text">Orden del grupo dentro de su sección (menor primero).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="grupoDescripcion" class="form-label">Descripción</label>
+                        <input type="text" class="form-control" id="grupoDescripcion" name="descripcion"
+                               placeholder="¿Qué rol cumple este grupo?">
+                    </div>
+                    <div class="mb-3">
+                        <label for="grupoSeccion" class="form-label">Sección</label>
+                        <input type="text" class="form-control" id="grupoSeccion" name="seccion"
+                               list="listaSecciones"
+                               placeholder="Escribe una sección o elige una existente">
+                        <datalist id="listaSecciones">
+                            {% for s in secciones_existentes %}
+                            <option value="{{ s }}"></option>
+                            {% endfor %}
+                        </datalist>
+                        <div class="form-text">Sección donde se agrupa este rol. Puedes escribir una nueva o elegir una existente.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var modalEl = document.getElementById('modalGrupo');
+    if (!modalEl || !window.bootstrap) return;
+    var modal = new bootstrap.Modal(modalEl);
+    var titulo = document.getElementById('modalGrupoTituloTexto');
+    var accion = document.getElementById('grupoAccion');
+    var pk = document.getElementById('grupoPk');
+    var nombre = document.getElementById('grupoNombre');
+    var descripcion = document.getElementById('grupoDescripcion');
+    var seccion = document.getElementById('grupoSeccion');
+    var indice = document.getElementById('grupoIndice');
+
+    function abrir(acc, targetPk, n, d, sec, idx) {
+        accion.value = acc;
+        pk.value = targetPk || '';
+        nombre.value = n || '';
+        descripcion.value = d || '';
+        seccion.value = sec || '';
+        indice.value = (idx === undefined || idx === null || idx === '') ? '0' : idx;
+        titulo.textContent = acc === 'editar' ? 'Editar grupo' : 'Nuevo grupo';
+        modal.show();
+        nombre.focus();
+    }
+
+    var btnNuevo = document.getElementById('btnNuevoGrupo');
+    if (btnNuevo) {
+        btnNuevo.addEventListener('click', function () {
+            abrir('crear');
+        });
+    }
+
+    document.querySelectorAll('[data-editar-grupo]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            abrir('editar', b.dataset.pk, b.dataset.nombre, b.dataset.descripcion,
+                  b.dataset.seccion, b.dataset.indice);
+        });
+    });
+
+    // Si se llega desde "Editar grupo" del detalle (?editar_grupo=<pk>), abrir prellenado
+    {% if grupo_editar %}
+    abrir('editar', {{ grupo_editar.pk }}, '{{ grupo_editar.name|escapejs }}', '{{ grupo_editar_descripcion|escapejs }}', '{{ grupo_editar_seccion|escapejs }}', {{ grupo_editar_indice }});
+    {% endif %}
+})();
+</script>
 {% endblock %}
