@@ -98,6 +98,7 @@
                     <tr>
                         <th class="ps-3">Acciones</th>
                         <th>Servicio</th>
+                        <th>Descripción Contractual</th>
                         <th>Responsables de atención</th>
                         <th>Estado</th>
                     </tr>
@@ -109,6 +110,7 @@
                             <button class="btn btn-outline-primary btn-sm btn-editar-servicio" title="Editar"
                                     data-pk="{{ s.pk }}"
                                     data-nombre="{{ s.nombre }}"
+                                    data-descripcion-contractual="{{ s.descripcion_contractual }}"
                                     data-responsables="{% for r in s.responsables.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"
                                     data-activo="{% if s.activo %}1{% else %}0{% endif %}">
                                 <i class="fas fa-pen"></i>
@@ -126,6 +128,13 @@
                         </td>
                         <td>
                             <span class="cell-name">{{ s.nombre }}</span>
+                        </td>
+                        <td>
+                            {% if s.descripcion_contractual %}
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">{{ s.get_descripcion_contractual_display }}</span>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% for r in s.responsables.all %}
@@ -210,6 +219,15 @@
                                    required placeholder="Ej. Servicio de internet">
                         </div>
                         <div class="col-12">
+                            <label for="servicioDescripcionContractual" class="form-label">Descripción Contractual</label>
+                            <select class="form-select" id="servicioDescripcionContractual" name="descripcion_contractual">
+                                <option value="">— Sin definir —</option>
+                                {% for valor, etiqueta in descripcion_contractual_choices %}
+                                <option value="{{ valor }}">{{ etiqueta }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label d-block">Responsables de atención</label>
                             <select name="responsables" multiple size="0"
                                     class="form-select ccg-select-busqueda ccg-select-multiple"
@@ -262,12 +280,13 @@
         btn.classList.toggle('text-muted', !n);
     }
 
-    function abrirEditar(pk, nombre, responsables, activo) {
+    function abrirEditar(pk, nombre, descripcionContractual, responsables, activo) {
         if (!editarModal) return;
         var m = new bootstrap.Modal(editarModal);
         document.getElementById('servicioAccion').value = pk ? 'editar_servicio' : 'crear_servicio';
         document.getElementById('servicioPk').value = pk || '';
         document.getElementById('servicioNombre').value = nombre || '';
+        document.getElementById('servicioDescripcionContractual').value = descripcionContractual || '';
         document.getElementById('servicioActivo').checked = activo !== '0';
         document.getElementById('modalServicioTituloTexto').textContent = pk ? 'Editar servicio' : 'Nuevo servicio';
 
@@ -285,7 +304,8 @@
 
     document.querySelectorAll('.btn-editar-servicio').forEach(function (b) {
         b.addEventListener('click', function () {
-            abrirEditar(b.dataset.pk, b.dataset.nombre, b.dataset.responsables, b.dataset.activo);
+            abrirEditar(b.dataset.pk, b.dataset.nombre, b.dataset.descripcionContractual,
+                        b.dataset.responsables, b.dataset.activo);
         });
     });
     var btnNuevo = document.getElementById('btnNuevoServicio');
@@ -295,6 +315,7 @@
 
     {% if servicio_editar %}
     abrirEditar({{ servicio_editar.pk }}, '{{ servicio_editar.nombre|escapejs }}',
+                '{{ servicio_editar.descripcion_contractual|escapejs }}',
                 '{% for r in servicio_editar.responsables.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}',
                 {{ servicio_editar.activo|yesno:"1,0" }});
     {% endif %}

@@ -1618,6 +1618,7 @@ def catalogo_servicios(request):
         accion = request.POST.get("accion")
         if accion in ("crear_servicio", "editar_servicio"):
             nombre = request.POST.get("nombre", "").strip()
+            descripcion_contractual = request.POST.get("descripcion_contractual", "").strip()
             activo = request.POST.get("activo") == "1"
             responsables_ids = [
                 int(x) for x in request.POST.getlist("responsables") if x.isdigit()
@@ -1639,8 +1640,11 @@ def catalogo_servicios(request):
                     messages.error(request, f"Ya existe un servicio «{nombre}».")
                 else:
                     servicio.nombre = nombre
+                    servicio.descripcion_contractual = descripcion_contractual
                     servicio.activo = activo
-                    servicio.save(update_fields=["nombre", "activo"])
+                    servicio.save(
+                        update_fields=["nombre", "descripcion_contractual", "activo"]
+                    )
                     servicio.responsables.set(responsables_qs)
                     messages.success(request, f"Servicio «{nombre}» actualizado.")
             elif accion == "crear_servicio":
@@ -1649,7 +1653,11 @@ def catalogo_servicios(request):
                 elif Servicio.objects.filter(nombre__iexact=nombre).exists():
                     messages.error(request, f"Ya existe un servicio «{nombre}».")
                 else:
-                    servicio = Servicio.objects.create(nombre=nombre, activo=activo)
+                    servicio = Servicio.objects.create(
+                        nombre=nombre,
+                        descripcion_contractual=descripcion_contractual,
+                        activo=activo,
+                    )
                     servicio.responsables.set(responsables_qs)
                     messages.success(request, f"Servicio «{nombre}» creado.")
         elif accion == "toggle_servicio":
@@ -1702,6 +1710,7 @@ def catalogo_servicios(request):
             "servicios": page_obj,
             "page_obj": page_obj,
             "responsables": ResponsableAtencion.objects.prefetch_related("servicios").order_by("nombre"),
+            "descripcion_contractual_choices": Servicio.DESCRIPCION_CONTRACTUAL_CHOICES,
             "q": q,
             "vista": vista,
             "qs_columnas": qs_columnas,

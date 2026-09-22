@@ -1048,7 +1048,21 @@ class ConfiguracionTickets(models.Model):
 class Servicio(models.Model):
     """Catálogo de servicios de atención (columna `servicio` del SIG)."""
 
+    DESCRIPCION_CONTRACTUAL_CHOICES = [
+        ("obligatorios_no_comerciales", "Servicios Obligatorios No Comerciales"),
+        ("obligatorios_comerciales", "Servicios Obligatorios Comerciales"),
+        ("opcionales_comerciales", "Servicios Opcionales Comerciales"),
+        ("solicitud_adicional", "Solicitud Adicional"),
+    ]
+
     nombre = models.CharField(max_length=255, unique=True, verbose_name="Servicio")
+    descripcion_contractual = models.CharField(
+        max_length=60,
+        choices=DESCRIPCION_CONTRACTUAL_CHOICES,
+        blank=True,
+        default="",
+        verbose_name="Descripción Contractual",
+    )
     activo = models.BooleanField(default=True, verbose_name="Activo")
     responsables = models.ManyToManyField(
         "ResponsableAtencion",

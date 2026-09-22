@@ -573,8 +573,8 @@ class ConfiguracionTicketsAdmin(admin.ModelAdmin):
 
 @admin.register(Servicio)
 class ServicioAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "activo", "creado_en")
-    list_filter = ("activo",)
+    list_display = ("nombre", "descripcion_contractual", "activo", "creado_en")
+    list_filter = ("activo", "descripcion_contractual")
     search_fields = ("nombre",)
     filter_horizontal = ("responsables",)
 
