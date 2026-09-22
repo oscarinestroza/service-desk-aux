@@ -699,6 +699,14 @@ class PermisoGrupo(models.Model):
         verbose_name="Capacidades",
         help_text="Lista de claves de capacidad (directorio, editar, importar, tickets, revisiones, admin).",
     )
+    modulos = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name="Módulos",
+        help_text="Claves de módulos (vistas del menú) habilitados para el grupo. "
+        "None = todos los módulos de las secciones habilitadas.",
+    )
     descripcion = models.CharField(
         max_length=255,
         blank=True,

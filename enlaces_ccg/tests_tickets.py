@@ -1843,3 +1843,76 @@ class PerfilInstitucionPermisosTests(TestCase):
         self.assertEqual(r_editar.status_code, 403)
         self.enlace.refresh_from_db()
         self.assertEqual(self.enlace.nombres, "Ana")
+
+
+class ModulosGrupoVisibilidadTests(TestCase):
+    """Visibilidad de módulos del menú por grupo (permiso fino)."""
+
+    def _grupo(self, nombre, capacidades, modulos=None):
+        from django.contrib.auth.models import Group
+
+        grupo = Group.objects.create(name=nombre)
+        PermisoGrupo.objects.create(
+            grupo=grupo, capacidades=capacidades, modulos=modulos
+        )
+        return grupo
+
+    def test_modulos_de_fallback_todos_los_de_sus_secciones(self):
+        from .roles import modulos_de
+
+        grupo = self._grupo("G-fallback", ["tickets"])
+        mods = modulos_de(grupo)
+        self.assertIn("tickets", mods)
+        self.assertIn("dashboard", mods)
+        self.assertIn("tiempos_holgura", mods)
+        self.assertIn("indicadores", mods)
+        self.assertNotIn("edificios", mods)
+
+    def test_modulos_de_explicito_limita(self):
+        from .roles import modulos_de
+
+        grupo = self._grupo("G-explicito", ["tickets"], modulos=["tickets"])
+        self.assertEqual(modulos_de(grupo), {"tickets"})
+
+    def test_modulo_sin_capacidad_no_visible(self):
+        from .roles import modulos_de
+
+        # Módulo marcado, pero su sección (tickets) no está habilitada.
+        grupo = self._grupo("G-sin-cap", ["directorio"], modulos=["tickets"])
+        self.assertNotIn("tickets", modulos_de(grupo))
+
+    def test_sidebar_oculta_modulos_no_habilitados(self):
+        from django.contrib.auth import get_user_model
+
+        grupo = self._grupo("G-sidebar", ["tickets"], modulos=["tickets"])
+        usuario = get_user_model().objects.create_user(
+            "side.user", "side@test.local", "Clave123!"
+        )
+        usuario.groups.add(grupo)
+        self.client.force_login(usuario)
+        html = self.client.get(reverse("enlaces_ccg:seguimiento_tickets")).content.decode(
+            "utf-8", "replace"
+        )
+        self.assertIn('href="/tickets/"', html)
+        self.assertNotIn("Tiempos de Holgura", html)
+        self.assertNotIn("Indicadores de mejora continua", html)
+
+    def test_permisos_grupo_guarda_modulos(self):
+        from django.contrib.auth import get_user_model
+
+        grupo = self._grupo("G-guardar", ["directorio", "tickets"])
+        admin = get_user_model().objects.create_superuser(
+            "root.mod", "root@test.local", "Clave123!"
+        )
+        self.client.force_login(admin)
+        self.client.post(
+            reverse("enlaces_ccg:permisos_grupo", args=[grupo.pk]),
+            {
+                "cap_directorio": "on",
+                "cap_tickets": "on",
+                "mod_edificios": "on",
+                "mod_tickets": "on",
+            },
+        )
+        permiso = PermisoGrupo.objects.get(grupo=grupo)
+        self.assertEqual(sorted(permiso.modulos), ["edificios", "tickets"])

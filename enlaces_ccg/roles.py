@@ -38,10 +38,11 @@ CAP_IMPORTAR = "importar"
 CAP_TICKETS = "tickets"
 CAP_ATENDER = "atender"
 CAP_REVISIONES = "revisiones"
+CAP_SUPERVISOR = "supervisor"
 CAP_ADMIN = "admin"
 
 CAPACIDADES_POR_ROL = {
-    ROL_ADMIN: {CAP_DIRECTORIO, CAP_EDITAR, CAP_IMPORTAR, CAP_TICKETS, CAP_ATENDER, CAP_REVISIONES, CAP_ADMIN},
+    ROL_ADMIN: {CAP_DIRECTORIO, CAP_EDITAR, CAP_IMPORTAR, CAP_TICKETS, CAP_ATENDER, CAP_REVISIONES, CAP_SUPERVISOR, CAP_ADMIN},
     ROL_OPERADOR: {CAP_DIRECTORIO, CAP_EDITAR, CAP_TICKETS, CAP_REVISIONES},
     ROL_ENCARGADO: {CAP_DIRECTORIO, CAP_TICKETS, CAP_ATENDER},
 }
@@ -100,6 +101,55 @@ def tiene(user, capacidad):
         if capacidad in capacidades_de(g):
             return True
     return False
+
+
+def modulos_de(grupo):
+    """Módulos (vistas del menú) habilitados para un grupo.
+
+    Requiere que la capacidad de su sección esté activa. Si el grupo no tiene
+    módulos configurados (`modulos is None`), se devuelven todos los módulos
+    de sus secciones habilitadas (comportamiento previo).
+    """
+    from .models import PermisoGrupo
+
+    permiso = PermisoGrupo.objects.filter(grupo=grupo).first()
+    if permiso is not None:
+        caps = set(permiso.capacidades or [])
+    else:
+        caps = set(CAPACIDADES_POR_ROL.get(getattr(grupo, "name", None), set()))
+
+    permitidos = {v["clave"] for v in VISTAS if v["seccion"] in caps}
+    if permiso is not None and permiso.modulos is not None:
+        permitidos &= set(permiso.modulos or [])
+    return permitidos
+
+
+def modulos_visibles(user):
+    """Conjunto de claves de módulos visibles para un usuario (unión de sus grupos)."""
+    if not user or not user.is_authenticated:
+        return set()
+    if user.is_superuser:
+        return {v["clave"] for v in VISTAS}
+
+    from .models import PermisoGrupo
+
+    grupos = list(user.groups.all())
+    permisos = {
+        p.grupo_id: p
+        for p in PermisoGrupo.objects.filter(grupo_id__in=[g.pk for g in grupos])
+    }
+    visibles = set()
+    for g in grupos:
+        permiso = permisos.get(g.pk)
+        if permiso is not None:
+            caps = set(permiso.capacidades or [])
+        else:
+            caps = set(CAPACIDADES_POR_ROL.get(g.name, set()))
+        permitidos = {v["clave"] for v in VISTAS if v["seccion"] in caps}
+        if permiso is not None and permiso.modulos is not None:
+            permitidos &= set(permiso.modulos or [])
+        visibles |= permitidos
+    return visibles
 
 
 def requiere(rol_or_capacidad):
@@ -171,6 +221,20 @@ VISTAS = [
      "seccion": CAP_REVISIONES, "ver": (CAP_REVISIONES,)},
     {"clave": "documentos", "etiqueta": "Documentos y carpetas", "icono": "fas fa-folder-open",
      "seccion": CAP_DIRECTORIO, "ver": (CAP_DIRECTORIO,)},
+    {"clave": "comunicados_cc", "etiqueta": "Comunicados CC", "icono": "fas fa-bullhorn",
+     "seccion": CAP_DIRECTORIO, "ver": (CAP_DIRECTORIO,)},
+    {"clave": "tiempos_holgura", "etiqueta": "Tiempos de Holgura", "icono": "fas fa-hourglass-half",
+     "seccion": CAP_TICKETS, "ver": (CAP_TICKETS,)},
+    {"clave": "aprendizaje", "etiqueta": "Aprendizaje", "icono": "fas fa-graduation-cap",
+     "seccion": CAP_REVISIONES, "ver": (CAP_REVISIONES,)},
+    {"clave": "correos", "etiqueta": "Correos", "icono": "fas fa-envelope",
+     "seccion": CAP_SUPERVISOR, "ver": (CAP_SUPERVISOR,)},
+    {"clave": "seguimiento_solicitudes", "etiqueta": "Seguimiento de Solicitudes", "icono": "fas fa-clipboard-list",
+     "seccion": CAP_SUPERVISOR, "ver": (CAP_SUPERVISOR,)},
+    {"clave": "fallas_recurrentes", "etiqueta": "Fallas Recurrentes", "icono": "fas fa-repeat",
+     "seccion": CAP_SUPERVISOR, "ver": (CAP_SUPERVISOR,)},
+    {"clave": "preguntas_frecuentes", "etiqueta": "Preguntas y Respuestas Frecuentes", "icono": "fas fa-question-circle",
+     "seccion": CAP_SUPERVISOR, "ver": (CAP_SUPERVISOR,)},
 ]
 
 
@@ -179,6 +243,7 @@ SECCIONES = [
     {"clave": CAP_TICKETS, "etiqueta": "Seguimiento de tickets"},
     {"clave": CAP_IMPORTAR, "etiqueta": "Importaciones"},
     {"clave": CAP_REVISIONES, "etiqueta": "Modulo Operativo MAO"},
+    {"clave": CAP_SUPERVISOR, "etiqueta": "Modulo Supervisor MAO"},
 ]
 
 
@@ -191,6 +256,7 @@ def nombres_capacidades():
         CAP_ATENDER: "Atender tickets",
         CAP_IMPORTAR: "Importaciones",
         CAP_REVISIONES: "Modulo Operativo MAO",
+        CAP_SUPERVISOR: "Modulo Supervisor MAO",
         CAP_ADMIN: "Panel de administración",
     }
 

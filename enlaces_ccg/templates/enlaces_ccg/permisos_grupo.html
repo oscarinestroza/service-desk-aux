@@ -25,7 +25,9 @@
 </div>
 
 <p class="text-muted">
-    Marca las secciones a las que el grupo tiene acceso. La sección <strong>Admin</strong>
+    Marca las secciones a las que el grupo tiene acceso y, dentro de cada una, los
+    <strong>módulos</strong> que aparecerán en el menú. Desmarca los módulos que aún no
+    estén listos para que no se muestren. La sección <strong>Admin</strong>
     (importaciones y panel) se habilita aparte con el rol Administrador.
 </p>
 
@@ -34,20 +36,34 @@
     <div class="card shadow-sm">
         <div class="card-body">
             {% for sec in secciones %}
-            <div class="border-bottom pb-3 mb-3">
-                <div class="row g-2 align-items-center">
-                    <div class="col-md-6">
+            <div class="border-bottom pb-3 mb-3" data-seccion="{{ sec.clave }}"
+                 data-cap-principal="{{ sec.cap_principal }}">
+                <div class="row g-3">
+                    <div class="col-md-8">
                         <strong><i class="fas fa-layer-group me-1 text-primary"></i>{{ sec.etiqueta }}</strong>
-                        <ul class="small text-muted mb-0 ps-3 mt-1 mb-1" style="list-style:disc;">
-                            {% for v in sec.vistas %}
-                            <li><i class="{{ v.icono }} me-1 text-secondary"></i>{{ v.etiqueta }}</li>
-                            {% endfor %}
-                        </ul>
+                        <div class="mt-2 ps-1">
+                            <div class="small text-muted mb-1">
+                                <i class="fas fa-bars me-1"></i>Módulos del menú
+                            </div>
+                            <div class="d-flex flex-column gap-2">
+                                {% for v in sec.vistas %}
+                                <div class="form-check">
+                                    <input class="form-check-input ccg-modulo" type="checkbox"
+                                           name="mod_{{ v.clave }}" id="mod_{{ v.clave }}_{{ sec.clave }}"
+                                           {% if v.clave in modulos_actuales %}checked{% endif %}>
+                                    <label class="form-check-label small" for="mod_{{ v.clave }}_{{ sec.clave }}">
+                                        <i class="{{ v.icono }} me-1 text-secondary"></i>{{ v.etiqueta }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6 d-flex flex-wrap gap-3">
+                    <div class="col-md-4 d-flex flex-wrap gap-3 justify-content-md-end align-items-start">
                         {% for cap in sec.caps %}
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox"
+                            <input class="form-check-input{% if cap == sec.cap_principal %} ccg-cap-principal{% endif %}"
+                                   type="checkbox"
                                    name="cap_{{ cap }}" id="cap_{{ cap }}_{{ forloop.parentloop.counter }}"
                                    {% if cap in caps_actuales %}checked{% endif %}>
                             <label class="form-check-label" for="cap_{{ cap }}_{{ forloop.parentloop.counter }}">
@@ -72,4 +88,22 @@
         </div>
     </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Al activar/desactivar la capacidad principal de una sección, se marcan o
+    // desmarcan todos sus módulos (el admin puede ajustar después uno por uno).
+    document.querySelectorAll('[data-seccion]').forEach(function (sec) {
+        var cap = sec.querySelector('.ccg-cap-principal');
+        if (!cap) return;
+        cap.addEventListener('change', function () {
+            sec.querySelectorAll('.ccg-modulo').forEach(function (m) {
+                m.checked = cap.checked;
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}

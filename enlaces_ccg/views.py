@@ -47,6 +47,7 @@ from .roles import (
     CAP_EDITAR,
     CAP_IMPORTAR,
     CAP_REVISIONES,
+    CAP_SUPERVISOR,
     CAP_TICKETS,
     requiere,
     tiene,
@@ -834,6 +835,7 @@ def ticket_json(request, pk):
             "raw_data": t.raw_data,
             "puede_atender": tiene(request.user, CAP_ATENDER),
             "url_detalle": reverse("enlaces_ccg:ticket_detalle", args=[t.pk]),
+            "url_cierre": reverse("enlaces_ccg:ticket_cerrar", args=[t.pk]),
             "html": render_to_string(
                 "enlaces_ccg/_modal_ticket.html",
                 {"ticket": t},
@@ -1146,6 +1148,36 @@ def indicadores_mejora(request):
     return render(request, "enlaces_ccg/indicadores_mejora.html")
 
 
+@requiere(CAP_TICKETS)
+def tiempos_holgura(request):
+    """Vista de Tiempos de Holgura (en construcción)."""
+    return render(request, "enlaces_ccg/tiempos_holgura.html")
+
+
+@requiere(CAP_SUPERVISOR)
+def correos(request):
+    """Vista de Correos (en construcción)."""
+    return render(request, "enlaces_ccg/correos.html")
+
+
+@requiere(CAP_SUPERVISOR)
+def seguimiento_solicitudes(request):
+    """Vista de Seguimiento de Solicitudes (en construcción)."""
+    return render(request, "enlaces_ccg/seguimiento_solicitudes.html")
+
+
+@requiere(CAP_SUPERVISOR)
+def fallas_recurrentes(request):
+    """Vista de Fallas Recurrentes (en construcción)."""
+    return render(request, "enlaces_ccg/fallas_recurrentes.html")
+
+
+@requiere(CAP_SUPERVISOR)
+def preguntas_frecuentes(request):
+    """Vista de Preguntas y Respuestas Frecuentes (en construcción)."""
+    return render(request, "enlaces_ccg/preguntas_frecuentes.html")
+
+
 @requiere(CAP_IMPORTAR)
 def importar_deductivas(request):
     """Vista para importar deductivas (en construcción)."""
@@ -1397,7 +1429,7 @@ def permisos_grupo(request, pk):
     from django.contrib.auth.models import Group
 
     from .models import PermisoGrupo
-    from .roles import ROL_ADMIN, SECCIONES, VISTAS, capacidades_de
+    from .roles import ROL_ADMIN, SECCIONES, VISTAS, capacidades_de, modulos_de
 
     grupo = Group.objects.filter(pk=pk).first()
     if grupo is None:
@@ -1409,6 +1441,7 @@ def permisos_grupo(request, pk):
         "tickets": ["tickets", "atender"],
         "importar": ["importar"],
         "revisiones": ["revisiones"],
+        "supervisor": ["supervisor"],
     }
 
     if request.method == "POST":
@@ -1421,20 +1454,26 @@ def permisos_grupo(request, pk):
         if grupo.name == ROL_ADMIN and CAP_ADMIN not in nuevas:
             nuevas.append(CAP_ADMIN)
         permiso.capacidades = nuevas
+        permiso.modulos = [
+            v["clave"] for v in VISTAS if request.POST.get(f"mod_{v['clave']}")
+        ]
         permiso.save()
         messages.success(request, f"Permisos de «{grupo.name}» actualizados.")
         return redirect("enlaces_ccg:permisos_grupo", pk=grupo.pk)
 
     caps_actuales = capacidades_de(grupo)
+    modulos_actuales = modulos_de(grupo)
 
     secciones = []
     for sec in SECCIONES:
+        caps_sec = caps_por_seccion.get(sec["clave"], [])
         secciones.append(
             {
                 "clave": sec["clave"],
                 "etiqueta": sec["etiqueta"],
                 "vistas": [v for v in VISTAS if v["seccion"] == sec["clave"]],
-                "caps": caps_por_seccion.get(sec["clave"], []),
+                "caps": caps_sec,
+                "cap_principal": caps_sec[0] if caps_sec else "",
             }
         )
 
@@ -1445,6 +1484,7 @@ def permisos_grupo(request, pk):
             "grupo": grupo,
             "secciones": secciones,
             "caps_actuales": caps_actuales,
+            "modulos_actuales": modulos_actuales,
         },
     )
 

@@ -338,7 +338,7 @@
                                 </button>
                                 {% if puede_atender %}
                                 <a class="btn btn-sm btn-outline-success"
-                                   href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}"
+                                   href="{% url 'enlaces_ccg:ticket_cerrar' t.pk %}"
                                    title="Atender">
                                     <i class="fas fa-wrench"></i>
                                 </a>
@@ -439,9 +439,15 @@
                     <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
                         <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
                     </a>
-<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                    {% if puede_atender %}
+                    <a href="#" id="modalTicketAtender" class="btn btn-sm btn-success">
+                        <i class="fas fa-wrench me-1"></i>Atender
+                    </a>
+                    {% else %}
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
                         <i class="fas fa-times me-1"></i>Cerrar
                     </button>
+                    {% endif %}
 </div>
     </div>
 </div>
@@ -576,6 +582,7 @@
     var modal = new bootstrap.Modal(modalEl);
     var cuerpo = document.getElementById('modalTicketContenido');
     var enlace = document.getElementById('modalTicketEnlace');
+    var atender = document.getElementById('modalTicketAtender');
     var btnAnterior = document.getElementById('modalTicketAnterior');
     var btnSiguiente = document.getElementById('modalTicketSiguiente');
 
@@ -605,6 +612,7 @@
             .then(function (d) {
                 cuerpo.innerHTML = d.html;
                 enlace.href = d.url_detalle;
+                if (atender) atender.href = d.url_cierre;
             })
             .catch(function () {
                 cuerpo.innerHTML = '<div class="alert alert-danger mb-0">' +

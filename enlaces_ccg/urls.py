@@ -259,6 +259,31 @@ urlpatterns = [
         name="indicadores_mejora",
     ),
     path(
+        "tiempos-holgura/",
+        views.tiempos_holgura,
+        name="tiempos_holgura",
+    ),
+    path(
+        "supervisor/correos/",
+        views.correos,
+        name="correos",
+    ),
+    path(
+        "supervisor/seguimiento-solicitudes/",
+        views.seguimiento_solicitudes,
+        name="seguimiento_solicitudes",
+    ),
+    path(
+        "supervisor/fallas-recurrentes/",
+        views.fallas_recurrentes,
+        name="fallas_recurrentes",
+    ),
+    path(
+        "supervisor/preguntas-frecuentes/",
+        views.preguntas_frecuentes,
+        name="preguntas_frecuentes",
+    ),
+    path(
         "importar/deductivas/",
         views.importar_deductivas,
         name="importar_deductivas",

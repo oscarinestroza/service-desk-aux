@@ -586,32 +586,41 @@
         </div>
 
         <ul class="sidebar-nav">
-            {% if puede_directorio %}
+            {% if 'directorio' in secciones_visibles %}
             <li class="nav-section">Directorio de Enlaces</li>
+            {% if 'edificios' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:lista_edificios' %}"
                    class="{% if request.resolver_match.url_name == 'lista_edificios' %}active{% endif %}">
                     <i class="fas fa-building"></i> Edificios
                 </a>
             </li>
+            {% endif %}
+            {% if 'instituciones' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:lista_instituciones' %}"
                    class="{% if request.resolver_match.url_name == 'lista_instituciones' %}active{% endif %}">
                     <i class="fas fa-landmark"></i> Instituciones
                 </a>
             </li>
+            {% endif %}
+            {% if 'enlaces' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:lista_enlaces' %}"
                    class="{% if request.resolver_match.url_name == 'lista_enlaces' %}active{% endif %}">
                     <i class="fas fa-id-card"></i> Enlaces
                 </a>
             </li>
+            {% endif %}
+            {% if 'documentos' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:documentos' %}"
                    class="{% if request.resolver_match.url_name == 'documentos' or request.resolver_match.url_name == 'detalle_carpeta' %}active{% endif %}">
                     <i class="fas fa-folder-open"></i> Documentos
                 </a>
             </li>
+            {% endif %}
+            {% if 'comunicados_cc' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:comunicados_cc' %}"
                    class="{% if request.resolver_match.url_name == 'comunicados_cc' %}active{% endif %}">
@@ -619,21 +628,35 @@
                 </a>
             </li>
             {% endif %}
+            {% endif %}
 
-            {% if puede_tickets %}
+            {% if 'tickets' in secciones_visibles %}
             <li class="nav-section">Seguimiento de tickets</li>
+            {% if 'dashboard' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:dashboard' %}"
                    class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
             </li>
+            {% endif %}
+            {% if 'tickets' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:seguimiento_tickets' %}"
                    class="{% if request.resolver_match.url_name == 'seguimiento_tickets' %}active{% endif %}">
                     <i class="fas fa-ticket-alt"></i> Tickets
                 </a>
             </li>
+            {% endif %}
+            {% if 'tiempos_holgura' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:tiempos_holgura' %}"
+                   class="{% if request.resolver_match.url_name == 'tiempos_holgura' %}active{% endif %}">
+                    <i class="fas fa-hourglass-half"></i> Tiempos de Holgura
+                </a>
+            </li>
+            {% endif %}
+            {% if 'indicadores' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:indicadores_mejora' %}"
                    class="{% if request.resolver_match.url_name == 'indicadores_mejora' %}active{% endif %}">
@@ -641,51 +664,102 @@
                 </a>
             </li>
             {% endif %}
+            {% endif %}
 
-            {% if puede_revisiones %}
+            {% if 'revisiones' in secciones_visibles %}
             <li class="nav-section">Modulo Operativo MAO</li>
+            {% if 'revision_tickets' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:revision_tickets' %}"
                    class="{% if request.resolver_match.url_name == 'revision_tickets' %}active{% endif %}">
                     <i class="fas fa-clipboard-check"></i> Revisión de Tickets
                 </a>
             </li>
+            {% endif %}
+            {% if 'revision_correos' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:revision_correos' %}"
                    class="{% if request.resolver_match.url_name == 'revision_correos' %}active{% endif %}">
                     <i class="fas fa-envelope-open-text"></i> Revisión de Correos
                 </a>
             </li>
+            {% endif %}
+            {% if 'cierre_operador' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:cierre_operador' %}"
                    class="{% if request.resolver_match.url_name == 'cierre_operador' %}active{% endif %}">
                     <i class="fas fa-lock"></i> Cierre de Operador
                 </a>
             </li>
+            {% endif %}
+            {% if 'comentarios_operador' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:comentarios_operador' %}"
                    class="{% if request.resolver_match.url_name == 'comentarios_operador' %}active{% endif %}">
                     <i class="fas fa-comments"></i> Comentarios de Operador
                 </a>
             </li>
+            {% endif %}
+            {% if 'recordatorios' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:recordatorios' %}"
                    class="{% if request.resolver_match.url_name == 'recordatorios' %}active{% endif %}">
                     <i class="fas fa-bell"></i> Recordatorios
                 </a>
             </li>
+            {% endif %}
+            {% if 'plantillas_respuesta' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:plantillas_respuesta' %}"
                    class="{% if request.resolver_match.url_name == 'plantillas_respuesta' %}active{% endif %}">
                     <i class="fas fa-reply-all"></i> Plantillas de respuesta
                 </a>
             </li>
+            {% endif %}
+            {% if 'aprendizaje' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:aprendizaje' %}"
                    class="{% if request.resolver_match.url_name == 'aprendizaje' %}active{% endif %}">
                     <i class="fas fa-graduation-cap"></i> Aprendizaje
                 </a>
             </li>
+            {% endif %}
+            {% endif %}
+
+            {% if 'supervisor' in secciones_visibles %}
+            <li class="nav-section">Modulo Supervisor MAO</li>
+            {% if 'correos' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:correos' %}"
+                   class="{% if request.resolver_match.url_name == 'correos' %}active{% endif %}">
+                    <i class="fas fa-envelope"></i> Correos
+                </a>
+            </li>
+            {% endif %}
+            {% if 'seguimiento_solicitudes' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:seguimiento_solicitudes' %}"
+                   class="{% if request.resolver_match.url_name == 'seguimiento_solicitudes' %}active{% endif %}">
+                    <i class="fas fa-clipboard-list"></i> Seguimiento de Solicitudes
+                </a>
+            </li>
+            {% endif %}
+            {% if 'fallas_recurrentes' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:fallas_recurrentes' %}"
+                   class="{% if request.resolver_match.url_name == 'fallas_recurrentes' %}active{% endif %}">
+                    <i class="fas fa-repeat"></i> Fallas Recurrentes
+                </a>
+            </li>
+            {% endif %}
+            {% if 'preguntas_frecuentes' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:preguntas_frecuentes' %}"
+                   class="{% if request.resolver_match.url_name == 'preguntas_frecuentes' %}active{% endif %}">
+                    <i class="fas fa-question-circle"></i> Preguntas y Respuestas Frecuentes
+                </a>
+            </li>
+            {% endif %}
             {% endif %}
 
             {% if user.is_staff %}

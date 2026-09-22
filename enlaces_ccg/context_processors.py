@@ -7,6 +7,8 @@ from .roles import (
     CAP_IMPORTAR,
     CAP_REVISIONES,
     CAP_TICKETS,
+    VISTAS,
+    modulos_visibles,
     rol_display,
     tiene,
 )
@@ -14,6 +16,7 @@ from .roles import (
 
 def constantes_globales(request):
     """Expone constantes y permisos de la app a todas las plantillas."""
+    modulos = modulos_visibles(request.user)
     return {
         "NIVEL_CHOICES": Institucion.NIVEL_CHOICES,
         "rol_actual": rol_display(request.user),
@@ -25,4 +28,8 @@ def constantes_globales(request):
         "puede_atender": tiene(request.user, CAP_ATENDER),
         "puede_revisiones": tiene(request.user, CAP_REVISIONES),
         "puede_admin": tiene(request.user, CAP_ADMIN) or request.user.is_staff,
+        # Módulos del menú lateral visibles para el usuario
+        "modulos_visibles": modulos,
+        # Secciones (claves de capacidad) con al menos un módulo visible
+        "secciones_visibles": {v["seccion"] for v in VISTAS if v["clave"] in modulos},
     }
