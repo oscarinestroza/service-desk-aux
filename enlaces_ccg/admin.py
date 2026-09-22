@@ -596,6 +596,8 @@ class ResponsableAtencionAdmin(admin.ModelAdmin):
     list_display = ("nombre", "activo", "creado_en")
     list_filter = ("activo",)
     search_fields = ("nombre",)
+    filter_horizontal = ("usuarios",)
+    readonly_fields = ("nombre",)
 
 
 @admin.register(Ticket)

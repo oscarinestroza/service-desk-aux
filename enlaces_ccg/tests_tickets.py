@@ -34,6 +34,7 @@ from .sig_sync.tickets import (
     _registrar_resultado,
     aplicar_tickets,
     parsear_excel_tickets,
+    sincronizar_tickets,
     tick_sync_tickets_task,
 )
 
@@ -820,6 +821,165 @@ class TickHorarioTests(TestCase):
             res = tick_sync_tickets_task()
         self.assertTrue(res["sincronizado"])
         sync_mock.assert_called_once_with(modo=MODO_SYNC_COMPLETO)
+
+
+class SincronizacionFallasTests(TestCase):
+    """La sincronización de tickets recalibra las fallas solo tras completas."""
+
+    def _correr_sincronizacion(self, modo):
+        with mock.patch(
+            "enlaces_ccg.sig_sync.tickets.descargar_excel_tickets",
+            return_value={"path": "x.xlsx"},
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets.parsear_excel_tickets",
+            return_value=([], 0),
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets.aplicar_tickets",
+            return_value={"creados": 0, "actualizados": 0, "archivados": 0},
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets._limpiar_descargas"
+        ), mock.patch(
+            "enlaces_ccg.sig_sync.tickets._registrar_resultado"
+        ) as registrar_mock, mock.patch(
+            "enlaces_ccg.sig_sync.tickets.sincronizar_datos_fallas",
+            return_value=3,
+        ) as fallas_mock:
+            res = sincronizar_tickets(modo=modo)
+            return res, registrar_mock, fallas_mock
+
+    def test_completo_recalibra_fallas(self):
+        res, registrar_mock, fallas_mock = self._correr_sincronizacion(
+            MODO_SYNC_COMPLETO
+        )
+        fallas_mock.assert_called_once_with()
+        self.assertEqual(res["fallas_actualizadas"], 3)
+        mensaje = registrar_mock.call_args[0][2]
+        self.assertIn("3 fallas actualizadas", mensaje)
+
+    def test_parcial_no_recalibra_fallas(self):
+        res, registrar_mock, fallas_mock = self._correr_sincronizacion(
+            MODO_SYNC_PARCIAL
+        )
+        fallas_mock.assert_not_called()
+        self.assertEqual(res["fallas_actualizadas"], 0)
+        mensaje = registrar_mock.call_args[0][2]
+        self.assertNotIn("fallas actualizadas", mensaje)
+
+
+class ResponsablesUsuariosTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.resp_uno = ResponsableAtencion.objects.create(
+            nombre="Resp Uno", activo=True
+        )
+        self.resp_dos = ResponsableAtencion.objects.create(
+            nombre="Resp Dos", activo=True
+        )
+        self.resp_tres = ResponsableAtencion.objects.create(
+            nombre="Resp Tres", activo=True
+        )
+        self.usuario = get_user_model().objects.create_superuser(
+            "operador.resp", "op@test.local", "Prueba123!"
+        )
+        self.usuario.responsables_atencion.add(self.resp_uno, self.resp_dos)
+        self.client.force_login(self.usuario)
+
+        def fila_resp(tid, numero, responsable):
+            fila = _fila_v(tid, numero)
+            fila[3] = responsable
+            return fila
+
+        self.datos = self._filas_basicas([
+            fila_resp(1, "SS26-0901", "Resp Uno"),
+            fila_resp(2, "SS26-0902", "Resp Dos"),
+            fila_resp(3, "SS26-0903", "Resp Tres"),
+        ])
+        aplicar_tickets(self.datos, MODO_SYNC_PARCIAL)
+
+    def _filas_basicas(self, filas):
+        ruta = _excel_tmp(filas)
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        return datos
+
+    def test_lista_prefiltrada_por_responsables_del_usuario(self):
+        respuesta = self.client.get(reverse("enlaces_ccg:seguimiento_tickets"))
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn(">SS26-0901<", html)
+        self.assertIn(">SS26-0902<", html)
+        self.assertNotIn(">SS26-0903<", html)
+        self.assertIn("Ver todos los tickets", html)
+
+    def test_todos_por_parametro_muestra_todo(self):
+        respuesta = self.client.get(reverse("enlaces_ccg:seguimiento_tickets"), {"todos": "1"})
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertIn(">SS26-0903<", html)
+        self.assertNotIn("Ver todos los tickets", html)
+
+    def test_responsable_explicito_ignora_prefiltro(self):
+        respuesta = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"),
+            {"responsable": str(self.resp_tres.pk)},
+        )
+        html = respuesta.content.decode("utf-8", "replace")
+        self.assertIn(">SS26-0903<", html)
+        self.assertNotIn("Ver todos los tickets", html)
+
+    def test_catalogo_usuarios_asigna_responsables_al_crear(self):
+        from django.contrib.auth import get_user_model
+
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:catalogo_usuarios"),
+            {
+                "accion": "crear_usuario",
+                "username": "usuario.limpieza",
+                "password": "Clave123!",
+                "first_name": "Limpieza",
+                "last_name": "Operativo",
+                "email": "",
+                "is_staff": "1",
+                "is_active": "1",
+                "responsables": [str(self.resp_uno.pk), str(self.resp_dos.pk)],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        u = get_user_model().objects.get(username="usuario.limpieza")
+        self.assertEqual(
+            set(u.responsables_atencion.values_list("pk", flat=True)),
+            {self.resp_uno.pk, self.resp_dos.pk},
+        )
+
+    def test_catalogo_usuarios_reasigna_responsables_al_editar(self):
+        from django.contrib.auth import get_user_model
+
+        u = get_user_model().objects.create_user(
+            "usuario.editar", "e@test.local", "Clave123!", is_active=True
+        )
+        u.responsables_atencion.add(self.resp_uno)
+
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:catalogo_usuarios"),
+            {
+                "accion": "editar_usuario",
+                "pk": str(u.pk),
+                "username": "usuario.editar",
+                "password": "",
+                "first_name": "",
+                "last_name": "",
+                "email": "",
+                "is_staff": "0",
+                "is_active": "1",
+                "responsables": [str(self.resp_tres.pk)],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        u.refresh_from_db()
+        self.assertEqual(
+            list(u.responsables_atencion.values_list("pk", flat=True)),
+            [self.resp_tres.pk],
+        )
 
 
 def _fila_v(tid, numero, solicitante="Cesar Augusto Zavala",

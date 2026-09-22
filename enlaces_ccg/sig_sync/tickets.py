@@ -879,13 +879,21 @@ def sincronizar_tickets(modo=None, desde=None):
         # Borra el Excel descargado y los JSON de metadatos para no llenar media/.
         _limpiar_descargas()
 
+    # Tras una descarga completa se recalibran las fallas (KPI y datos de
+    # clasificación/categoría/servicio) con el ticket más reciente de cada una.
+    fallas_actualizadas = 0
+    if modo == MODO_SYNC_COMPLETO:
+        fallas_actualizadas = sincronizar_datos_fallas()
+
     conteos["errores"] = errores_parse
     conteos["modo"] = modo
     conteos["filas"] = len(datos)
+    conteos["fallas_actualizadas"] = fallas_actualizadas
     mensaje = (
         f"{modo}: {len(datos)} filas, {conteos['creados']} creados, "
         f"{conteos['actualizados']} actualizados, {conteos['archivados']} archivados."
         + (f" {errores_parse} filas con error." if errores_parse else "")
+        + (f" {fallas_actualizadas} fallas actualizadas." if fallas_actualizadas else "")
     )
     _registrar_resultado(modo, TicketLog.ESTADO_OK, mensaje, conteos)
     return conteos

@@ -159,6 +159,11 @@ urlpatterns = [
         name="catalogo_usuarios",
     ),
     path(
+        "catalogos/responsables/",
+        views.catalogo_responsables,
+        name="catalogo_responsables",
+    ),
+    path(
         "tickets/",
         views.seguimiento_tickets,
         name="seguimiento_tickets",

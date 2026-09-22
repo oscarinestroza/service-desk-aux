@@ -57,7 +57,7 @@ from .roles import (
 # ---------------------------------------------------------------------------
 def login_vista(request):
     if request.user.is_authenticated:
-        return redirect("enlaces_ccg:lista_edificios")
+        return redirect("/enlaces/")
 
     error = None
     if request.method == "POST":
@@ -67,7 +67,7 @@ def login_vista(request):
         if user is not None:
             auth.login(request, user)
             destino = request.GET.get("next", "")
-            return redirect(destino or "enlaces_ccg:lista_edificios")
+            return redirect(destino or "/enlaces/")
         error = "Usuario o contraseña incorrectos."
 
     return render(request, "enlaces_ccg/login.html", {"error": error})
@@ -495,6 +495,23 @@ def seguimiento_tickets(request):
     desde = filtros_ctx["desde"]
     hasta = filtros_ctx["hasta"]
 
+    # Prefiltrado por responsables del usuario: si el usuario tiene responsables
+    # asignados y no pidió otro filtro, por defecto solo ve los suyos. Cambiable
+    # (puede elegir otros o usar "Ver todos" con ?todos=1).
+    mis_responsables_ids = list(
+        request.user.responsables_atencion.filter(activo=True).values_list(
+            "pk", flat=True
+        )
+    )
+    filtrado_por_mis = bool(
+        mis_responsables_ids
+        and not request.GET.getlist("responsable")
+        and request.GET.get("todos") != "1"
+    )
+    if filtrado_por_mis:
+        qs = qs.filter(responsable_atencion_id__in=mis_responsables_ids)
+        responsable_ids = list(mis_responsables_ids)
+
     paginator = Paginator(qs, 50)
     try:
         pagina = int(request.GET.get("page", "1"))
@@ -508,6 +525,11 @@ def seguimiento_tickets(request):
         for v in valores
         if k != "page" and v.strip() != ""
     )
+    if filtrado_por_mis:
+        extra = "&".join(
+            f"responsable={quote(str(v))}" for v in mis_responsables_ids
+        )
+        filtros = f"{filtros}&{extra}" if filtros else extra
 
     proxima = cfg.proxima_sincronizacion()
     if proxima:
@@ -534,6 +556,7 @@ def seguimiento_tickets(request):
             "falla_id": falla_id,
             "nivel_id": nivel_id,
             "responsable_ids": responsable_ids,
+            "filtrado_por_mis": filtrado_por_mis,
             "solicitante_id": solicitante_id,
             "institucion_id": institucion_id,
             "edificios": Edificio.objects.all(),
@@ -1365,12 +1388,83 @@ def catalogo_fallas(request):
 
 
 # ---------------------------------------------------------------------------
+# Catálogo de Responsables de Atención
+# ---------------------------------------------------------------------------
+@requiere(CAP_ADMIN)
+def catalogo_responsables(request):
+    """Catálogo de responsables de atención (solo administradores).
+
+    El nombre proviene del SIG y no es editable; solo se permite activar/
+    desactivar. La asignación de usuarios se hace desde el catálogo de usuarios.
+    """
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "toggle_responsable":
+            responsable = ResponsableAtencion.objects.filter(
+                pk=request.POST.get("pk")
+            ).first()
+            if responsable:
+                responsable.activo = not responsable.activo
+                responsable.save(update_fields=["activo"])
+                messages.success(
+                    request,
+                    f"Responsable «{responsable.nombre}» "
+                    f"{'activado' if responsable.activo else 'desactivado'}.",
+                )
+        return redirect("enlaces_ccg:catalogo_responsables")
+
+    q = request.GET.get("q", "").strip()
+    vista = request.GET.get("vista", "activos")
+    if vista not in ("activos", "inactivos", "todos"):
+        vista = "activos"
+
+    responsables = ResponsableAtencion.objects.prefetch_related("usuarios")
+    if q:
+        responsables = responsables.filter(nombre__icontains=q)
+    if vista == "activos":
+        responsables = responsables.filter(activo=True)
+    elif vista == "inactivos":
+        responsables = responsables.filter(activo=False)
+    responsables = responsables.order_by("nombre")
+
+    paginator = Paginator(responsables, 50)
+    try:
+        pagina = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        pagina = 1
+    page_obj = paginator.get_page(pagina)
+
+    filtros = "&".join(
+        f"{k}={quote(v)}"
+        for k, valores in request.GET.lists()
+        for v in valores
+        if k != "page" and v.strip() != ""
+    )
+
+    return render(
+        request,
+        "enlaces_ccg/catalogo_responsables.html",
+        {
+            "page_obj": page_obj,
+            "filtros": filtros,
+            "q": q,
+            "vista": vista,
+            "n_activos": ResponsableAtencion.objects.filter(activo=True).count(),
+            "n_inactivos": ResponsableAtencion.objects.filter(activo=False).count(),
+            "n_todos": ResponsableAtencion.objects.count(),
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Catálogo de Usuarios
 # ---------------------------------------------------------------------------
 def _usuario_desde_post(request, usuario=None):
     """Valida y crea/actualiza un usuario a partir de un POST del catálogo."""
     from django.contrib.auth import get_user_model
     from django.contrib.auth.models import Group
+
+    from .models import ResponsableAtencion
 
     User = get_user_model()
     username = request.POST.get("username", "").strip()
@@ -1381,6 +1475,9 @@ def _usuario_desde_post(request, usuario=None):
     is_staff = request.POST.get("is_staff") == "1"
     is_active = request.POST.get("is_active") == "1"
     grupos_ids = [int(x) for x in request.POST.getlist("grupos") if x.isdigit()]
+    responsables_ids = [
+        int(x) for x in request.POST.getlist("responsables") if x.isdigit()
+    ]
 
     if not username:
         messages.error(request, "El nombre de usuario no puede estar vacío.")
@@ -1411,6 +1508,9 @@ def _usuario_desde_post(request, usuario=None):
         usuario.set_password(password)
     usuario.save()
     usuario.groups.set(Group.objects.filter(pk__in=grupos_ids))
+    usuario.responsables_atencion.set(
+        ResponsableAtencion.objects.filter(pk__in=responsables_ids)
+    )
     return usuario
 
 
@@ -1463,7 +1563,9 @@ def catalogo_usuarios(request):
     vista = request.GET.get("vista", "activos")
     if vista not in ("activos", "inactivos", "todos"):
         vista = "activos"
-    usuarios = User.objects.prefetch_related("groups").order_by("username")
+    usuarios = User.objects.prefetch_related(
+        "groups", "responsables_atencion"
+    ).order_by("username")
     if vista == "activos":
         usuarios = usuarios.filter(is_active=True)
     elif vista == "inactivos":
@@ -1475,6 +1577,7 @@ def catalogo_usuarios(request):
         {
             "usuarios": usuarios,
             "grupos": Group.objects.order_by("name"),
+            "responsables": ResponsableAtencion.objects.order_by("nombre"),
             "usuario_editar": usuario_editar,
             "vista": vista,
             "n_activos": User.objects.filter(is_active=True).count(),

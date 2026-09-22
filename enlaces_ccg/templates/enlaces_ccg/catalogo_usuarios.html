@@ -46,6 +46,7 @@
                 <th>Nombre completo</th>
                 <th>Correo</th>
                 <th>Roles</th>
+                <th>Responsables</th>
                 <th>Estado</th>
                 <th>Última sesión</th>
             </tr>
@@ -62,6 +63,7 @@
                             data-superuser="{% if u.is_superuser %}1{% else %}0{% endif %}"
                             data-staff="{% if u.is_staff %}1{% else %}0{% endif %}"
                             data-grupos="{{ u.groups.all|join:',' }}"
+                            data-responsables="{{ u.responsables_atencion.all|join:',' }}"
                             data-lastlogin="{{ u.last_login|date:'d/m/Y H:i'|default:'' }}"
                             data-datejoined="{{ u.date_joined|date:'d/m/Y'|default:'' }}">
                         <i class="fas fa-eye"></i>
@@ -75,7 +77,8 @@
                             data-staff="{% if u.is_staff %}1{% else %}0{% endif %}"
                             data-active="{% if u.is_active %}1{% else %}0{% endif %}"
                             data-superuser="{% if u.is_superuser %}1{% else %}0{% endif %}"
-                            data-grupos="{{ u.groups.all|join:',' }}">
+                            data-grupos="{% for g in u.groups.all %}{{ g.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"
+                            data-resp-ids="{% for r in u.responsables_atencion.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}">
                         <i class="fas fa-pen"></i>
                     </button>
                     <form method="post" action="{% url 'enlaces_ccg:catalogo_usuarios' %}" class="d-inline">
@@ -106,6 +109,13 @@
                 <td>
                     {% for g in u.groups.all %}
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">{{ g.name }}</span>
+                    {% empty %}
+                    <span class="text-muted small">—</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for r in u.responsables_atencion.all %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">{{ r.nombre }}</span>
                     {% empty %}
                     <span class="text-muted small">—</span>
                     {% endfor %}
@@ -162,6 +172,8 @@
                     Estado: <span id="verEstado"></span>
                     <span id="verRol"></span>
                 </div>
+                <div class="section-title">Responsables de atención</div>
+                <div id="verResponsables" class="mb-2"></div>
                 <div class="section-title">Sesión</div>
                 <div class="row g-3">
                     <div class="col-md-6">
@@ -242,6 +254,19 @@
                             <div class="form-text">Elige uno o varios roles para el usuario. Se abre una ventana con buscador y selección múltiple.</div>
                         </div>
                         <div class="col-12">
+                            <label class="form-label d-block">Responsables de atención</label>
+                            <select name="responsables" multiple size="0"
+                                    class="form-select ccg-select-busqueda ccg-select-multiple"
+                                    data-vacio="Responsable(s) de atención">
+                                {% for r in responsables %}
+                                <option value="{{ r.pk }}">{{ r.nombre }}</option>
+                                {% empty %}
+                                <option value="0" disabled>No hay responsables creados</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Elige los Responsables de Atención asignados a este usuario (pueden ser varios). Así verá sus tickets filtrados al entrar al módulo.</div>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label d-block">Estado y accesos</label>
                             <div class="d-flex flex-wrap gap-4">
                                 <div class="form-check form-switch">
@@ -309,6 +334,18 @@
             cont.innerHTML = '<span class="text-muted small">Sin roles asignados</span>';
         }
 
+        var contResp = document.getElementById('verResponsables');
+        contResp.innerHTML = '';
+        (b.dataset.responsables || '').split(',').filter(Boolean).forEach(function (n) {
+            var s = document.createElement('span');
+            s.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1';
+            s.textContent = n;
+            contResp.appendChild(s);
+        });
+        if (!contResp.children.length) {
+            contResp.innerHTML = '<span class="text-muted small">Sin responsables asignados</span>';
+        }
+
         var estado = document.getElementById('verEstado');
         estado.className = b.dataset.active === '1'
             ? 'badge bg-success-subtle text-success'
@@ -329,7 +366,7 @@
         v.show();
     }
 
-    function abrirEditar(pk, username, first, last, email, staff, active, superuser, grupos) {
+    function abrirEditar(pk, username, first, last, email, staff, active, superuser, grupos, responsables) {
         if (!editarModal) return;
         var m = new bootstrap.Modal(editarModal);
         document.getElementById('userAccion').value = pk ? 'editar_usuario' : 'crear_usuario';
@@ -362,6 +399,16 @@
             });
             actualizarBotonGrupos(selGrupos);
         }
+
+        // Responsables de atención: idéntico al de roles
+        var selResp = document.querySelector('#formUsuario select[name="responsables"]');
+        var respIds = (responsables || '').split(',').filter(Boolean).map(Number);
+        if (selResp) {
+            Array.prototype.forEach.call(selResp.options, function (opt) {
+                opt.selected = opt.value && respIds.indexOf(Number(opt.value)) !== -1;
+            });
+            actualizarBotonResp(selResp);
+        }
         m.show();
         document.getElementById('userUsername').focus();
     }
@@ -374,6 +421,18 @@
         if (!n) txt = sel.dataset.vacio || 'Sin roles';
         else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
         else txt = n + ' seleccionados';
+        btn.querySelector('.ccg-picker-label').textContent = txt;
+        btn.classList.toggle('text-muted', !n);
+    }
+
+    function actualizarBotonResp(sel) {
+        var btn = sel._ccgBtn;
+        if (!btn) return;
+        var n = sel.selectedOptions.length;
+        var txt;
+        if (!n) txt = sel.dataset.vacio || 'Responsable(s) de atención';
+        else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
+        else txt = n + ' responsables seleccionados';
         btn.querySelector('.ccg-picker-label').textContent = txt;
         btn.classList.toggle('text-muted', !n);
     }
@@ -394,7 +453,7 @@
         b.addEventListener('click', function () {
             abrirEditar(b.dataset.pk, b.dataset.username, b.dataset.first, b.dataset.last,
                         b.dataset.email, b.dataset.staff, b.dataset.active,
-                        b.dataset.superuser, b.dataset.grupos);
+                        b.dataset.superuser, b.dataset.grupos, b.dataset.respIds);
         });
     });
     var btnNuevo = document.getElementById('btnNuevoUsuario');
@@ -409,7 +468,8 @@
                 '{{ usuario_editar.email|escapejs }}',
                 {{ usuario_editar.is_staff|yesno:"1,0" }}, {{ usuario_editar.is_active|yesno:"1,0" }},
                 {{ usuario_editar.is_superuser|yesno:"1,0" }},
-                '{{ usuario_editar.groups.all|join:","|escapejs }}');
+                '{% for g in usuario_editar.groups.all %}{{ g.pk }}{% if not forloop.last %},{% endif %}{% endfor %}',
+                '{% for r in usuario_editar.responsables_atencion.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}');
     {% endif %}
 })();
 </script>

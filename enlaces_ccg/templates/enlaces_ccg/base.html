@@ -709,6 +709,12 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'enlaces_ccg:catalogo_responsables' %}"
+                   class="{% if request.resolver_match.url_name == 'catalogo_responsables' %}active{% endif %}">
+                    <i class="fas fa-user-tie"></i> Catálogo de Responsables
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'enlaces_ccg:importar_deductivas' %}"
                    class="{% if request.resolver_match.url_name == 'importar_deductivas' %}active{% endif %}">
                     <i class="fas fa-file-import"></i> Importar deductivas

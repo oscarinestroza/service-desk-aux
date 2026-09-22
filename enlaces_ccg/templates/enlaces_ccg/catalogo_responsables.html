@@ -1,0 +1,136 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Catálogo de Responsables — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Catálogo de Responsables</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-user-tie me-2 text-primary"></i>Catálogo de Responsables
+    </h1>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-primary">{{ page_obj.paginator.count }} responsable{{ page_obj.paginator.count|pluralize }}</span>
+    </div>
+</div>
+
+<p class="text-muted small mb-3">
+    <i class="fas fa-info-circle me-1"></i>Los responsables de atención provienen del SIG y no se crean ni editan aquí.
+    La asignación de usuarios se realiza desde el <a href="{% url 'enlaces_ccg:catalogo_usuarios' %}">Catálogo de Usuarios</a>.
+</p>
+
+<!-- Filtro por nombre -->
+<form method="get" class="ccg-well mb-3">
+    <input type="hidden" name="vista" value="{{ vista }}">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-9 col-xl-10">
+            <label class="form-label small text-muted mb-1" for="filtroResponsableNombre">Responsable</label>
+            <input type="text" class="form-control form-control-sm" id="filtroResponsableNombre"
+                   name="q" value="{{ q }}" placeholder="Buscar por nombre...">
+        </div>
+        <div class="col-md-3 col-xl-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100">
+                <i class="fas fa-filter me-1"></i>Filtrar
+            </button>
+        </div>
+    </div>
+</form>
+
+<!-- Pestañas por estado -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activos' %}active{% endif %}"
+           href="?{% if filtros %}{{ filtros }}&{% endif %}vista=activos">Activos <span class="badge bg-success-subtle text-success ms-1">{{ n_activos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivos' %}active{% endif %}"
+           href="?{% if filtros %}{{ filtros }}&{% endif %}vista=inactivos">Inactivos <span class="badge bg-danger-subtle text-danger ms-1">{{ n_inactivos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todos' %}active{% endif %}"
+           href="?{% if filtros %}{{ filtros }}&{% endif %}vista=todos">Todos <span class="badge bg-primary-subtle text-primary ms-1">{{ n_todos }}</span></a>
+    </li>
+</ul>
+
+{% if page_obj.object_list %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle">
+        <thead>
+            <tr>
+                <th class="ps-3">Acciones</th>
+                <th>Responsable</th>
+                <th>Usuarios asignados</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in page_obj.object_list %}
+            <tr>
+                <td class="ps-3 ccg-actions">
+                    <form method="post" action="{% url 'enlaces_ccg:catalogo_responsables' %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="toggle_responsable">
+                        <input type="hidden" name="pk" value="{{ r.pk }}">
+                        <button type="submit"
+                                class="btn btn-outline-{% if r.activo %}success{% else %}danger{% endif %} btn-sm"
+                                title="{% if r.activo %}Desactivar{% else %}Activar{% endif %}">
+                            <i class="fas fa-{% if r.activo %}check{% else %}ban{% endif %}"></i>
+                        </button>
+                    </form>
+                </td>
+                <td>
+                    <span class="cell-name">{{ r.nombre }}</span>
+                </td>
+                <td>
+                    {% for u in r.usuarios.all %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">{{ u.username }}</span>
+                    {% empty %}
+                    <span class="text-muted small">—</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if r.activo %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                    {% else %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactivo</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+    {% if page_obj.paginator.count %}
+    <span class="small text-muted">Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} responsable{{ page_obj.paginator.count|pluralize }}</span>
+    {% endif %}
+    {% if page_obj.paginator.num_pages > 1 %}
+    <ul class="pagination pagination-sm mb-0 ms-auto">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a></li>
+        <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a></li>
+        {% endif %}
+    </ul>
+    {% endif %}
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-user-tie fa-3x mb-3 d-block opacity-50"></i>
+        {% if q %}
+        No hay responsables que coincidan con el filtro.
+        {% else %}
+        No hay responsables registrados.
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -60,7 +60,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Auth redirects
 LOGIN_URL = "/login/"
 LOGOUT_URL = "/logout/"
-LOGIN_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/enlaces/"
 LOGOUT_REDIRECT_URL = "/login/"
 
 

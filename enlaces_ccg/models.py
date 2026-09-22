@@ -1138,6 +1138,12 @@ class ResponsableAtencion(models.Model):
 
     nombre = models.CharField(max_length=255, unique=True, verbose_name="Nombre")
     activo = models.BooleanField(default=True, verbose_name="Activo")
+    usuarios = models.ManyToManyField(
+        "auth.User",
+        blank=True,
+        related_name="responsables_atencion",
+        verbose_name="Usuarios asignados",
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:

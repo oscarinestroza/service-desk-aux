@@ -31,6 +31,18 @@
     </div>
 </div>
 
+{% if filtrado_por_mis %}
+<div class="alert alert-info py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <span class="small">
+        <i class="fas fa-user-tie me-1"></i>
+        Mostrando solo los tickets de tus responsables de atención asignados.
+    </span>
+    <a href="?todos=1" class="btn btn-sm btn-outline-info">
+        <i class="fas fa-list me-1"></i>Ver todos los tickets
+    </a>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-3">
         <form method="get">
