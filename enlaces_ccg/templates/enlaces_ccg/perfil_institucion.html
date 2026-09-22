@@ -21,7 +21,7 @@
 {% endblock %}
 
 {% block topbar_acciones %}
-{% if user.is_staff %}
+{% if puede_editar %}
 <button type="button" data-crear-enlace class="btn btn-success btn-sm"
         data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
     <i class="fas fa-plus me-1"></i> Nuevo Enlace
@@ -111,7 +111,7 @@
                     </div>
                 </div>
             </div>
-            {% if user.is_staff %}
+            {% if puede_editar %}
             <button type="button" class="btn btn-outline-secondary btn-sm"
                     data-editar-institucion data-pk="{{ institucion.pk }}">
                 <i class="fas fa-pen me-1"></i> Editar
@@ -163,10 +163,12 @@
     </h2>
     <div class="d-flex align-items-center gap-2">
         <span class="badge bg-primary">{{ enlaces|length }} registro{{ enlaces|length|pluralize }}</span>
+        {% if puede_editar %}
         <button type="button" data-crear-enlace class="btn btn-success btn-sm"
                 data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
             <i class="fas fa-plus me-1"></i> Nuevo Enlace
         </button>
+        {% endif %}
     </div>
 </div>
 
@@ -469,7 +471,7 @@
                             data-pk="{{ enlace.pk }}" title="Ver detalles">
                         <i class="fas fa-eye"></i>
                     </button>
-                    {% if user.is_authenticated %}
+                    {% if puede_editar %}
                     <button class="btn btn-outline-primary btn-sm btn-editar-enlace"
                             data-pk="{{ enlace.pk }}" title="Editar">
                         <i class="fas fa-pen"></i>
@@ -533,7 +535,7 @@
         {% endif %}
     </h5>
     <div class="mt-2">
-        {% if user.is_staff %}
+        {% if puede_editar %}
         <button type="button" data-crear-enlace class="btn btn-success btn-sm"
                 data-inst-id="{{ institucion.pk }}" data-inst-nombre="{{ institucion.nombre }}" data-inst-siglas="{{ institucion.siglas }}">
             <i class="fas fa-plus me-1"></i> Agregar Primer Enlace

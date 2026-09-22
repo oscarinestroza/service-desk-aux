@@ -32,6 +32,15 @@
                         <i class="fas fa-plus me-2"></i>Guardar vista actual...
                     </button>
                 </li>
+                <li>
+                    <form method="post" action="{% url 'enlaces_ccg:vista_mis_mes' %}" class="p-0 border-0">
+                        {% csrf_token %}
+                        <button class="dropdown-item" type="submit">
+                            <i class="fas fa-{% if mis_mes_activa %}star text-warning{% else %}star-o{% endif %} me-2"></i>
+                            {% if mis_mes_activa %}Quitar «Mis Tickets del Mes» como predeterminada{% else %}Usar «Mis Tickets del Mes» como predeterminada{% endif %}
+                        </button>
+                    </form>
+                </li>
                 {% if mis_vistas or vistas_generales %}
                 <li><hr class="dropdown-divider"></li>
                 {% endif %}
@@ -469,8 +478,10 @@
 
     // Círculo de estado:
     //   - pulsante azul: actualización en progreso.
+    //   - gris: la BD tiene registros más nuevos; hay que refrescar (tiene
+    //     prioridad sobre el fuera de horario: tras una sincronización manual
+    //     fuera de horario también debe avisar que hay datos nuevos).
     //   - gris: fuera de horario (se puede sincronizar manualmente).
-    //   - gris: la BD tiene registros más nuevos; hay que refrescar.
     //   - verde: esta página ya tiene los últimos registros de la BD.
     var pintarDot = function () {
         if (!dot) return;
@@ -479,12 +490,12 @@
         if (sincronizando) {
             clase += ' ccg-dot-sync';
             texto = 'Actualización en progreso';
+        } else if (ultimaServidor !== null && ultimaServidor > baselineUltima) {
+            texto = 'Actualiza la página para ver los últimos registros';
         } else if (!enHorario) {
             texto = 'Fuera de Horario (Puedes realizar la sincronización manual)';
         } else if (ultimaServidor === null) {
             texto = 'Sin sincronizar';
-        } else if (ultimaServidor > baselineUltima) {
-            texto = 'Actualiza la página para ver los últimos registros';
         } else {
             clase += ' ccg-dot-ok';
             texto = 'Actualizado';

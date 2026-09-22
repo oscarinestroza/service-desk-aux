@@ -20,6 +20,7 @@ from .models import (
     Falla,
     Institucion,
     Nivel,
+    PermisoGrupo,
     ResponsableAtencion,
     Servicio,
     Ticket,
@@ -27,6 +28,7 @@ from .models import (
     TicketLog,
     VistaGuardada,
 )
+from .roles import CAP_DIRECTORIO, CAP_EDITAR
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
     MODO_SYNC_PARCIAL,
@@ -1675,3 +1677,169 @@ class VinculacionVistasTests(TestCase):
         self.assertIn("SS26-0710", html)
         self.assertNotIn('id="tab-alta"', html)
         self.assertNotIn('id="tab-sig"', html)
+
+
+class VistaMisMesTests(TestCase):
+    """Toggle opt-in de la vista predeterminada «Mis Tickets del Mes»."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "operador.mismes", "mm@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+
+    def _toggle(self):
+        return self.client.post(reverse("enlaces_ccg:vista_mis_mes"))
+
+    def test_activar_crea_vista_predeterminada(self):
+        respuesta = self._toggle()
+        self.assertEqual(respuesta.status_code, 302)
+        vista = VistaGuardada.objects.get(
+            usuario=self.usuario, modulo="tickets", nombre="Mis Tickets del Mes"
+        )
+        self.assertTrue(vista.es_predeterminada)
+        self.assertEqual(vista.parametros["responsable"], ["@mios"])
+        self.assertEqual(vista.parametros["desde"], ["@mes_inicio"])
+        self.assertEqual(vista.parametros["hasta"], ["@mes_fin"])
+
+    def test_activar_reemplaza_otra_predeterminada(self):
+        otra = VistaGuardada.objects.create(
+            usuario=self.usuario,
+            modulo="tickets",
+            nombre="Otra",
+            parametros={},
+            es_predeterminada=True,
+        )
+        self._toggle()
+        otra.refresh_from_db()
+        self.assertFalse(otra.es_predeterminada)
+
+    def test_desactivar_elimina_vista(self):
+        self._toggle()
+        self._toggle()
+        self.assertFalse(
+            VistaGuardada.objects.filter(
+                usuario=self.usuario, nombre="Mis Tickets del Mes"
+            ).exists()
+        )
+
+    def test_boton_visible_en_lista(self):
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Mis Tickets del Mes", html)
+
+    def test_predeterminada_filtra_mis_tickets_del_mes(self):
+        resp = ResponsableAtencion.objects.create(nombre="Resp Mio", activo=True)
+        self.usuario.responsables_atencion.add(resp)
+        Ticket.objects.create(
+            ticket_id="M1",
+            numero="SS26-M1",
+            numero_display="SS26-M1",
+            fecha=timezone.now(),
+            responsable_atencion=resp,
+            estatus=Ticket.ESTATUS_ABIERTO,
+            raw_data={"solicitud_solicitante": ""},
+        )
+        Ticket.objects.create(
+            ticket_id="M2",
+            numero="SS26-M2",
+            numero_display="SS26-M2",
+            fecha=timezone.now() - timedelta(days=40),
+            responsable_atencion=resp,
+            estatus=Ticket.ESTATUS_ABIERTO,
+            raw_data={"solicitud_solicitante": ""},
+        )
+        self._toggle()
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("SS26-M1", html)
+        self.assertNotIn("SS26-M2", html)
+
+
+class CatalogoFallasPaginacionTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "admin.fallas", "af@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+
+    def test_paginacion_muestra_botones_arriba_y_abajo(self):
+        for i in range(60):
+            Falla.objects.create(descripcion=f"Falla {i:03d}")
+        html = self.client.get(
+            reverse("enlaces_ccg:catalogo_fallas")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Mostrando 1–50 de 60 fallas", html)
+        self.assertIn("Página 1 de 2", html)
+        self.assertIn("page=2", html)
+        self.assertIn("card-footer", html)
+
+    def test_pagina_dos_cambia_contenido(self):
+        for i in range(60):
+            Falla.objects.create(descripcion=f"Falla {i:03d}")
+        html = self.client.get(
+            reverse("enlaces_ccg:catalogo_fallas"), {"page": "2"}
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Mostrando 51–60 de 60 fallas", html)
+
+
+class PerfilInstitucionPermisosTests(TestCase):
+    """En la ficha de institución solo quien puede editar ve los botones."""
+
+    def setUp(self):
+        self.inst = Institucion.objects.create(nombre="Institución Test", siglas="IT")
+        self.enlace = EnlaceAutorizado.objects.create(
+            nombres="Ana", primer_apellido="Perez", institucion=self.inst
+        )
+
+    def _usuario(self, username, capacidades):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+
+        usuario = get_user_model().objects.create_user(
+            username, f"{username}@test.local", "Clave123!"
+        )
+        grupo = Group.objects.create(name=f"G-{username}")
+        PermisoGrupo.objects.create(grupo=grupo, capacidades=capacidades)
+        usuario.groups.add(grupo)
+        return usuario
+
+    def test_sin_permiso_no_ve_botones_de_edicion(self):
+        usuario = self._usuario("solo.directorio", [CAP_DIRECTORIO])
+        self.client.force_login(usuario)
+        html = self.client.get(
+            reverse("enlaces_ccg:perfil_institucion", args=[self.inst.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertNotIn('data-crear-enlace class="btn', html)
+        self.assertNotIn("btn-outline-primary btn-sm btn-editar-enlace", html)
+
+    def test_con_permiso_ve_botones_de_edicion(self):
+        usuario = self._usuario("editor", [CAP_DIRECTORIO, CAP_EDITAR])
+        self.client.force_login(usuario)
+        html = self.client.get(
+            reverse("enlaces_ccg:perfil_institucion", args=[self.inst.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn('data-crear-enlace class="btn', html)
+        self.assertIn("btn-outline-primary btn-sm btn-editar-enlace", html)
+
+    def test_sin_permiso_no_puede_crear_ni_editar(self):
+        usuario = self._usuario("sin.editar", [CAP_DIRECTORIO])
+        self.client.force_login(usuario)
+        r_crear = self.client.post(
+            reverse("enlaces_ccg:crear_enlace"),
+            {"nombres": "X", "primer_apellido": "Y"},
+        )
+        self.assertEqual(r_crear.status_code, 403)
+        r_editar = self.client.post(
+            reverse("enlaces_ccg:editar_enlace", args=[self.enlace.pk]),
+            {"nombres": "Z", "primer_apellido": "W"},
+        )
+        self.assertEqual(r_editar.status_code, 403)
+        self.enlace.refresh_from_db()
+        self.assertEqual(self.enlace.nombres, "Ana")

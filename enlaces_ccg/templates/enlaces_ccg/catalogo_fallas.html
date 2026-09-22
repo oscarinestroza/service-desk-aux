@@ -13,7 +13,7 @@
         <i class="fas fa-bug me-2 text-primary"></i>Catálogo de Fallas
     </h1>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="badge bg-primary">{{ fallas|length }} falla{{ fallas|length|pluralize }}</span>
+        <span class="badge bg-primary">{{ page_obj.paginator.count }} falla{{ page_obj.paginator.count|pluralize }}</span>
         <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
             {% csrf_token %}
             <input type="hidden" name="accion" value="actualizar_fallas">
@@ -98,74 +98,135 @@
     </li>
 </ul>
 
-{% if fallas %}
-<div class="ccg-table-wrap">
-    <table class="table align-middle">
-        <thead>
-            <tr>
-                <th class="ps-3">Acciones</th>
-                <th>Falla</th>
-                <th>KPI</th>
-                <th>Clasificación</th>
-                <th>Categoría</th>
-                <th>Servicio</th>
-                <th>Estado</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for f in fallas %}
-            <tr>
-                <td class="ps-3 ccg-actions">
-                    <button class="btn btn-outline-primary btn-sm btn-editar-falla" title="Editar"
-                            data-pk="{{ f.pk }}"
-                            data-descripcion="{{ f.descripcion }}"
-                            data-clasificacion="{{ f.clasificacion }}"
-                            data-categoria="{{ f.categoria }}"
-                            data-servicio="{{ f.servicio_id|default:'' }}"
-                            data-activo="{% if f.activo %}1{% else %}0{% endif %}">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
-                        {% csrf_token %}
-                        <input type="hidden" name="accion" value="toggle_falla">
-                        <input type="hidden" name="pk" value="{{ f.pk }}">
-                        <button type="submit"
-                                class="btn btn-outline-{% if f.activo %}success{% else %}danger{% endif %} btn-sm"
-                                title="{% if f.activo %}Desactivar{% else %}Activar{% endif %}">
-                            <i class="fas fa-{% if f.activo %}check{% else %}ban{% endif %}"></i>
-                        </button>
-                    </form>
-                </td>
-                <td>
-                    <span class="cell-name">{{ f.descripcion }}</span>
-                </td>
-                <td>
-                    {% if f.kpi %}
-                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">IE-{{ f.kpi }}</span>
-                    {% else %}
-                    <span class="text-muted small">—</span>
-                    {% endif %}
-                </td>
-                <td class="text-muted">{% if f.clasificacion %}{{ f.clasificacion }}{% else %}—{% endif %}</td>
-                <td class="text-muted">{% if f.categoria %}{{ f.categoria }}{% else %}—{% endif %}</td>
-                <td>
-                    {% if f.servicio %}
-                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ f.servicio.nombre }}</span>
-                    {% else %}
-                    <span class="text-muted small">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if f.activo %}
-                    <span class="badge bg-success-subtle text-success border border-success-subtle">Activa</span>
-                    {% else %}
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactiva</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+{% if page_obj.object_list %}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <span class="small text-muted">
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} fallas
+        </span>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Paginación de fallas">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        <div class="ccg-table-wrap">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Acciones</th>
+                        <th>Falla</th>
+                        <th>KPI</th>
+                        <th>Clasificación</th>
+                        <th>Categoría</th>
+                        <th>Servicio</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in page_obj.object_list %}
+                    <tr>
+                        <td class="ps-3 ccg-actions">
+                            <button class="btn btn-outline-primary btn-sm btn-editar-falla" title="Editar"
+                                    data-pk="{{ f.pk }}"
+                                    data-descripcion="{{ f.descripcion }}"
+                                    data-clasificacion="{{ f.clasificacion }}"
+                                    data-categoria="{{ f.categoria }}"
+                                    data-servicio="{{ f.servicio_id|default:'' }}"
+                                    data-activo="{% if f.activo %}1{% else %}0{% endif %}">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="toggle_falla">
+                                <input type="hidden" name="pk" value="{{ f.pk }}">
+                                <button type="submit"
+                                        class="btn btn-outline-{% if f.activo %}success{% else %}danger{% endif %} btn-sm"
+                                        title="{% if f.activo %}Desactivar{% else %}Activar{% endif %}">
+                                    <i class="fas fa-{% if f.activo %}check{% else %}ban{% endif %}"></i>
+                                </button>
+                            </form>
+                        </td>
+                        <td>
+                            <span class="cell-name">{{ f.descripcion }}</span>
+                        </td>
+                        <td>
+                            {% if f.kpi %}
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">IE-{{ f.kpi }}</span>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">{% if f.clasificacion %}{{ f.clasificacion }}{% else %}—{% endif %}</td>
+                        <td class="text-muted">{% if f.categoria %}{{ f.categoria }}{% else %}—{% endif %}</td>
+                        <td>
+                            {% if f.servicio %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ f.servicio.nombre }}</span>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if f.activo %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Activa</span>
+                            {% else %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactiva</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-end align-items-center gap-2 py-2">
+        <nav aria-label="Paginación de fallas">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 {% else %}
 <div class="card border-0 shadow-sm">

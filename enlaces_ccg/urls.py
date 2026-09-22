@@ -194,6 +194,11 @@ urlpatterns = [
         name="vista_eliminar",
     ),
     path(
+        "tickets/vistas/mis-mes/",
+        views.vista_mis_mes,
+        name="vista_mis_mes",
+    ),
+    path(
         "tickets/detalle/<int:pk>/",
         views.ticket_detalle,
         name="ticket_detalle",

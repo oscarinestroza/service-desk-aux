@@ -52,6 +52,9 @@ from .roles import (
     tiene,
 )
 
+# Nombre de la vista personal de acceso rápido «Mis Tickets del Mes».
+NOMBRE_VISTA_MIS_MES = "Mis Tickets del Mes"
+
 
 # ---------------------------------------------------------------------------
 # Login / Logout
@@ -655,6 +658,12 @@ def seguimiento_tickets(request):
             "vistas_generales": VistaGuardada.objects.filter(
                 modulo="tickets", es_general=True
             ).order_by("nombre"),
+            "mis_mes_activa": VistaGuardada.objects.filter(
+                usuario=request.user,
+                modulo="tickets",
+                nombre=NOMBRE_VISTA_MIS_MES,
+                es_predeterminada=True,
+            ).exists(),
             "solicitante_id": solicitante_id,
             "institucion_id": institucion_id,
             "edificios": Edificio.objects.all(),
@@ -749,6 +758,44 @@ def vista_eliminar(request, pk):
         VistaGuardada, pk=pk, usuario=request.user, modulo="tickets"
     )
     vista.delete()
+    return redirect("enlaces_ccg:seguimiento_tickets")
+
+
+@login_required
+@require_POST
+@requiere(CAP_TICKETS)
+def vista_mis_mes(request):
+    """Activa/desactiva la vista predeterminada «Mis Tickets del Mes».
+
+    Es opt-in: solo el usuario decide usarla como predeterminada. Al activarla
+    crea (o actualiza) una vista personal con los tickets de sus responsables de
+    atención en el mes vigente, marcada como predeterminada. Al desactivarla la
+    elimina, por lo que deja de aplicarse automáticamente.
+    """
+    existente = VistaGuardada.objects.filter(
+        usuario=request.user, modulo="tickets", nombre=NOMBRE_VISTA_MIS_MES
+    ).first()
+    if existente and existente.es_predeterminada:
+        existente.delete()
+    else:
+        with transaction.atomic():
+            VistaGuardada.objects.filter(
+                usuario=request.user, modulo="tickets", es_predeterminada=True
+            ).update(es_predeterminada=False)
+            VistaGuardada.objects.update_or_create(
+                usuario=request.user,
+                modulo="tickets",
+                nombre=NOMBRE_VISTA_MIS_MES,
+                defaults={
+                    "parametros": {
+                        "estatus": ["ABIERTO"],
+                        "responsable": ["@mios"],
+                        "desde": ["@mes_inicio"],
+                        "hasta": ["@mes_fin"],
+                    },
+                    "es_predeterminada": True,
+                },
+            )
     return redirect("enlaces_ccg:seguimiento_tickets")
 
 
@@ -1517,6 +1564,13 @@ def catalogo_fallas(request):
         fallas = fallas.filter(activo=False)
     fallas = fallas.order_by("descripcion")
 
+    paginator = Paginator(fallas, 50)
+    try:
+        pagina = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        pagina = 1
+    page_obj = paginator.get_page(pagina)
+
     partes = []
     if q:
         partes.append("q=" + quote(q))
@@ -1534,7 +1588,8 @@ def catalogo_fallas(request):
         request,
         "enlaces_ccg/catalogo_fallas.html",
         {
-            "fallas": fallas,
+            "fallas": page_obj,
+            "page_obj": page_obj,
             "servicios": Servicio.objects.order_by("nombre"),
             "clasificaciones": FALLA_CLASIFICACION_CHOICES,
             "categorias": FALLA_CATEGORIA_CHOICES,
