@@ -1609,6 +1609,111 @@ def catalogo_fallas(request):
 
 
 # ---------------------------------------------------------------------------
+# Catálogo de Servicios
+# ---------------------------------------------------------------------------
+@requiere(CAP_ADMIN)
+def catalogo_servicios(request):
+    """Catálogo de servicios de atención (solo administradores)."""
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion in ("crear_servicio", "editar_servicio"):
+            nombre = request.POST.get("nombre", "").strip()
+            activo = request.POST.get("activo") == "1"
+            responsables_ids = [
+                int(x) for x in request.POST.getlist("responsables") if x.isdigit()
+            ]
+            responsables_qs = ResponsableAtencion.objects.filter(pk__in=responsables_ids)
+            servicio = None
+            if accion == "editar_servicio":
+                servicio = Servicio.objects.filter(pk=request.POST.get("pk")).first()
+                if servicio is None:
+                    messages.error(request, "El servicio no existe.")
+            if servicio is not None:
+                if not nombre:
+                    messages.error(request, "El nombre del servicio no puede estar vacío.")
+                elif (
+                    Servicio.objects.filter(nombre__iexact=nombre)
+                    .exclude(pk=servicio.pk)
+                    .exists()
+                ):
+                    messages.error(request, f"Ya existe un servicio «{nombre}».")
+                else:
+                    servicio.nombre = nombre
+                    servicio.activo = activo
+                    servicio.save(update_fields=["nombre", "activo"])
+                    servicio.responsables.set(responsables_qs)
+                    messages.success(request, f"Servicio «{nombre}» actualizado.")
+            elif accion == "crear_servicio":
+                if not nombre:
+                    messages.error(request, "El nombre del servicio no puede estar vacío.")
+                elif Servicio.objects.filter(nombre__iexact=nombre).exists():
+                    messages.error(request, f"Ya existe un servicio «{nombre}».")
+                else:
+                    servicio = Servicio.objects.create(nombre=nombre, activo=activo)
+                    servicio.responsables.set(responsables_qs)
+                    messages.success(request, f"Servicio «{nombre}» creado.")
+        elif accion == "toggle_servicio":
+            servicio = Servicio.objects.filter(pk=request.POST.get("pk")).first()
+            if servicio:
+                servicio.activo = not servicio.activo
+                servicio.save(update_fields=["activo"])
+                messages.success(
+                    request,
+                    f"Servicio «{servicio.nombre}» "
+                    f"{'activado' if servicio.activo else 'desactivado'}.",
+                )
+        return redirect("enlaces_ccg:catalogo_servicios")
+
+    servicio_editar = None
+    if request.GET.get("editar_servicio"):
+        servicio_editar = Servicio.objects.filter(
+            pk=request.GET.get("editar_servicio")
+        ).first()
+
+    q = request.GET.get("q", "").strip()
+    vista = request.GET.get("vista", "activos")
+    if vista not in ("activos", "inactivos", "todos"):
+        vista = "activos"
+
+    servicios = Servicio.objects.prefetch_related("responsables")
+    if q:
+        servicios = servicios.filter(nombre__icontains=q)
+    if vista == "activos":
+        servicios = servicios.filter(activo=True)
+    elif vista == "inactivos":
+        servicios = servicios.filter(activo=False)
+    servicios = servicios.order_by("nombre")
+
+    paginator = Paginator(servicios, 50)
+    try:
+        pagina = int(request.GET.get("page", "1"))
+    except (TypeError, ValueError):
+        pagina = 1
+    page_obj = paginator.get_page(pagina)
+
+    qs_columnas = ""
+    if q:
+        qs_columnas = "q=" + quote(q)
+
+    return render(
+        request,
+        "enlaces_ccg/catalogo_servicios.html",
+        {
+            "servicios": page_obj,
+            "page_obj": page_obj,
+            "responsables": ResponsableAtencion.objects.prefetch_related("servicios").order_by("nombre"),
+            "q": q,
+            "vista": vista,
+            "qs_columnas": qs_columnas,
+            "n_activos": Servicio.objects.filter(activo=True).count(),
+            "n_inactivos": Servicio.objects.filter(activo=False).count(),
+            "n_todos": Servicio.objects.count(),
+            "servicio_editar": servicio_editar,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Catálogo de Responsables de Atención
 # ---------------------------------------------------------------------------
 @requiere(CAP_ADMIN)
@@ -1639,7 +1744,7 @@ def catalogo_responsables(request):
     if vista not in ("activos", "inactivos", "todos"):
         vista = "activos"
 
-    responsables = ResponsableAtencion.objects.prefetch_related("usuarios")
+    responsables = ResponsableAtencion.objects.prefetch_related("usuarios", "servicios")
     if q:
         responsables = responsables.filter(nombre__icontains=q)
     if vista == "activos":

@@ -164,6 +164,11 @@ urlpatterns = [
         name="catalogo_responsables",
     ),
     path(
+        "catalogos/servicios/",
+        views.catalogo_servicios,
+        name="catalogo_servicios",
+    ),
+    path(
         "tickets/",
         views.seguimiento_tickets,
         name="seguimiento_tickets",

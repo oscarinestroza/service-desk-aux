@@ -63,6 +63,7 @@
                 <th class="ps-3">Acciones</th>
                 <th>Responsable</th>
                 <th>Usuarios asignados</th>
+                <th>Servicios asignados</th>
                 <th>Estado</th>
             </tr>
         </thead>
@@ -94,6 +95,13 @@
                 <td>
                     {% for u in r.usuarios.all %}
                     <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">{{ u.username }}</span>
+                    {% empty %}
+                    <span class="text-muted small">—</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% for s in r.servicios.all %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">{{ s.nombre }}</span>
                     {% empty %}
                     <span class="text-muted small">—</span>
                     {% endfor %}
@@ -160,10 +168,21 @@
                     </li>
                     {% endfor %}
                 </ul>
+                <p class="small text-muted mb-2 mt-3">Servicios asignados a este responsable de atención:</p>
+                <div>
+                    {% for s in r.servicios.all %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1 mb-1">{{ s.nombre }}</span>
+                    {% empty %}
+                    <span class="text-muted small">Sin servicios asignados.</span>
+                    {% endfor %}
+                </div>
             </div>
             <div class="modal-footer">
                 <a href="{% url 'enlaces_ccg:catalogo_usuarios' %}" class="btn btn-sm btn-outline-secondary">
                     <i class="fas fa-user-cog me-1"></i>Ir al catálogo de usuarios
+                </a>
+                <a href="{% url 'enlaces_ccg:catalogo_servicios' %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-concierge-bell me-1"></i>Ir al catálogo de servicios
                 </a>
                 <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Cerrar</button>
             </div>

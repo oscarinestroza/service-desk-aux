@@ -703,6 +703,12 @@
                 </a>
             </li>
             <li>
+                <a href="{% url 'enlaces_ccg:catalogo_servicios' %}"
+                   class="{% if request.resolver_match.url_name == 'catalogo_servicios' %}active{% endif %}">
+                    <i class="fas fa-concierge-bell"></i> Catálogo de Servicios
+                </a>
+            </li>
+            <li>
                 <a href="{% url 'enlaces_ccg:catalogo_usuarios' %}"
                    class="{% if request.resolver_match.url_name == 'catalogo_usuarios' %}active{% endif %}">
                     <i class="fas fa-users"></i> Catálogo de Usuarios

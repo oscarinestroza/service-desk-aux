@@ -144,52 +144,20 @@
 
 <!-- ── Modal: ver usuario ── -->
 <div class="modal fade modal-ccg" id="modalVerUsuario" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-user me-2"></i>Detalle de usuario</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body">
-                <div class="section-title">Datos</div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="field-label text-muted small">Usuario</div>
-                        <strong id="verUsername">—</strong>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="field-label text-muted small">Nombre completo</div>
-                        <span id="verFull">—</span>
-                    </div>
-                    <div class="col-12">
-                        <div class="field-label text-muted small">Correo</div>
-                        <span id="verEmail">—</span>
-                    </div>
+            <div class="modal-body" id="modalVerUsuarioBody" style="padding:16px;"></div>
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <div class="d-flex gap-2"></div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cerrar
+                    </button>
                 </div>
-                <div class="section-title">Roles y estado</div>
-                <div id="verGrupos" class="mb-2"></div>
-                <div class="mb-1">
-                    Estado: <span id="verEstado"></span>
-                    <span id="verRol"></span>
-                </div>
-                <div class="section-title">Responsables de atención</div>
-                <div id="verResponsables" class="mb-2"></div>
-                <div class="section-title">Sesión</div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="field-label text-muted small">Última sesión</div>
-                        <span id="verLastLogin">—</span>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="field-label text-muted small">Miembro desde</div>
-                        <span id="verDateJoined">—</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cerrar
-                </button>
             </div>
         </div>
     </div>
@@ -313,56 +281,106 @@
     var verModal = document.getElementById('modalVerUsuario');
     var editarModal = document.getElementById('modalEditarUsuario');
 
+    function esc(s) {
+        return (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function abrirVer(b) {
         if (!verModal) return;
         var v = new bootstrap.Modal(verModal);
-        document.getElementById('verUsername').textContent = b.dataset.username || '—';
-        document.getElementById('verFull').textContent = b.dataset.full || '—';
-        document.getElementById('verEmail').textContent = b.dataset.email || '—';
-        document.getElementById('verLastLogin').textContent = b.dataset.lastlogin || '—';
-        document.getElementById('verDateJoined').textContent = b.dataset.datejoined || '—';
+        var cuerpo = document.getElementById('modalVerUsuarioBody');
 
-        var cont = document.getElementById('verGrupos');
-        cont.innerHTML = '';
+        var seccion = function (titulo, icono, contenido) {
+            return '<div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">' +
+                '<div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">' +
+                '<h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas ' + icono + ' me-1"></i>' + titulo + '</h6>' +
+                '</div>' +
+                '<div style="padding:12px 14px;">' + contenido + '</div>' +
+                '</div>';
+        };
+        var fila = function (k, val) {
+            return '<tr><td class="text-muted" style="width:35%">' + k + '</td><td>' + val + '</td></tr>';
+        };
+        var tabla = function (contenido) {
+            return '<table class="table table-sm table-borderless align-middle mb-0">' + contenido + '</table>';
+        };
+
+        var nombre = esc(b.dataset.full) || esc(b.dataset.username);
+        var username = esc(b.dataset.username) || '—';
+        var email = b.dataset.email
+            ? '<a href="mailto:' + esc(b.dataset.email) + '" class="text-decoration-none">' + esc(b.dataset.email) + '</a>'
+            : '—';
+
+        var badgesGrupos = '';
         (b.dataset.grupos || '').split(',').filter(Boolean).forEach(function (n) {
-            var s = document.createElement('span');
-            s.className = 'badge bg-primary-subtle text-primary me-1';
-            s.textContent = n;
-            cont.appendChild(s);
+            badgesGrupos += '<span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">' + esc(n) + '</span>';
         });
-        if (!cont.children.length) {
-            cont.innerHTML = '<span class="text-muted small">Sin roles asignados</span>';
-        }
+        if (!badgesGrupos) badgesGrupos = '<span class="text-muted small">Sin roles asignados</span>';
 
-        var contResp = document.getElementById('verResponsables');
-        contResp.innerHTML = '';
+        var badgesResp = '';
         (b.dataset.responsables || '').split(',').filter(Boolean).forEach(function (n) {
-            var s = document.createElement('span');
-            s.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1';
-            s.textContent = n;
-            contResp.appendChild(s);
+            badgesResp += '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">' + esc(n) + '</span>';
         });
-        if (!contResp.children.length) {
-            contResp.innerHTML = '<span class="text-muted small">Sin responsables asignados</span>';
-        }
+        if (!badgesResp) badgesResp = '<span class="text-muted small">Sin responsables asignados</span>';
 
-        var estado = document.getElementById('verEstado');
-        estado.className = b.dataset.active === '1'
-            ? 'badge bg-success-subtle text-success'
-            : 'badge bg-danger-subtle text-danger';
-        estado.textContent = b.dataset.active === '1' ? 'Activo' : 'Inactivo';
+        var estadoBadge = b.dataset.active === '1'
+            ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>'
+            : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactivo</span>';
 
-        var rol = document.getElementById('verRol');
-        rol.className = '';
+        var rolBadge;
         if (b.dataset.superuser === '1') {
-            rol.className = 'badge bg-warning text-dark ms-1';
-            rol.textContent = 'Superusuario';
+            rolBadge = '<span class="badge bg-warning text-dark">Superusuario</span>';
         } else if (b.dataset.staff === '1') {
-            rol.className = 'badge bg-secondary ms-1';
-            rol.textContent = 'Staff';
+            rolBadge = '<span class="badge bg-secondary">Staff</span>';
         } else {
-            rol.textContent = '';
+            rolBadge = '<span class="text-muted">—</span>';
         }
+
+        var main = '';
+        main += seccion('Datos', 'fa-user', tabla(
+            fila('Usuario', username) +
+            fila('Nombre completo', esc(b.dataset.full) || '—') +
+            fila('Correo', email)
+        ));
+        main += seccion('Roles y estado', 'fa-user-shield', tabla(
+            fila('Roles', badgesGrupos) +
+            fila('Accesos', rolBadge) +
+            fila('Estado', estadoBadge)
+        ));
+        main += seccion('Responsables de atención', 'fa-headset', tabla(
+            fila('Responsables', badgesResp)
+        ));
+        main += seccion('Sesión', 'fa-clock', tabla(
+            fila('Última sesión', esc(b.dataset.lastlogin) || '—') +
+            fila('Miembro desde', esc(b.dataset.datejoined) || '—')
+        ));
+
+        var estadoHeader = b.dataset.active === '1'
+            ? '<span class="badge bg-success fs-6">Activo</span>'
+            : '<span class="badge bg-danger fs-6">Inactivo</span>';
+
+        cuerpo.innerHTML = `
+        <div class="text-center p-3 mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;">
+            <div class="mb-1"><i class="fas fa-user-circle fa-2x" style="color:#6c757d;"></i></div>
+            <h4 class="mb-1">${esc(nombre) || '—'}</h4>
+            <div class="row g-2 mt-1 text-center" style="margin:0;">
+                <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                    <span class="small text-muted">Usuario:</span>
+                    <span style="color:#495057;">${username}</span>
+                </div>
+                <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                    <span class="small text-muted">Rol:</span>
+                    <span style="color:#495057;">${rolBadge}</span>
+                </div>
+                <div class="col-4 d-flex justify-content-center align-items-center gap-1">
+                    <span class="small text-muted">Estado:</span>
+                    ${estadoHeader}
+                </div>
+            </div>
+        </div>
+        ${main}`;
+
         v.show();
     }
 

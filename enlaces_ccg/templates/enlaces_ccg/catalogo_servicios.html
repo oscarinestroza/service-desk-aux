@@ -1,0 +1,303 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Catálogo de Servicios — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'enlaces_ccg:lista_enlaces' %}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Catálogo de Servicios</li>
+{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-concierge-bell me-2 text-primary"></i>Catálogo de Servicios
+    </h1>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge bg-primary">{{ page_obj.paginator.count }} servicio{{ page_obj.paginator.count|pluralize }}</span>
+        <button type="button" class="btn btn-primary" id="btnNuevoServicio">
+            <i class="fas fa-plus me-1"></i>Nuevo servicio
+        </button>
+    </div>
+</div>
+
+<!-- Filtro por nombre -->
+<form method="get" class="ccg-well mb-3">
+    <input type="hidden" name="vista" value="{{ vista }}">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-6 col-xl-4">
+            <label class="form-label small text-muted mb-1" for="filtroServicioNombre">Servicio</label>
+            <input type="text" class="form-control form-control-sm" id="filtroServicioNombre"
+                   name="q" value="{{ q }}" placeholder="Buscar por nombre...">
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100">
+                <i class="fas fa-filter me-1"></i>Filtrar
+            </button>
+        </div>
+        <div class="col-md-6 col-xl-2">
+            <a href="{% url 'enlaces_ccg:catalogo_servicios' %}"
+               class="btn btn-sm btn-outline-secondary w-100" title="Quitar filtros">
+                <i class="fas fa-times me-1"></i>Limpiar
+            </a>
+        </div>
+    </div>
+</form>
+
+<!-- Pestañas por estado -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'activos' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=activos">Activos <span class="badge bg-success-subtle text-success ms-1">{{ n_activos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'inactivos' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=inactivos">Inactivos <span class="badge bg-danger-subtle text-danger ms-1">{{ n_inactivos }}</span></a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if vista == 'todos' %}active{% endif %}"
+           href="?{% if qs_columnas %}{{ qs_columnas }}&{% endif %}vista=todos">Mostrar todos <span class="badge bg-primary-subtle text-primary ms-1">{{ n_todos }}</span></a>
+    </li>
+</ul>
+
+{% if page_obj.object_list %}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <span class="small text-muted">
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} servicios
+        </span>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Paginación de servicios">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        <div class="ccg-table-wrap">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Acciones</th>
+                        <th>Servicio</th>
+                        <th>Responsables de atención</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in page_obj.object_list %}
+                    <tr>
+                        <td class="ps-3 ccg-actions">
+                            <button class="btn btn-outline-primary btn-sm btn-editar-servicio" title="Editar"
+                                    data-pk="{{ s.pk }}"
+                                    data-nombre="{{ s.nombre }}"
+                                    data-responsables="{% for r in s.responsables.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"
+                                    data-activo="{% if s.activo %}1{% else %}0{% endif %}">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <form method="post" action="{% url 'enlaces_ccg:catalogo_servicios' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="toggle_servicio">
+                                <input type="hidden" name="pk" value="{{ s.pk }}">
+                                <button type="submit"
+                                        class="btn btn-outline-{% if s.activo %}success{% else %}danger{% endif %} btn-sm"
+                                        title="{% if s.activo %}Desactivar{% else %}Activar{% endif %}">
+                                    <i class="fas fa-{% if s.activo %}check{% else %}ban{% endif %}"></i>
+                                </button>
+                            </form>
+                        </td>
+                        <td>
+                            <span class="cell-name">{{ s.nombre }}</span>
+                        </td>
+                        <td>
+                            {% for r in s.responsables.all %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle me-1">{{ r.nombre }}</span>
+                            {% empty %}
+                            <span class="text-muted small">—</span>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% if s.activo %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                            {% else %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactivo</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-end align-items-center gap-2 py-2">
+        <nav aria-label="Paginación de servicios">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ qs_columnas }}{% if qs_columnas %}&{% endif %}vista={{ vista }}&page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-concierge-bell fa-3x mb-3 d-block opacity-50"></i>
+        {% if q %}
+        No hay servicios que coincidan con los filtros.
+        {% else %}
+        No hay servicios registrados. Crea uno con el botón «Nuevo servicio».
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Modal: crear/editar servicio ── -->
+<div class="modal fade modal-ccg" id="modalEditarServicio" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalServicioTitulo">
+                    <i class="fas fa-concierge-bell me-2"></i><span id="modalServicioTituloTexto">Nuevo servicio</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:catalogo_servicios' %}" id="formServicio">
+                {% csrf_token %}
+                <input type="hidden" name="accion" id="servicioAccion" value="crear_servicio">
+                <input type="hidden" name="pk" id="servicioPk" value="">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="servicioNombre" class="form-label">Nombre del servicio</label>
+                            <input type="text" class="form-control" id="servicioNombre" name="nombre"
+                                   required placeholder="Ej. Servicio de internet">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-block">Responsables de atención</label>
+                            <select name="responsables" multiple size="0"
+                                    class="form-select ccg-select-busqueda ccg-select-multiple"
+                                    data-vacio="Responsable(s) de atención">
+                                {% for r in responsables %}
+                                <option value="{{ r.pk }}">{{ r.nombre }}</option>
+                                {% empty %}
+                                <option value="0" disabled>No hay responsables creados</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Elige los Responsables de Atención asignados a este servicio. Cada responsable puede atender varios servicios.</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="activo" value="1" id="servicioActivo">
+                                <label class="form-check-label" for="servicioActivo">Activo</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    if (!window.bootstrap) return;
+    var editarModal = document.getElementById('modalEditarServicio');
+
+    function actualizarBotonResponsables(sel) {
+        var btn = sel._ccgBtn;
+        if (!btn) return;
+        var n = sel.selectedOptions.length;
+        var txt;
+        if (!n) txt = sel.dataset.vacio || 'Responsable(s) de atención';
+        else if (n === 1) txt = sel.selectedOptions[0].textContent.trim();
+        else txt = n + ' responsables seleccionados';
+        btn.querySelector('.ccg-picker-label').textContent = txt;
+        btn.classList.toggle('text-muted', !n);
+    }
+
+    function abrirEditar(pk, nombre, responsables, activo) {
+        if (!editarModal) return;
+        var m = new bootstrap.Modal(editarModal);
+        document.getElementById('servicioAccion').value = pk ? 'editar_servicio' : 'crear_servicio';
+        document.getElementById('servicioPk').value = pk || '';
+        document.getElementById('servicioNombre').value = nombre || '';
+        document.getElementById('servicioActivo').checked = activo !== '0';
+        document.getElementById('modalServicioTituloTexto').textContent = pk ? 'Editar servicio' : 'Nuevo servicio';
+
+        var selResp = document.querySelector('#formServicio select[name="responsables"]');
+        var respIds = (responsables || '').split(',').filter(Boolean).map(Number);
+        if (selResp) {
+            Array.prototype.forEach.call(selResp.options, function (opt) {
+                opt.selected = opt.value && respIds.indexOf(Number(opt.value)) !== -1;
+            });
+            actualizarBotonResponsables(selResp);
+        }
+        m.show();
+        document.getElementById('servicioNombre').focus();
+    }
+
+    document.querySelectorAll('.btn-editar-servicio').forEach(function (b) {
+        b.addEventListener('click', function () {
+            abrirEditar(b.dataset.pk, b.dataset.nombre, b.dataset.responsables, b.dataset.activo);
+        });
+    });
+    var btnNuevo = document.getElementById('btnNuevoServicio');
+    if (btnNuevo) {
+        btnNuevo.addEventListener('click', function () { abrirEditar(''); });
+    }
+
+    {% if servicio_editar %}
+    abrirEditar({{ servicio_editar.pk }}, '{{ servicio_editar.nombre|escapejs }}',
+                '{% for r in servicio_editar.responsables.all %}{{ r.pk }}{% if not forloop.last %},{% endif %}{% endfor %}',
+                {{ servicio_editar.activo|yesno:"1,0" }});
+    {% endif %}
+})();
+</script>
+{% endblock %}

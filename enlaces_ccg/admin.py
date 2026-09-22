@@ -576,6 +576,7 @@ class ServicioAdmin(admin.ModelAdmin):
     list_display = ("nombre", "activo", "creado_en")
     list_filter = ("activo",)
     search_fields = ("nombre",)
+    filter_horizontal = ("responsables",)
 
 
 @admin.register(Falla)

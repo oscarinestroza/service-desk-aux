@@ -1050,6 +1050,12 @@ class Servicio(models.Model):
 
     nombre = models.CharField(max_length=255, unique=True, verbose_name="Servicio")
     activo = models.BooleanField(default=True, verbose_name="Activo")
+    responsables = models.ManyToManyField(
+        "ResponsableAtencion",
+        blank=True,
+        related_name="servicios",
+        verbose_name="Responsables de atención",
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
