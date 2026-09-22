@@ -137,7 +137,13 @@
                     <input type="text" name="q" class="form-control form-control-sm"
                            placeholder="Folio, descripción, falla u observaciones" value="{{ q }}">
                 </div>
-                <div class="col">
+                <div class="col d-sm-none">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            id="btnToggleFiltros" aria-expanded="false" aria-controls="formFiltros">
+                        <i class="fas fa-sliders-h me-1"></i><span id="btnToggleFiltrosTexto">Más filtros</span>
+                    </button>
+                </div>
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Responsable de atención</label>
                     <select name="responsable" class="form-select form-select-sm ccg-select-busqueda ccg-select-multiple" multiple>
                         {% for r in responsables %}
@@ -145,15 +151,15 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Desde</label>
                     <input type="date" name="desde" class="form-control form-control-sm" value="{{ desde }}">
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Hasta</label>
                     <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Estatus</label>
                     <select name="estatus" class="form-select form-select-sm">
                         <option value="">Todos</option>
@@ -162,7 +168,7 @@
                     </select>
                 </div>
 
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Servicio</label>
                     <select name="servicio" class="form-select form-select-sm">
                         <option value="">Todos</option>
@@ -171,7 +177,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Edificio</label>
                     <select name="torre" class="form-select form-select-sm">
                         <option value="">Todos</option>
@@ -180,7 +186,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Nivel</label>
                     <select name="nivel" class="form-select form-select-sm">
                         <option value="">Todos</option>
@@ -189,7 +195,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Solicitante</label>
                     <select name="solicitante" class="form-select form-select-sm ccg-select-busqueda">
                         <option value="">Todos</option>
@@ -198,7 +204,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col">
+                <div class="col ccg-filtro-extra">
                     <label class="form-label small mb-1">Institución</label>
                     <select name="institucion" class="form-select form-select-sm ccg-select-busqueda">
                         <option value="">Todas</option>
@@ -210,7 +216,7 @@
             </div>
 
             <div class="d-flex justify-content-between align-items-center gap-2 pt-2">
-                <div class="form-check mb-0">
+                <div class="form-check mb-0 ccg-filtro-extra">
                     <input class="form-check-input" type="checkbox" name="incluir" value="1"
                            id="incluirArchivados" {% if incluir_archivados %}checked{% endif %}>
                     <label class="form-check-label small" for="incluirArchivados">Incluir archivados</label>
@@ -256,6 +262,21 @@
         0%, 100% { opacity: 1; transform: scale(1); }
         50%      { opacity: .35; transform: scale(1.5); }
     }
+
+    /* ── Vista de teléfono: solo Ticket, Falla y Estatus; filtros colapsados;
+       el Nº de ticket es la única columna vinculable. ── */
+    @media (max-width: 575.98px) {
+        .ccg-tickets-table .ccg-col-acciones,
+        .ccg-tickets-table .ccg-col-extra { display: none; }
+
+        #formFiltros:not(.ccg-filtros-abiertos) .ccg-filtro-extra { display: none; }
+
+        .ccg-tickets-table .ccg-link-plain {
+            pointer-events: none;
+            color: inherit;
+            text-decoration: none;
+        }
+    }
 </style>
 
 <div class="card border-0 shadow-sm">
@@ -288,26 +309,26 @@
     <div class="card-body p-0">
         <div class="ccg-scroll-top">
             <div class="ccg-table-wrap">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0 ccg-tickets-table">
                     <thead>
                         <tr>
-                            <th class="text-center">Acciones</th>
-                            <th class="cell-name">Ticket</th>
-                            <th>Falla</th>
-                            <th>Responsable de atención</th>
-                            <th>Fecha de solicitud</th>
-                            <th>Estatus</th>
-                            <th>Solicitante</th>
-                            <th>Edificio</th>
-                            <th>Nivel</th>
-                            <th>Unidad Funcional</th>
+                            <th class="text-center ccg-col-acciones">Acciones</th>
+                            <th class="cell-name ccg-col-ticket">Ticket</th>
+                            <th class="ccg-col-falla">Falla</th>
+                            <th class="ccg-col-extra">Responsable de atención</th>
+                            <th class="ccg-col-extra">Fecha de solicitud</th>
+                            <th class="ccg-col-estatus">Estatus</th>
+                            <th class="ccg-col-extra">Solicitante</th>
+                            <th class="ccg-col-extra">Edificio</th>
+                            <th class="ccg-col-extra">Nivel</th>
+                            <th class="ccg-col-extra">Unidad Funcional</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for t in page_obj.object_list %}
                         {% with c=t.raw_data %}
                         <tr{% if t.cierre and not t.cierre_sincronizado %} class="table-warning"{% endif %}>
-                            <td class="text-center ccg-ticket-actions">
+                            <td class="text-center ccg-ticket-actions ccg-col-acciones">
                                 <button type="button"
                                         class="btn btn-sm btn-outline-primary btn-ver-ticket"
                                         data-pk="{{ t.pk }}"
@@ -323,44 +344,44 @@
                                 </a>
                                 {% endif %}
                             </td>
-                            <td class="cell-name">
+                            <td class="cell-name ccg-col-ticket">
                                 <a href="{% url 'enlaces_ccg:ticket_detalle' t.pk %}">{{ t.numero_display }}</a>
                             </td>
-                            <td>
+                            <td class="ccg-col-falla">
                                 {% if t.falla %}
-                                <a href="?falla={{ t.falla_id }}" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
+                                <a href="?falla={{ t.falla_id }}" class="ccg-link-plain" title="Filtrar por esta falla">{{ t.falla.descripcion }}</a>
                                 {% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}
                             </td>
-                            <td>
+                            <td class="ccg-col-extra">
                                 {% if t.responsable_atencion %}
                                 <a href="?responsable={{ t.responsable_atencion_id }}" title="Filtrar por este responsable">{{ t.responsable_atencion.nombre }}</a>
                                 {% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}
                             </td>
-                            <td nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
-                            <td>
+                            <td class="ccg-col-extra" nowrap>{% if t.fecha %}{{ t.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                            <td class="ccg-col-estatus">
                                 {% if t.esta_cerrado %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle">Cerrado</span>
                                 {% else %}
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Abierto</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="ccg-col-extra">
                                 {% if t.solicitante %}
                                     <a href="{% url 'enlaces_ccg:enlace_detalle' t.solicitante.pk %}"
                                        title="Ver ficha del enlace">{{ t.solicitante.nombre_sig }}</a>
                                 {% else %}{{ t.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
                             </td>
-                            <td>
+                            <td class="ccg-col-extra">
                                 {% if t.torre %}
                                 <a href="{% url 'enlaces_ccg:detalle_edificio' t.torre.pk %}">{{ t.torre.nombre }}</a>
                                 {% else %}{{ c.nivel|default:"—" }}{% endif %}
                             </td>
-                            <td>
+                            <td class="ccg-col-extra">
                                 {% if t.nivel %}
                                 <a href="?nivel={{ t.nivel_id }}" title="Filtrar por este nivel">{{ t.nivel.nombre }}</a>
                                 {% else %}{{ c.grupo|default:"—" }}{% endif %}
                             </td>
-                            <td>{{ c.unidad|default:"—" }}</td>
+                            <td class="ccg-col-extra">{{ c.unidad|default:"—" }}</td>
                         </tr>
                         {% endwith %}
                         {% empty %}
@@ -429,6 +450,20 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+(function () {
+    // Toggle de filtros (solo teléfono): al inicio solo se ve "Buscar".
+    var btn = document.getElementById('btnToggleFiltros');
+    var form = document.getElementById('formFiltros');
+    if (!btn || !form) return;
+    btn.addEventListener('click', function () {
+        var abierto = form.classList.toggle('ccg-filtros-abiertos');
+        btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+        var texto = document.getElementById('btnToggleFiltrosTexto');
+        if (texto) texto.textContent = abierto ? 'Ocultar filtros' : 'Más filtros';
+    });
+})();
+</script>
 <script>
 (function () {
     // --- Sincronización: badge "Última" + círculo de estado ---
