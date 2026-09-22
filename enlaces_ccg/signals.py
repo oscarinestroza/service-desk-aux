@@ -9,6 +9,7 @@ Se dispara un sync en background cuando:
 """
 
 import logging
+from django.conf import settings
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
@@ -93,3 +94,15 @@ def sync_sig_on_enlace_save(sender, instance, created, **kwargs):
             )
             from .sig_sync.tasks import actualizar_correo_enlace
             actualizar_correo_enlace(instance.pk)
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def desvincular_responsables_usuario_inactivo(sender, instance, created, raw, **kwargs):
+    """Si un usuario queda inactivo, se desvincula automáticamente de todos
+    sus responsables de atención asignados."""
+    if raw or instance.is_active:
+        return
+    try:
+        instance.responsables_atencion.clear()
+    except Exception as exc:  # pragma: no cover - defensivo
+        logger.warning("No se pudo desvincular responsables de %s: %s", instance.pk, exc)

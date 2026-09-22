@@ -179,6 +179,21 @@ urlpatterns = [
         name="ticket_sincronizacion_estado",
     ),
     path(
+        "tickets/vistas/guardar/",
+        views.vista_guardar,
+        name="vista_guardar",
+    ),
+    path(
+        "tickets/vistas/<int:pk>/predeterminar/",
+        views.vista_predeterminar,
+        name="vista_predeterminar",
+    ),
+    path(
+        "tickets/vistas/<int:pk>/eliminar/",
+        views.vista_eliminar,
+        name="vista_eliminar",
+    ),
+    path(
         "tickets/detalle/<int:pk>/",
         views.ticket_detalle,
         name="ticket_detalle",

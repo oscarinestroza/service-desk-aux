@@ -1155,6 +1155,42 @@ class ResponsableAtencion(models.Model):
         return self.nombre
 
 
+class VistaGuardada(models.Model):
+    """Vista de filtros guardada por un usuario (por ahora módulo de tickets).
+
+    `parametros` es un dict {campo: [valores]} con semántica de `getlist`, que
+    puede incluir tokens relativos que se resuelven al aplicar la vista:
+        desde/hasta: @mes_inicio, @mes_fin, @hoy
+        responsable: @mios (responsables activos del usuario al aplicar)
+    """
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vistas_guardadas",
+        verbose_name="Usuario",
+    )
+    modulo = models.CharField(max_length=30, default="tickets", db_index=True)
+    nombre = models.CharField(max_length=120, verbose_name="Nombre")
+    parametros = models.JSONField(default=dict, verbose_name="Parámetros")
+    es_general = models.BooleanField(
+        default=False, verbose_name="Disponible para todos"
+    )
+    es_predeterminada = models.BooleanField(default=False, verbose_name="Predeterminada")
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        unique_together = [("usuario", "modulo", "nombre")]
+        verbose_name = "Vista guardada"
+        verbose_name_plural = "Vistas guardadas"
+
+    def __str__(self):
+        return f"{self.nombre} ({self.usuario_id or 'general'})"
+
+
 class Ticket(models.Model):
     """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
 

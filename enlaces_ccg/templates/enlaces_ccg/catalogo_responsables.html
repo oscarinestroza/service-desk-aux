@@ -70,6 +70,13 @@
             {% for r in page_obj.object_list %}
             <tr>
                 <td class="ps-3 ccg-actions">
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalResp{{ r.pk }}"
+                            title="Ver usuarios asignados">
+                        <i class="fas fa-users"></i>
+                    </button>
                     <form method="post" action="{% url 'enlaces_ccg:catalogo_responsables' %}" class="d-inline">
                         {% csrf_token %}
                         <input type="hidden" name="accion" value="toggle_responsable">
@@ -121,6 +128,49 @@
     </ul>
     {% endif %}
 </div>
+
+{% for r in page_obj.object_list %}
+<div class="modal fade modal-ccg" id="modalResp{{ r.pk }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-tie me-2 text-primary"></i>{{ r.nombre }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">Usuarios vinculados a este responsable de atención:</p>
+                <ul class="list-group list-group-flush">
+                    {% for u in r.usuarios.all %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+                        <div class="min-w-0">
+                            <span class="fw-semibold">{{ u.get_full_name|default:u.username }}</span>
+                            <span class="text-muted small d-block text-truncate">@{{ u.username }}{% if u.email %} · {{ u.email }}{% endif %}</span>
+                        </div>
+                        {% if u.is_active %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Inactivo</span>
+                        {% endif %}
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted small py-4">
+                        Sin usuarios asignados.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'enlaces_ccg:catalogo_usuarios' %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-user-cog me-1"></i>Ir al catálogo de usuarios
+                </a>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% else %}
 <div class="card border-0 shadow-sm">
     <div class="text-center py-5 text-muted">

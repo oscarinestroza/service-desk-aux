@@ -16,9 +16,9 @@ from datetime import datetime, timedelta
 from django.contrib import auth, messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, F, Q
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from urllib.parse import quote
@@ -38,6 +38,7 @@ from .models import (
     Servicio, Ticket,
     TicketAdjunto, TicketCierre,
     TicketRegistro,
+    VistaGuardada,
 )
 from .roles import (
     CAP_ADMIN,
@@ -467,6 +468,50 @@ def _filtrar_tickets(qs, params):
     }
 
 
+def _resolver_tokens_vista(parametros, usuario):
+    """Resuelve los tokens relativos de una vista guardada.
+
+    Fechas: `@mes_inicio` / `@mes_fin` (mes vigente) y `@hoy`.
+    Responsable: `@mios` → pks de los responsables activos del usuario; si no
+    tiene ninguno, se omite el filtro por responsable.
+    Devuelve el dict de parámetros listo para filtrar (sin tokens).
+    """
+    hoy = timezone.localdate()
+    inicio_mes = hoy.replace(day=1)
+    if hoy.month == 12:
+        fin_mes = hoy.replace(day=31)
+    else:
+        fin_mes = (inicio_mes.replace(month=hoy.month + 1, day=1) - timedelta(days=1))
+    tokens_fecha = {
+        "@mes_inicio": inicio_mes.strftime("%Y-%m-%d"),
+        "@mes_fin": fin_mes.strftime("%Y-%m-%d"),
+        "@hoy": hoy.strftime("%Y-%m-%d"),
+    }
+
+    salida = {campo: list(valores) for campo, valores in parametros.items()}
+    for campo in ("desde", "hasta"):
+        if campo in salida:
+            salida[campo] = [tokens_fecha.get(v, v) for v in salida[campo]]
+
+    if "responsable" in salida:
+        mios = list(
+            usuario.responsables_atencion.filter(activo=True).values_list(
+                "pk", flat=True
+            )
+        )
+        nuevos = []
+        for v in salida["responsable"]:
+            if v == "@mios":
+                nuevos.extend(str(pk) for pk in mios)
+            else:
+                nuevos.append(v)
+        if nuevos:
+            salida["responsable"] = nuevos
+        else:
+            salida.pop("responsable", None)
+    return salida
+
+
 @requiere(CAP_TICKETS)
 def seguimiento_tickets(request):
     """Lista paginada de tickets con filtros (servidor-side).
@@ -481,7 +526,44 @@ def seguimiento_tickets(request):
         "torre", "institucion", "solicitante", "servicio", "falla", "nivel"
     )
 
-    qs, filtros_ctx = _filtrar_tickets(qs, request.GET)
+    # Vistas guardadas: se aplica la elegida (?vista=<pk>) o, al entrar sin
+    # filtros, la marcada como predeterminada del usuario (si existe). Una
+    # vista activa gobierna el filtrado (desactiva el prefiltro automático).
+    vista_pk = request.GET.get("vista", "").strip()
+    vista_en_url = bool(vista_pk)
+    if vista_pk == "0":
+        vista_pk = ""
+    campos_filtro = {
+        "estatus", "incluir", "torre", "servicio", "falla", "nivel",
+        "responsable", "solicitante", "institucion", "q", "desde", "hasta",
+        "todos",
+    }
+    vista_activa = None
+    if vista_pk and vista_pk.isdigit():
+        vista_activa = (
+            VistaGuardada.objects.filter(pk=vista_pk, modulo="tickets")
+            .filter(Q(es_general=True) | Q(usuario=request.user))
+            .first()
+        )
+    elif not vista_en_url and not (campos_filtro & set(request.GET.keys())):
+        vista_activa = VistaGuardada.objects.filter(
+            usuario=request.user, modulo="tickets", es_predeterminada=True
+        ).first()
+
+    if vista_activa:
+        resueltos = _resolver_tokens_vista(vista_activa.parametros, request.user)
+        params = QueryDict(mutable=True)
+        for campo, valores in resueltos.items():
+            for valor in valores:
+                params.appendlist(campo, valor)
+        if request.GET.get("page"):
+            params["page"] = request.GET["page"]
+        qs, filtros_ctx = _filtrar_tickets(qs, params)
+        params_filtros = params
+    else:
+        qs, filtros_ctx = _filtrar_tickets(qs, request.GET)
+        params_filtros = request.GET
+
     estatus = filtros_ctx["estatus"]
     incluir_archivados = filtros_ctx["incluir_archivados"]
     torre_id = filtros_ctx["torre_id"]
@@ -497,7 +579,8 @@ def seguimiento_tickets(request):
 
     # Prefiltrado por responsables del usuario: si el usuario tiene responsables
     # asignados y no pidió otro filtro, por defecto solo ve los suyos. Cambiable
-    # (puede elegir otros o usar "Ver todos" con ?todos=1).
+    # (puede elegir otros o usar "Ver todos" con ?todos=1). Con una vista activa
+    # el prefiltrado automático no aplica (gobierna la vista).
     mis_responsables_ids = list(
         request.user.responsables_atencion.filter(activo=True).values_list(
             "pk", flat=True
@@ -505,8 +588,9 @@ def seguimiento_tickets(request):
     )
     filtrado_por_mis = bool(
         mis_responsables_ids
-        and not request.GET.getlist("responsable")
-        and request.GET.get("todos") != "1"
+        and not vista_activa
+        and not params_filtros.getlist("responsable")
+        and params_filtros.get("todos") != "1"
     )
     if filtrado_por_mis:
         qs = qs.filter(responsable_atencion_id__in=mis_responsables_ids)
@@ -521,7 +605,7 @@ def seguimiento_tickets(request):
 
     filtros = "&".join(
         f"{k}={quote(v)}"
-        for k, valores in request.GET.lists()
+        for k, valores in params_filtros.lists()
         for v in valores
         if k != "page" and v.strip() != ""
     )
@@ -530,6 +614,12 @@ def seguimiento_tickets(request):
             f"responsable={quote(str(v))}" for v in mis_responsables_ids
         )
         filtros = f"{filtros}&{extra}" if filtros else extra
+    if vista_activa:
+        filtros = (
+            f"{filtros}&vista={vista_activa.pk}"
+            if filtros
+            else f"vista={vista_activa.pk}"
+        )
 
     proxima = cfg.proxima_sincronizacion()
     if proxima:
@@ -557,6 +647,14 @@ def seguimiento_tickets(request):
             "nivel_id": nivel_id,
             "responsable_ids": responsable_ids,
             "filtrado_por_mis": filtrado_por_mis,
+            "tiene_responsables": bool(mis_responsables_ids),
+            "vista_activa": vista_activa,
+            "mis_vistas": VistaGuardada.objects.filter(
+                usuario=request.user, modulo="tickets"
+            ).order_by("nombre"),
+            "vistas_generales": VistaGuardada.objects.filter(
+                modulo="tickets", es_general=True
+            ).order_by("nombre"),
             "solicitante_id": solicitante_id,
             "institucion_id": institucion_id,
             "edificios": Edificio.objects.all(),
@@ -584,6 +682,74 @@ def seguimiento_tickets(request):
             "cfg": cfg,
         },
     )
+
+
+@login_required
+@require_POST
+@requiere(CAP_TICKETS)
+def vista_guardar(request):
+    """Guarda (o reemplaza por nombre) una vista de filtros del usuario."""
+    nombre = request.POST.get("nombre", "").strip()[:120]
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "Escribe un nombre."}, status=400)
+    try:
+        parametros = json.loads(request.POST.get("parametros_json", "{}"))
+    except (TypeError, ValueError):
+        parametros = None
+    if not isinstance(parametros, dict):
+        return JsonResponse({"ok": False, "error": "Parámetros inválidos."}, status=400)
+
+    limpios = {}
+    for campo, valores in parametros.items():
+        if campo in ("page", "vista", "todos", "csrfmiddlewaretoken"):
+            continue
+        if not isinstance(valores, (list, tuple)):
+            valores = [valores]
+        vals = [str(v).strip() for v in valores if str(v).strip() != ""]
+        if vals:
+            limpios[campo] = vals
+
+    vista, creado = VistaGuardada.objects.update_or_create(
+        usuario=request.user,
+        modulo="tickets",
+        nombre=nombre,
+        defaults={"parametros": limpios},
+    )
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "pk": vista.pk, "creada": creado})
+    destino = reverse("enlaces_ccg:seguimiento_tickets")
+    return redirect(f"{destino}?vista={vista.pk}")
+
+
+@login_required
+@require_POST
+@requiere(CAP_TICKETS)
+def vista_predeterminar(request, pk):
+    """Marca/desmarca una vista como predeterminada (solo del dueño)."""
+    vista = get_object_or_404(
+        VistaGuardada, pk=pk, usuario=request.user, modulo="tickets"
+    )
+    nueva = not vista.es_predeterminada
+    with transaction.atomic():
+        VistaGuardada.objects.filter(
+            usuario=request.user, modulo="tickets", es_predeterminada=True
+        ).update(es_predeterminada=False)
+        vista.es_predeterminada = nueva
+        vista.save(update_fields=["es_predeterminada"])
+    destino = reverse("enlaces_ccg:seguimiento_tickets")
+    return redirect(f"{destino}?vista={vista.pk}")
+
+
+@login_required
+@require_POST
+@requiere(CAP_TICKETS)
+def vista_eliminar(request, pk):
+    """Elimina una vista guardada (solo del dueño)."""
+    vista = get_object_or_404(
+        VistaGuardada, pk=pk, usuario=request.user, modulo="tickets"
+    )
+    vista.delete()
+    return redirect("enlaces_ccg:seguimiento_tickets")
 
 
 @requiere(CAP_TICKETS)
@@ -1508,9 +1674,13 @@ def _usuario_desde_post(request, usuario=None):
         usuario.set_password(password)
     usuario.save()
     usuario.groups.set(Group.objects.filter(pk__in=grupos_ids))
-    usuario.responsables_atencion.set(
-        ResponsableAtencion.objects.filter(pk__in=responsables_ids)
-    )
+    if is_active:
+        usuario.responsables_atencion.set(
+            ResponsableAtencion.objects.filter(pk__in=responsables_ids)
+        )
+    else:
+        # Un usuario inactivo no se mantiene vinculado a responsables.
+        usuario.responsables_atencion.clear()
     return usuario
 
 
@@ -1905,6 +2075,10 @@ def perfil_institucion(request, pk):
             "servicios": Servicio.objects.filter(activo=True),
             "fallas": Falla.objects.filter(activo=True),
             "niveles": Nivel.objects.filter(activo=True),
+            "responsables": ResponsableAtencion.objects.filter(activo=True),
+            "solicitantes": EnlaceAutorizado.objects.filter(
+                institucion=institucion
+            ).order_by("nombre_sig"),
             **(filtros_ctx or {}),
         },
     )
@@ -2213,6 +2387,7 @@ def enlace_detalle(request, pk):
             "servicios": Servicio.objects.filter(activo=True),
             "fallas": Falla.objects.filter(activo=True),
             "niveles": Nivel.objects.filter(activo=True),
+            "responsables": ResponsableAtencion.objects.filter(activo=True),
             **(filtros_ctx or {}),
         },
     )

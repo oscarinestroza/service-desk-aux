@@ -1,6 +1,7 @@
 """Pruebas del parser/importador del módulo de tickets (Fase 2)."""
 
 import tempfile
+import json
 from datetime import datetime, time, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -24,6 +25,7 @@ from .models import (
     Ticket,
     TicketCierre,
     TicketLog,
+    VistaGuardada,
 )
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
@@ -980,6 +982,315 @@ class ResponsablesUsuariosTests(TestCase):
             list(u.responsables_atencion.values_list("pk", flat=True)),
             [self.resp_tres.pk],
         )
+
+    def test_desactivar_usuario_desvincula_responsables(self):
+        from django.contrib.auth import get_user_model
+
+        u = get_user_model().objects.create_user(
+            "usuario.baja", "b@test.local", "Clave123!", is_active=True
+        )
+        u.responsables_atencion.add(self.resp_uno, self.resp_dos)
+
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:catalogo_usuarios"),
+            {"accion": "toggle_usuario", "pk": str(u.pk)},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        u.refresh_from_db()
+        self.assertFalse(u.is_active)
+        self.assertEqual(u.responsables_atencion.count(), 0)
+
+    def test_editar_usuario_inactivo_desvincula_responsables(self):
+        from django.contrib.auth import get_user_model
+
+        u = get_user_model().objects.create_user(
+            "usuario.inactivo", "i@test.local", "Clave123!", is_active=True
+        )
+        u.responsables_atencion.add(self.resp_uno)
+
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:catalogo_usuarios"),
+            {
+                "accion": "editar_usuario",
+                "pk": str(u.pk),
+                "username": "usuario.inactivo",
+                "password": "",
+                "first_name": "",
+                "last_name": "",
+                "email": "",
+                "is_staff": "0",
+                "is_active": "0",
+                "responsables": [str(self.resp_uno.pk), str(self.resp_dos.pk)],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        u.refresh_from_db()
+        self.assertFalse(u.is_active)
+        self.assertEqual(u.responsables_atencion.count(), 0)
+
+    def test_guardar_usuario_inactivo_desvincula_por_signal(self):
+        from django.contrib.auth import get_user_model
+
+        u = get_user_model().objects.create_user(
+            "usuario.signal", "s@test.local", "Clave123!", is_active=True
+        )
+        u.responsables_atencion.add(self.resp_uno)
+        u.is_active = False
+        u.save(update_fields=["is_active"])
+        u.refresh_from_db()
+        self.assertEqual(u.responsables_atencion.count(), 0)
+
+
+class VistaGuardadaTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.resp_uno = ResponsableAtencion.objects.create(
+            nombre="Resp Uno", activo=True
+        )
+        self.resp_dos = ResponsableAtencion.objects.create(
+            nombre="Resp Dos", activo=True
+        )
+        self.resp_tres = ResponsableAtencion.objects.create(
+            nombre="Resp Tres", activo=True
+        )
+        self.usuario = get_user_model().objects.create_superuser(
+            "operador.vistas", "v@test.local", "Prueba123!"
+        )
+        self.usuario.responsables_atencion.add(self.resp_uno, self.resp_dos)
+        self.client.force_login(self.usuario)
+
+        hoy = timezone.localdate()
+        fecha_mes = hoy.replace(day=max(1, hoy.day - 1))
+        fecha_pasado = hoy.replace(day=1) - timedelta(days=1)
+
+        def fila(tid, numero, responsable, fecha, cierro=""):
+            f = _fila_v(tid, numero)
+            f[3] = responsable
+            f[13] = fecha.strftime("%Y-%m-%d 10:00:00")
+            if cierro:
+                f[17] = fecha.strftime("%Y-%m-%d 10:00:00")
+            return f
+
+        self.datos = self._filas_basicas([
+            fila(1, "SS26-1001", "Resp Uno", fecha_mes),                       # A: mío, mes, abierto
+            fila(2, "SS26-1002", "Resp Uno", fecha_pasado),                   # B: mío, mes pasado
+            fila(3, "SS26-1003", "Resp Dos", fecha_mes),                      # C: mío, mes, abierto
+            fila(4, "SS26-1004", "Resp Tres", fecha_mes),                     # D: ajeno
+            fila(5, "SS26-1005", "Resp Uno", fecha_mes, cierro=True),         # E: mío, cerrado
+        ])
+        aplicar_tickets(self.datos, MODO_SYNC_PARCIAL)
+
+    def _filas_basicas(self, filas):
+        ruta = _excel_tmp(filas)
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        return datos
+
+    def _guardar_vista(self, nombre, parametros):
+        return self.client.post(
+            reverse("enlaces_ccg:vista_guardar"),
+            {"nombre": nombre, "parametros_json": json.dumps(parametros)},
+        )
+
+    def test_guardar_y_aplicar_vista_mis_abiertos_del_mes(self):
+        respuesta = self._guardar_vista(
+            "Mis abiertos del mes",
+            {
+                "estatus": ["ABIERTO"],
+                "responsable": ["@mios"],
+                "desde": ["@mes_inicio"],
+                "hasta": ["@mes_fin"],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn("vista=", respuesta.url)
+        vista = VistaGuardada.objects.get(
+            usuario=self.usuario, nombre="Mis abiertos del mes"
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"vista": vista.pk}
+        ).content.decode("utf-8", "replace")
+        self.assertIn(">SS26-1001<", html)
+        self.assertIn(">SS26-1003<", html)
+        self.assertNotIn(">SS26-1002<", html)
+        self.assertNotIn(">SS26-1004<", html)
+        self.assertNotIn(">SS26-1005<", html)
+        self.assertIn("Mis abiertos del mes", html)
+
+    def test_predeterminada_se_aplica_al_entrar_sin_filtros(self):
+        VistaGuardada.objects.create(
+            usuario=self.usuario,
+            modulo="tickets",
+            nombre="Solo mios del mes",
+            parametros={
+                "estatus": ["ABIERTO"],
+                "responsable": ["@mios"],
+                "desde": ["@mes_inicio"],
+                "hasta": ["@mes_fin"],
+            },
+            es_predeterminada=True,
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Solo mios del mes", html)
+        self.assertIn(">SS26-1001<", html)
+        self.assertNotIn(">SS26-1004<", html)
+
+        html2 = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"todos": "1"}
+        ).content.decode("utf-8", "replace")
+        self.assertIn(">SS26-1004<", html2)
+
+    def test_vista_cero_no_aplica_predeterminada(self):
+        VistaGuardada.objects.create(
+            usuario=self.usuario,
+            modulo="tickets",
+            nombre="Solo mios del mes",
+            parametros={"estatus": ["ABIERTO"]},
+            es_predeterminada=True,
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"), {"vista": "0"}
+        ).content.decode("utf-8", "replace")
+        # Sin vista: vuelve el prefiltro por mis responsables (incluye mes pasado).
+        self.assertIn(">SS26-1002<", html)
+        self.assertNotIn(">SS26-1004<", html)
+
+    def test_predeterminar_marca_y_desmarca(self):
+        v1 = VistaGuardada.objects.create(
+            usuario=self.usuario, modulo="tickets", nombre="V1", parametros={}
+        )
+        v2 = VistaGuardada.objects.create(
+            usuario=self.usuario, modulo="tickets", nombre="V2", parametros={}
+        )
+        self.client.post(reverse("enlaces_ccg:vista_predeterminar", args=[v1.pk]))
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        self.assertTrue(v1.es_predeterminada)
+        self.assertFalse(v2.es_predeterminada)
+        self.client.post(reverse("enlaces_ccg:vista_predeterminar", args=[v2.pk]))
+        v1.refresh_from_db()
+        v2.refresh_from_db()
+        self.assertFalse(v1.es_predeterminada)
+        self.assertTrue(v2.es_predeterminada)
+
+    def test_mios_siguen_a_responsables_actuales(self):
+        vista = VistaGuardada.objects.create(
+            usuario=self.usuario,
+            modulo="tickets",
+            nombre="Mis tickets",
+            parametros={"responsable": ["@mios"]},
+        )
+        url = reverse("enlaces_ccg:seguimiento_tickets") + f"?vista={vista.pk}"
+        html = self.client.get(url).content.decode("utf-8", "replace")
+        self.assertNotIn(">SS26-1004<", html)
+
+        self.usuario.responsables_atencion.add(self.resp_tres)
+        html2 = self.client.get(url).content.decode("utf-8", "replace")
+        self.assertIn(">SS26-1004<", html2)
+
+    def test_eliminar_vista_propia(self):
+        vista = VistaGuardada.objects.create(
+            usuario=self.usuario, modulo="tickets", nombre="V", parametros={}
+        )
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:vista_eliminar", args=[vista.pk])
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(VistaGuardada.objects.filter(pk=vista.pk).exists())
+
+    def test_no_eliminar_vista_ajena(self):
+        from django.contrib.auth import get_user_model
+
+        otro = get_user_model().objects.create_user(
+            "otro.vistas", "o@test.local", "Clave123!"
+        )
+        vista = VistaGuardada.objects.create(
+            usuario=otro, modulo="tickets", nombre="Ajeno", parametros={}
+        )
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:vista_eliminar", args=[vista.pk])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertTrue(VistaGuardada.objects.filter(pk=vista.pk).exists())
+
+    def test_nombre_repetido_reemplaza(self):
+        self._guardar_vista("Mi vista", {"estatus": ["ABIERTO"]})
+        self._guardar_vista("Mi vista", {"estatus": ["CERRADO"]})
+        self.assertEqual(
+            VistaGuardada.objects.filter(
+                usuario=self.usuario, nombre="Mi vista"
+            ).count(),
+            1,
+        )
+        vista = VistaGuardada.objects.get(
+            usuario=self.usuario, nombre="Mi vista"
+        )
+        self.assertEqual(vista.parametros, {"estatus": ["CERRADO"]})
+
+    def test_guardar_sin_nombre_rechaza(self):
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:vista_guardar"),
+            {"nombre": "", "parametros_json": "{}"},
+        )
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_semilla_general_existe(self):
+        self.assertTrue(
+            VistaGuardada.objects.filter(
+                modulo="tickets",
+                es_general=True,
+                nombre="Mis tickets del mes (abiertos)",
+            ).exists()
+        )
+
+    def test_vista_general_disponible_para_todos(self):
+        from django.contrib.auth import get_user_model
+
+        general = VistaGuardada.objects.create(
+            usuario=None,
+            modulo="tickets",
+            nombre="General abiertos del mes",
+            parametros={
+                "estatus": ["ABIERTO"],
+                "responsable": ["@mios"],
+                "desde": ["@mes_inicio"],
+                "hasta": ["@mes_fin"],
+            },
+            es_general=True,
+        )
+        otro = get_user_model().objects.create_superuser(
+            "operador.general", "g@test.local", "Prueba123!"
+        )
+        self.client.force_login(otro)
+
+        html = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets")
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Disponibles para todos", html)
+        self.assertIn("General abiertos del mes", html)
+
+        # El viewer no tiene responsables: @mios se omite, filtra mes + abiertos.
+        html2 = self.client.get(
+            reverse("enlaces_ccg:seguimiento_tickets"),
+            {"vista": general.pk},
+        ).content.decode("utf-8", "replace")
+        self.assertIn(">SS26-1001<", html2)  # A, abierto este mes
+        self.assertIn(">SS26-1004<", html2)  # D, abierto este mes, ajeno
+        self.assertNotIn(">SS26-1002<", html2)  # B, abierto pero mes pasado
+        self.assertNotIn(">SS26-1005<", html2)  # E, cerrado
+
+        # No puede eliminar ni marcar como predeterminada una vista general.
+        r1 = self.client.post(
+            reverse("enlaces_ccg:vista_predeterminar", args=[general.pk])
+        )
+        self.assertEqual(r1.status_code, 404)
+        r2 = self.client.post(
+            reverse("enlaces_ccg:vista_eliminar", args=[general.pk])
+        )
+        self.assertEqual(r2.status_code, 404)
 
 
 def _fila_v(tid, numero, solicitante="Cesar Augusto Zavala",

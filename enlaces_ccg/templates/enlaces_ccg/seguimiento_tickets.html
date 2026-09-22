@@ -20,6 +20,70 @@
               data-estado-url="{% url 'enlaces_ccg:ticket_sincronizacion_estado' %}">
             <i class="fas fa-sync-alt me-1"></i><span id="badgeUltimaTexto">{% if ultima_sincronizacion %}Última: {{ ultima_sincronizacion|timesince }} atrás{% else %}Sin sincronizar{% endif %}</span>
         </span>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-bookmark me-1"></i>Vistas
+                {% if vista_activa %}<span class="text-primary fw-bold ms-1">●</span>{% endif %}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end ccg-ddl-vistas">
+                <li>
+                    <button class="dropdown-item" type="button" id="btnGuardarVista">
+                        <i class="fas fa-plus me-2"></i>Guardar vista actual...
+                    </button>
+                </li>
+                {% if mis_vistas or vistas_generales %}
+                <li><hr class="dropdown-divider"></li>
+                {% endif %}
+                {% if mis_vistas %}
+                <li><h6 class="dropdown-header">Mis vistas</h6></li>
+                {% for v in mis_vistas %}
+                <li class="ccg-ddl-vista" data-nombre="{{ v.nombre }}">
+                    <a class="dropdown-item d-flex justify-content-between align-items-center gap-2"
+                       href="?vista={{ v.pk }}" title="Aplicar vista">
+                        <span class="text-truncate">{{ v.nombre }}</span>
+                        {% if v.es_predeterminada %}
+                        <i class="fas fa-star text-warning ms-1" title="Predeterminada"></i>
+                        {% endif %}
+                    </a>
+                    <form method="post" action="{% url 'enlaces_ccg:vista_predeterminar' v.pk %}"
+                          class="p-0 border-0">
+                        {% csrf_token %}
+                        <button class="btn btn-sm w-100 text-start px-3 py-1" type="submit"
+                                title="Marcar como predeterminada">
+                            <i class="fas fa-star-o me-2"></i>
+                            {{ v.es_predeterminada|yesno:"Quitar predeterminada,Marcar predeterminada" }}
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'enlaces_ccg:vista_eliminar' v.pk %}"
+                          class="p-0 border-0" data-confirmar="vista">
+                        {% csrf_token %}
+                        <button class="btn btn-sm w-100 text-start px-3 py-1 text-danger" type="submit">
+                            <i class="fas fa-trash me-2"></i>Eliminar
+                        </button>
+                    </form>
+                </li>
+                {% endfor %}
+                {% endif %}
+                {% if vistas_generales %}
+                <li><h6 class="dropdown-header">Disponibles para todos</h6></li>
+                {% for v in vistas_generales %}
+                <li class="{% if vista_activa and vista_activa.pk == v.pk %}bg-light bg-gradient{% endif %}">
+                    <a class="dropdown-item d-flex justify-content-between align-items-center gap-2"
+                       href="?vista={{ v.pk }}" title="Aplicar vista">
+                        <span class="text-truncate">{{ v.nombre }}</span>
+                        {% if vista_activa and vista_activa.pk == v.pk %}
+                        <i class="fas fa-check text-primary ms-1" title="Vista activa"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+                {% endif %}
+                {% if not mis_vistas and not vistas_generales %}
+                <li><span class="dropdown-item-text small text-muted">No hay vistas</span></li>
+                {% endif %}
+            </ul>
+        </div>
         {% if puede_editar %}
         <form method="post" action="{% url 'enlaces_ccg:ticket_sincronizar' %}">
             {% csrf_token %}
@@ -43,9 +107,21 @@
 </div>
 {% endif %}
 
+{% if vista_activa %}
+<div class="alert alert-primary py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <span class="small">
+        <i class="fas fa-bookmark me-1"></i>
+        Vista: <strong>{{ vista_activa.nombre }}</strong>
+    </span>
+    <a href="?vista=0" class="btn btn-sm btn-outline-primary">
+        <i class="fas fa-times me-1"></i>Quitar vista
+    </a>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-3">
-        <form method="get">
+        <form method="get" id="formFiltros">
             <div class="row row-cols-1 row-cols-md-5 g-2 align-items-end">
                 <div class="col">
                     <label class="form-label small mb-1">Buscar</label>
@@ -291,6 +367,23 @@
             </div>
         </div>
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-end align-items-center gap-2 py-2">
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page=1">Primera</a></li>
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a></li>
+                {% endif %}
+                <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a></li>
+                <li class="page-item"><a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 
 <div class="modal fade modal-ccg" id="modalTicket" tabindex="-1" aria-hidden="true">
@@ -316,12 +409,12 @@
                     <a href="#" id="modalTicketEnlace" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
                         <i class="fas fa-up-right-from-square me-1"></i>Abrir página completa
                     </a>
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
                         <i class="fas fa-times me-1"></i>Cerrar
                     </button>
-                </div>
-            </div>
-        </div>
+</div>
+    </div>
+</div>
     </div>
 </div>
 {% endblock %}
@@ -491,6 +584,98 @@
             }
         });
     }
+})();
+</script>
+
+<!-- Modal: Guardar vista -->
+<input type="hidden" id="ccgUserTieneResp" value="{{ tiene_responsables|yesno:'1,0' }}">
+<div class="modal fade" id="modalGuardarVista" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'enlaces_ccg:vista_guardar' %}" id="formGuardarVista">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h6 class="modal-title"><i class="fas fa-bookmark me-2 text-primary"></i>Guardar vista</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="vistaNombre">Nombre de la vista</label>
+                    <input class="form-control form-control-sm" id="vistaNombre" name="nombre" required
+                           maxlength="120" placeholder="Ej. Mis tickets de este mes abiertos">
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="vistaMios">
+                        <label class="form-check-label small" for="vistaMios">
+                            Solo tickets de mis responsables de atención
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="vistaMes">
+                        <label class="form-check-label small" for="vistaMes">
+                            Solo de este mes (se actualiza cada mes)
+                        </label>
+                    </div>
+                    <input type="hidden" name="parametros_json" id="vistaParametros">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var formFiltros = document.getElementById('formFiltros');
+    var botonGuardar = document.getElementById('btnGuardarVista');
+    var frmGuardar = document.getElementById('formGuardarVista');
+    var nombre = document.getElementById('vistaNombre');
+    var parametros = document.getElementById('vistaParametros');
+    var chkMios = document.getElementById('vistaMios');
+    var chkMes = document.getElementById('vistaMes');
+    var userTieneResp = document.getElementById('ccgUserTieneResp');
+    if (!formFiltros || !botonGuardar || !frmGuardar) return;
+
+    var serializarFiltros = function () {
+        var datos = {};
+        new FormData(formFiltros).forEach(function (v, k) {
+            if (String(v).trim() === '') return;
+            (datos[k] = datos[k] || []).push(String(v));
+        });
+        return datos;
+    };
+
+    botonGuardar.addEventListener('click', function () {
+        var datos = serializarFiltros();
+        var tieneResp = (datos['responsable'] || []).join('');
+        var conFechas = ((datos['desde'] || [''])[0] + (datos['hasta'] || [''])[0]).trim();
+        chkMios.checked = !tieneResp && userTieneResp && userTieneResp.value === '1';
+        chkMes.checked = !conFechas;
+        nombre.value = '';
+        new bootstrap.Modal(document.getElementById('modalGuardarVista')).show();
+        setTimeout(function () { nombre.focus(); }, 300);
+    });
+
+    frmGuardar.addEventListener('submit', function () {
+        var datos = serializarFiltros();
+        if (chkMios.checked) datos['responsable'] = ['@mios'];
+        if (chkMes.checked) {
+            datos['desde'] = ['@mes_inicio'];
+            datos['hasta'] = ['@mes_fin'];
+        }
+        parametros.value = JSON.stringify(datos);
+    });
+
+    document.querySelectorAll('form[data-confirmar="vista"]').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            var li = f.closest('.ccg-ddl-vista');
+            var n = li ? li.dataset.nombre : 'esta vista';
+            if (!window.confirm('¿Eliminar la vista "' + n + '"?')) e.preventDefault();
+        });
+    });
 })();
 </script>
 {% endblock %}

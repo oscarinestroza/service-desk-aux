@@ -231,12 +231,12 @@
                 <input type="text" name="q" class="form-control form-control-sm"
                        placeholder="Folio, descripción, falla u observaciones" value="{{ q }}">
             </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Estatus</label>
-                <select name="estatus" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
-                    <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Responsable de atención</label>
+                <select name="responsable" class="form-select form-select-sm ccg-select-busqueda ccg-select-multiple" multiple>
+                    {% for r in responsables %}
+                    <option value="{{ r.pk }}" {% if r.pk in responsable_ids %}selected{% endif %}>{{ r.nombre }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
@@ -247,13 +247,12 @@
                 <label class="form-label small mb-1">Hasta</label>
                 <input type="date" name="hasta" class="form-control form-control-sm" value="{{ hasta }}">
             </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-1">Edificio</label>
-                <select name="torre" class="form-select form-select-sm">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Estatus</label>
+                <select name="estatus" class="form-select form-select-sm">
                     <option value="">Todos</option>
-                    {% for ed in edificios %}
-                    <option value="{{ ed.pk }}" {% if torre_id == ed.pk %}selected{% endif %}>{{ ed.nombre }}</option>
-                    {% endfor %}
+                    <option value="ABIERTO" {% if estatus == 'ABIERTO' %}selected{% endif %}>Abiertos</option>
+                    <option value="CERRADO" {% if estatus == 'CERRADO' %}selected{% endif %}>Cerrados</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -266,20 +265,20 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small mb-1">Falla</label>
-                <select name="falla" class="form-select form-select-sm">
-                    <option value="">Todas</option>
-                    {% for f in fallas %}
-                    <option value="{{ f.pk }}" {% if falla_id == f.pk %}selected{% endif %}>{{ f.descripcion }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
                 <label class="form-label small mb-1">Nivel</label>
                 <select name="nivel" class="form-select form-select-sm">
                     <option value="">Todos</option>
                     {% for n in niveles %}
                     <option value="{{ n.pk }}" {% if nivel_id == n.pk %}selected{% endif %}>{{ n.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Solicitante</label>
+                <select name="solicitante" class="form-select form-select-sm ccg-select-busqueda">
+                    <option value="">Todos</option>
+                    {% for s in solicitantes %}
+                    <option value="{{ s.pk }}" {% if solicitante_id == s.pk %}selected{% endif %}>{{ s.nombre_sig }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -419,6 +418,33 @@
         </div>
         {% endif %}
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-end align-items-center gap-2 py-2">
+        <nav aria-label="Paginación de tickets">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page=1">Primera</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.previous_page_number }}">‹</a>
+                </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.next_page_number }}">›</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?{{ filtros }}{% if filtros %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </div>
 
 {% elif enlaces %}

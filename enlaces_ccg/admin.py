@@ -30,6 +30,7 @@ from .models import (
     TicketCierre,
     TicketLog,
     TicketRegistro,
+    VistaGuardada,
 )
 
 
@@ -598,6 +599,13 @@ class ResponsableAtencionAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
     filter_horizontal = ("usuarios",)
     readonly_fields = ("nombre",)
+
+
+@admin.register(VistaGuardada)
+class VistaGuardadaAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "usuario", "modulo", "es_predeterminada", "creada_en")
+    list_filter = ("modulo", "es_predeterminada")
+    search_fields = ("nombre", "usuario__username")
 
 
 @admin.register(Ticket)
