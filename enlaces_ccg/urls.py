@@ -264,11 +264,6 @@ urlpatterns = [
         name="tiempos_holgura",
     ),
     path(
-        "supervisor/correos/",
-        views.correos,
-        name="correos",
-    ),
-    path(
         "supervisor/seguimiento-solicitudes/",
         views.seguimiento_solicitudes,
         name="seguimiento_solicitudes",
@@ -292,11 +287,6 @@ urlpatterns = [
         "revisiones/tickets/",
         views.revision_tickets,
         name="revision_tickets",
-    ),
-    path(
-        "revisiones/correos/",
-        views.revision_correos,
-        name="revision_correos",
     ),
     path(
         "revisiones/cierre-operador/",

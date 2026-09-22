@@ -1155,12 +1155,6 @@ def tiempos_holgura(request):
 
 
 @requiere(CAP_SUPERVISOR)
-def correos(request):
-    """Vista de Correos (en construcción)."""
-    return render(request, "enlaces_ccg/correos.html")
-
-
-@requiere(CAP_SUPERVISOR)
 def seguimiento_solicitudes(request):
     """Vista de Seguimiento de Solicitudes (en construcción)."""
     return render(request, "enlaces_ccg/seguimiento_solicitudes.html")
@@ -1188,12 +1182,6 @@ def importar_deductivas(request):
 def revision_tickets(request):
     """Vista de Revisión de Tickets (en construcción)."""
     return render(request, "enlaces_ccg/revision_tickets.html")
-
-
-@requiere(CAP_REVISIONES)
-def revision_correos(request):
-    """Vista de Revisión de Correos (en construcción)."""
-    return render(request, "enlaces_ccg/revision_correos.html")
 
 
 @requiere(CAP_REVISIONES)

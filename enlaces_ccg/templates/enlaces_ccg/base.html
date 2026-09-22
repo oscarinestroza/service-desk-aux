@@ -676,14 +676,6 @@
                 </a>
             </li>
             {% endif %}
-            {% if 'revision_correos' in modulos_visibles %}
-            <li>
-                <a href="{% url 'enlaces_ccg:revision_correos' %}"
-                   class="{% if request.resolver_match.url_name == 'revision_correos' %}active{% endif %}">
-                    <i class="fas fa-envelope-open-text"></i> Revisión de Correos
-                </a>
-            </li>
-            {% endif %}
             {% if 'cierre_operador' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:cierre_operador' %}"
@@ -728,14 +720,6 @@
 
             {% if 'supervisor' in secciones_visibles %}
             <li class="nav-section">Modulo Supervisor MAO</li>
-            {% if 'correos' in modulos_visibles %}
-            <li>
-                <a href="{% url 'enlaces_ccg:correos' %}"
-                   class="{% if request.resolver_match.url_name == 'correos' %}active{% endif %}">
-                    <i class="fas fa-envelope"></i> Correos
-                </a>
-            </li>
-            {% endif %}
             {% if 'seguimiento_solicitudes' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:seguimiento_solicitudes' %}"
