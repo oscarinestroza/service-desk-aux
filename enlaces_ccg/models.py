@@ -1788,6 +1788,76 @@ class TicketCierre(models.Model):
     observaciones_usuario = models.TextField(
         blank=True, default="", verbose_name="Observaciones del usuario"
     )
+    PROCESO_ATENCION = "atencion"
+    PROCESO_PROGRAMACION = "programacion"
+    PROCESO_TIEMPO_ACORDADO = "tiempo_acordado"
+    PROCESO_CHOICES = [
+        (PROCESO_ATENCION, "Atención"),
+        (PROCESO_PROGRAMACION, "Programación"),
+        (PROCESO_TIEMPO_ACORDADO, "Tiempo Acordado"),
+    ]
+    proceso = models.CharField(
+        max_length=20,
+        choices=PROCESO_CHOICES,
+        default=PROCESO_ATENCION,
+        verbose_name="Proceso",
+    )
+    programacion_fecha_solucion = models.DateTimeField(
+        null=True, blank=True, verbose_name="Fecha y hora de la solución final"
+    )
+    programacion_enlace = models.CharField(
+        blank=True, default="", max_length=200, verbose_name="Nombre del enlace"
+    )
+    programacion_institucion = models.CharField(
+        blank=True, default="", max_length=200, verbose_name="Institución"
+    )
+    programacion_edificio = models.CharField(
+        blank=True, default="", max_length=200, verbose_name="Edificio"
+    )
+    programacion_nivel = models.CharField(
+        blank=True, default="", max_length=100, verbose_name="Nivel"
+    )
+    programacion_ubicacion_adicional = models.CharField(
+        blank=True, default="", max_length=200,
+        verbose_name="Ubicación adicional",
+        help_text="Dato adicional de texto deseado por el usuario (ej. Oficina 21).",
+    )
+    programacion_motivo = models.TextField(
+        blank=True, default="", verbose_name="Motivo de la programación"
+    )
+    programacion_sin_provisional = models.TextField(
+        blank=True, default="",
+        verbose_name="Indicación de por qué no aplica solución provisional",
+    )
+    programacion_firma = models.TextField(
+        blank=True, default="",
+        verbose_name="Firma",
+        help_text="Imagen PNG (base64) capturada en el dispositivo.",
+    )
+    programacion_firma_nombre = models.CharField(
+        blank=True, default="", max_length=200,
+        verbose_name="Nombre escrito de la firma",
+        help_text="Nombre escrito por el usuario para la firma tipo carta.",
+    )
+    programacion_firma_usuario = models.CharField(
+        blank=True, default="", max_length=200,
+        verbose_name="Firmado por",
+        help_text="Respaldo: usuario que registró la firma.",
+    )
+    programacion_firma_fecha = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Fecha de la firma",
+        help_text="Respaldo: fecha y hora en que se registró la firma.",
+    )
+    tiempo_fecha_solucion = models.DateTimeField(
+        null=True, blank=True, verbose_name="Fecha y hora de la solución final"
+    )
+    tiempo_motivo = models.TextField(
+        blank=True, default="", verbose_name="Motivo del tiempo acordado"
+    )
+    tiempo_solucion_provisional = models.TextField(
+        blank=True, default="", verbose_name="Solución provisional acordada"
+    )
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -1926,6 +1996,40 @@ class PlantillaRespuesta(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.usuario})"
+
+
+class FirmaUsuario(models.Model):
+    """Firma guardada por un usuario para reutilizarla en los cierres.
+
+    Cada usuario puede tener una sola firma, pero puede actualizarla
+    (cambiarla) cuantas veces quiera.
+    """
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="firma_guardada",
+        verbose_name="Usuario",
+    )
+    imagen = models.TextField(
+        blank=True, default="", verbose_name="Firma",
+        help_text="Imagen PNG (base64) de la firma guardada.",
+    )
+    nombre = models.CharField(
+        blank=True, default="", max_length=200,
+        verbose_name="Nombre escrito de la firma",
+        help_text="Nombre escrito por el usuario para la firma tipo carta.",
+    )
+    actualizado_en = models.DateTimeField(
+        auto_now=True, verbose_name="Actualizada en"
+    )
+
+    class Meta:
+        verbose_name = "Firma guardada"
+        verbose_name_plural = "Firmas guardadas"
+
+    def __str__(self):
+        return f"Firma de {self.usuario}"
 
 
 class RevisionTicket(models.Model):

@@ -28,14 +28,27 @@
     .ccg-dropzone:hover, .ccg-dropzone.ccg-dropzone-over {
         background: #e7f1ff; border-color: #0d6efd;
     }
+    .check-proceso { opacity: 0; }
+    .btn-proceso.active .check-proceso { opacity: 1; }
 </style>
 
 <div class="mx-auto" style="max-width: 760px;">
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h1 class="h3 mb-0">
-            <i class="fas fa-check-double me-2 text-success"></i>Atención del Ticket {{ ticket.numero_display }}
+            <i class="fas fa-check-double me-2 text-success"></i>Ticket {{ ticket.numero_display }}
         </h1>
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                        id="dropdownProcesos" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-tasks me-1"></i>Procesos
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow" id="menuProcesos" aria-labelledby="dropdownProcesos">
+                    <li><button type="button" class="dropdown-item btn-proceso {% if proceso == 'atencion' %}active{% endif %}" data-proceso="atencion"><i class="fas fa-check me-2 check-proceso"></i>Atención</button></li>
+                    <li><button type="button" class="dropdown-item btn-proceso {% if proceso == 'programacion' %}active{% endif %}" data-proceso="programacion"><i class="fas fa-check me-2 check-proceso"></i>Programación</button></li>
+                    <li><button type="button" class="dropdown-item btn-proceso {% if proceso == 'tiempo_acordado' %}active{% endif %}" data-proceso="tiempo_acordado"><i class="fas fa-check me-2 check-proceso"></i>Tiempo Acordado</button></li>
+                </ul>
+            </div>
             <div class="dropdown">
                 <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
                         id="dropdownPlantillas" data-bs-toggle="dropdown" aria-expanded="false">
@@ -127,8 +140,9 @@
 
     <form method="post" action="{% url 'enlaces_ccg:ticket_cierre_guardar' ticket.pk %}" class="mb-3" id="formCierre">
         {% csrf_token %}
+        <input type="hidden" name="proceso" id="idProceso" value="{{ proceso }}">
 
-        <div class="card border-0 shadow-sm mb-3">
+        <div class="card border-0 shadow-sm mb-3 card-proceso" data-visible-en="atencion" id="cardInforme">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong><i class="fas fa-clipboard-list me-1"></i>Informe de Atención</strong>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="btnGuardarPlantilla">
@@ -159,7 +173,108 @@
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm mb-3">
+        <div class="card border-0 shadow-sm mb-3 card-proceso" data-visible-en="programacion" id="cardProgramacion">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-calendar-check me-1"></i>Datos de la programación</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="idProgFechaSolucion">Fecha y hora de la solución final</label>
+                    <input type="datetime-local" class="form-control" id="idProgFechaSolucion"
+                           name="programacion_fecha_solucion"
+                           value="{{ programacion_fecha_solucion }}"
+                           min="{{ cierre_min_datetime }}"
+                           aria-label="Fecha y hora de la solución final">
+                    <div class="form-text">No puede ser anterior a la apertura del ticket ({{ cierre_min|default:"—" }}).</div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="idProgEnlace">Nombre del enlace</label>
+                        <input type="text" class="form-control" id="idProgEnlace" name="programacion_enlace"
+                               value="{{ programacion_enlace }}" maxlength="200">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="idProgInstitucion">Institución</label>
+                        <input type="text" class="form-control" id="idProgInstitucion" name="programacion_institucion"
+                               value="{{ programacion_institucion }}" maxlength="200">
+                    </div>
+                </div>
+                <div class="row g-3 mt-0">
+                    <div class="col-md-4">
+                        <label class="form-label" for="idProgEdificio">Edificio</label>
+                        <input type="text" class="form-control" id="idProgEdificio" name="programacion_edificio"
+                               value="{{ programacion_edificio }}" maxlength="200">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="idProgNivel">Nivel</label>
+                        <input type="text" class="form-control" id="idProgNivel" name="programacion_nivel"
+                               value="{{ programacion_nivel }}" maxlength="100">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="idProgUbicacionAdicional">Ubicación adicional</label>
+                        <input type="text" class="form-control" id="idProgUbicacionAdicional"
+                               name="programacion_ubicacion_adicional"
+                               value="{{ programacion_ubicacion_adicional }}" maxlength="200"
+                               placeholder="Ej. Oficina 21">
+                    </div>
+                </div>
+                <div class="mb-3 mt-3">
+                    <label class="form-label" for="idProgMotivo">Motivo de la programación</label>
+                    <textarea class="form-control" id="idProgMotivo" name="programacion_motivo" rows="3"
+                              placeholder="Motivo por el que se programa la solución">{{ programacion_motivo }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="idProgSinProvisional">¿Por qué no aplica solución provisional?</label>
+                    <textarea class="form-control" id="idProgSinProvisional" name="programacion_sin_provisional" rows="3"
+                              placeholder="Indicación de por qué no aplica una solución provisional">{{ programacion_sin_provisional }}</textarea>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label">Firma</label>
+                    <canvas id="firmaCanvas" class="border rounded w-100 bg-white" width="600" height="220"
+                            style="touch-action:none; cursor:crosshair;"></canvas>
+                    <input type="hidden" id="idProgramacionFirma" name="programacion_firma"
+                           value="{{ programacion_firma }}">
+                    <div class="row g-2 mt-2">
+                        <div class="col-12 col-sm-8">
+                            <input type="text" class="form-control form-control-sm" id="idFirmaNombre"
+                                   name="programacion_firma_nombre" maxlength="200"
+                                   placeholder="Escribe tu nombre para una firma tipo carta"
+                                   value="{{ programacion_firma_nombre }}" autocomplete="off">
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <button type="button" class="btn btn-sm btn-outline-primary w-100" id="btnFirmaNombre">
+                                <i class="fas fa-pen me-1"></i>Firmar con nombre
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnLimpiarFirma">
+                            <i class="fas fa-eraser me-1"></i>Limpiar
+                        </button>
+                        <button type="button" class="btn btn-sm btn-success" id="btnGuardarFirma">
+                            <i class="fas fa-save me-1"></i>Guardar firma
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnUsarFirma"{% if not firma_guardada %} style="display:none"{% endif %}>
+                            <i class="fas fa-user-check me-1"></i>Usar mi firma
+                        </button>
+                    </div>
+                    <div class="small text-muted mt-2" id="firmaRespaldo">
+                        {% if programacion_firma_usuario %}
+                        Firmado por: <strong>{{ programacion_firma_usuario }}</strong>{% if programacion_firma_fecha %}, {{ programacion_firma_fecha }}{% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="small text-muted mt-1" id="firmaGuardadaInfo">
+                        {% if firma_guardada %}
+                        Firma guardada el <strong>{{ firma_guardada.actualizada }}</strong>{% if firma_guardada.nombre %} ({{ firma_guardada.nombre }}){% endif %}.
+                        {% else %}
+                        Aún no tienes una firma guardada. Usa "Guardar firma" y podrás reutilizarla en otros tickets.
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3 card-proceso" data-visible-en="atencion programacion" id="cardFechas">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong><i class="fas fa-calendar me-1"></i>Fechas de Atención</strong>
                 <div class="form-check form-switch mb-0">
@@ -205,6 +320,33 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3 card-proceso" data-visible-en="tiempo_acordado" id="cardTiempo">
+            <div class="card-header bg-white py-2">
+                <strong><i class="fas fa-handshake me-1"></i>Tiempo acordado</strong>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="idTiempoFechaSolucion">Fecha y hora de la solución final</label>
+                    <input type="datetime-local" class="form-control" id="idTiempoFechaSolucion"
+                           name="tiempo_fecha_solucion" value="{{ tiempo_fecha_solucion }}"
+                           min="{{ cierre_min_datetime }}"
+                           aria-label="Fecha y hora de la solución final">
+                    <div class="form-text">No puede ser anterior a la apertura del ticket ({{ cierre_min|default:"—" }}).</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="idTiempoMotivo">Motivo del tiempo acordado</label>
+                    <textarea class="form-control" id="idTiempoMotivo" name="tiempo_motivo" rows="3"
+                              placeholder="Motivo por el que se acuerda un tiempo">{{ tiempo_motivo }}</textarea>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label" for="idTiempoSolucionProvisional">Solución provisional acordada</label>
+                    <textarea class="form-control" id="idTiempoSolucionProvisional"
+                              name="tiempo_solucion_provisional" rows="3"
+                              placeholder="Solución provisional acordada con el usuario">{{ tiempo_solucion_provisional }}</textarea>
                 </div>
             </div>
         </div>
@@ -279,6 +421,7 @@
 </div>
 
 {{ plantillas|json_script:"plantillasData" }}
+{{ firma_guardada|json_script:"firmaGuardadaData" }}
 <script>
 (function() {
     const pk = {{ ticket.pk }};
@@ -438,6 +581,273 @@
                 alert('Debes completar el Informe de Atención, adjuntar un archivo o incluir las fechas de atención.');
             }
         });
+    }
+
+    // ── Procesos ──
+    var menuProcesos = document.getElementById('menuProcesos');
+    var inputProceso = document.getElementById('idProceso');
+    var TEXTO_ENVIAR = {
+        atencion: 'Enviar cierre',
+        programacion: 'Enviar programación',
+        tiempo_acordado: 'Registrar acuerdo'
+    };
+
+    function aplicarProceso(proceso) {
+        if (inputProceso) inputProceso.value = proceso;
+        document.querySelectorAll('.card-proceso').forEach(function (card) {
+            var visibles = (card.getAttribute('data-visible-en') || '').split(/\s+/);
+            card.style.display = visibles.indexOf(proceso) !== -1 ? '' : 'none';
+        });
+        var btnTxt = document.getElementById('btnEnviarTexto');
+        if (btnTxt && TEXTO_ENVIAR[proceso]) btnTxt.textContent = TEXTO_ENVIAR[proceso];
+    }
+
+    if (menuProcesos) {
+        menuProcesos.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-proceso');
+            if (!btn) return;
+            menuProcesos.querySelectorAll('.btn-proceso').forEach(function (b) {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            aplicarProceso(btn.dataset.proceso);
+            var ddl = document.getElementById('dropdownProcesos');
+            if (ddl && window.bootstrap && window.bootstrap.Dropdown) {
+                bootstrap.Dropdown.getOrCreateInstance(ddl).hide();
+            }
+        });
+    }
+    if (inputProceso && inputProceso.value) aplicarProceso(inputProceso.value);
+
+    // ── Firma (Datos de la programación) ──
+    var firmaCanvas = document.getElementById('firmaCanvas');
+    if (firmaCanvas && firmaCanvas.getContext) {
+        var firmaCtx = firmaCanvas.getContext('2d');
+        var firmaDibujando = false;
+        firmaCtx.lineWidth = 2.5;
+        firmaCtx.lineCap = 'round';
+        firmaCtx.strokeStyle = '#000';
+
+        function posFirma(e) {
+            var r = firmaCanvas.getBoundingClientRect();
+            return {
+                x: (e.clientX - r.left) * (firmaCanvas.width / r.width),
+                y: (e.clientY - r.top) * (firmaCanvas.height / r.height)
+            };
+        }
+
+        firmaCanvas.addEventListener('pointerdown', function (e) {
+            firmaDibujando = true;
+            firmaCanvas.setPointerCapture(e.pointerId);
+            var p = posFirma(e);
+            firmaCtx.beginPath();
+            firmaCtx.moveTo(p.x, p.y);
+        });
+        firmaCanvas.addEventListener('pointermove', function (e) {
+            if (!firmaDibujando) return;
+            var p = posFirma(e);
+            firmaCtx.lineTo(p.x, p.y);
+            firmaCtx.stroke();
+        });
+        ['pointerup', 'pointercancel'].forEach(function (ev) {
+            firmaCanvas.addEventListener(ev, function () {
+                if (!firmaDibujando) return;
+                firmaDibujando = false;
+                document.getElementById('idProgramacionFirma').value =
+                    firmaCanvas.toDataURL('image/png');
+                if (ev === 'pointerup') registrarFirma();
+            });
+        });
+
+        // Respaldo de quién firma
+        var firmaUsuarioActual = "{{ request.user.get_full_name|default:request.user.get_username|escapejs }}";
+        var firmaRespaldo = document.getElementById('firmaRespaldo');
+        var firmaRespaldoVacia = firmaRespaldo ? firmaRespaldo.innerHTML : '';
+
+        function fechaHoraActual() {
+            var a = new Date();
+            function p(n) { return String(n).padStart(2, '0'); }
+            return p(a.getDate()) + '/' + p(a.getMonth() + 1) + '/' + a.getFullYear() +
+                   ' ' + p(a.getHours()) + ':' + p(a.getMinutes());
+        }
+
+        function registrarFirma() {
+            if (!firmaRespaldo) return;
+            firmaRespaldo.innerHTML = 'Firmado por: <strong>' + firmaUsuarioActual + '</strong>, ' + fechaHoraActual();
+        }
+
+        function limpiarFirma() {
+            firmaCtx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+            document.getElementById('idProgramacionFirma').value = '';
+            document.getElementById('idFirmaNombre').value = '';
+            if (firmaRespaldo) firmaRespaldo.innerHTML = firmaRespaldoVacia;
+        }
+
+        var btnLimpiarFirma = document.getElementById('btnLimpiarFirma');
+        if (btnLimpiarFirma) {
+            btnLimpiarFirma.addEventListener('click', limpiarFirma);
+        }
+
+        var firmaGuardada = document.getElementById('idProgramacionFirma').value;
+        if (firmaGuardada) {
+            var imgFirma = new Image();
+            imgFirma.onload = function () {
+                firmaCtx.drawImage(imgFirma, 0, 0, firmaCanvas.width, firmaCanvas.height);
+                document.getElementById('idProgramacionFirma').value =
+                    firmaCanvas.toDataURL('image/png');
+            };
+            imgFirma.src = firmaGuardada;
+        }
+
+        // Firma tipo carta escribiendo el nombre
+        function firmarConNombre() {
+            var inp = document.getElementById('idFirmaNombre');
+            var nombre = (inp.value || '').trim();
+            if (!nombre) {
+                alert('Escribe tu nombre para firmar.');
+                inp.focus();
+                return;
+            }
+            firmaCtx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+            var fuente = 'italic {size}px "Segoe Script", "Brush Script MT", "Lucida Handwriting", "Segoe Print", cursive';
+            var tamanio = 52;
+            var anchoMax = firmaCanvas.width - 40;
+            var lineas = [nombre];
+            var mide = function (t, s) {
+                firmaCtx.font = fuente.replace('{size}', s);
+                return firmaCtx.measureText(t).width;
+            };
+            while (mide(nombre, tamanio) > anchoMax && tamanio > 30) {
+                tamanio -= 2;
+            }
+            if (mide(nombre, tamanio) > anchoMax) {
+                var palabras = nombre.split(/\s+/);
+                var a = [], b = [];
+                palabras.forEach(function (w, i) {
+                    (i % 2 === 0 ? a : b).push(w);
+                });
+                lineas = [a.join(' '), b.join(' ')];
+                var maxAncho = Math.max(mide(lineas[0], tamanio), mide(lineas[1], tamanio));
+                if (maxAncho > anchoMax) {
+                    tamanio = Math.max(24, Math.floor(tamanio * anchoMax / maxAncho));
+                }
+            }
+            firmaCtx.font = fuente.replace('{size}', tamanio);
+            firmaCtx.textAlign = 'center';
+            firmaCtx.textBaseline = 'middle';
+            firmaCtx.fillStyle = '#000';
+            var altoLinea = tamanio * 1.6;
+            var total = lineas.length * altoLinea;
+            var y = (firmaCanvas.height - total) / 2 + altoLinea / 2;
+            lineas.forEach(function (l) {
+                firmaCtx.fillText(l, firmaCanvas.width / 2, y);
+                y += altoLinea;
+            });
+            document.getElementById('idProgramacionFirma').value =
+                firmaCanvas.toDataURL('image/png');
+            registrarFirma();
+        }
+
+        var btnFirmaNombre = document.getElementById('btnFirmaNombre');
+        if (btnFirmaNombre) {
+            btnFirmaNombre.addEventListener('click', firmarConNombre);
+        }
+        document.getElementById('idFirmaNombre').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                firmarConNombre();
+            }
+        });
+
+        // ── Firma guardada del usuario ──
+        var firmaGuardadaData = JSON.parse(
+            document.getElementById('firmaGuardadaData').textContent
+        );
+        var btnGuardarFirma = document.getElementById('btnGuardarFirma');
+        var btnUsarFirma = document.getElementById('btnUsarFirma');
+        var firmaGuardadaInfo = document.getElementById('firmaGuardadaInfo');
+
+        function ocultarUsarFirma() {
+            if (btnUsarFirma) btnUsarFirma.style.display = 'none';
+        }
+
+        function mostrarUsarFirma() {
+            if (btnUsarFirma) btnUsarFirma.style.display = '';
+        }
+
+        function cargarFirmaEnCanvas(datos) {
+            firmaCtx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+            var inpNombre = document.getElementById('idFirmaNombre');
+            if (inpNombre) inpNombre.value = datos.nombre || '';
+            if (!datos.imagen) {
+                document.getElementById('idProgramacionFirma').value = '';
+                return;
+            }
+            var img = new Image();
+            img.onload = function () {
+                firmaCtx.drawImage(img, 0, 0, firmaCanvas.width, firmaCanvas.height);
+                document.getElementById('idProgramacionFirma').value =
+                    firmaCanvas.toDataURL('image/png');
+            };
+            img.src = datos.imagen;
+        }
+
+        if (btnGuardarFirma) {
+            btnGuardarFirma.addEventListener('click', function () {
+                var imagen = document.getElementById('idProgramacionFirma').value;
+                var nombre = document.getElementById('idFirmaNombre').value.trim();
+                if (!imagen && !nombre) {
+                    if (!confirm('Guardar sin firma eliminará tu firma guardada. ¿Continuar?')) return;
+                }
+                var btn = btnGuardarFirma;
+                var original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                var fd = new FormData();
+                fd.append('firma_imagen', imagen);
+                fd.append('firma_nombre', nombre);
+                fetch("{% url 'enlaces_ccg:firma_guardar' %}", {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    if (!d.ok) {
+                        alert(d.error || 'Error al guardar la firma.');
+                        return;
+                    }
+                    if (d.eliminada) {
+                        firmaGuardadaData = null;
+                        ocultarUsarFirma();
+                        if (firmaGuardadaInfo) {
+                            firmaGuardadaInfo.innerHTML = 'Aún no tienes una firma guardada. Usa "Guardar firma" y podrás reutilizarla en otros tickets.';
+                        }
+                        alert('Firma guardada eliminada.');
+                        return;
+                    }
+                    firmaGuardadaData = { imagen: imagen, nombre: nombre, actualizada: d.actualizada };
+                    mostrarUsarFirma();
+                    if (firmaGuardadaInfo) {
+                        firmaGuardadaInfo.innerHTML = 'Firma guardada el <strong>' + d.actualizada + '</strong>' +
+                            (nombre ? ' (' + nombre + ')' : '') + '.';
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    alert('Error de conexión.');
+                });
+            });
+        }
+
+        if (btnUsarFirma) {
+            btnUsarFirma.addEventListener('click', function () {
+                if (firmaGuardadaData) cargarFirmaEnCanvas(firmaGuardadaData);
+            });
+        }
     }
 
     // ── Plantillas de respuesta ──

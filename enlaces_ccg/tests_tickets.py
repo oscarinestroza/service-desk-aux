@@ -1565,6 +1565,169 @@ class VinculacionVistasTests(TestCase):
         self.assertEqual(t.estatus, Ticket.ESTATUS_CERRADO)
         self.assertTrue(t.esta_cerrado)
 
+    def test_programacion_cierra_ticket_y_guarda_datos(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        solucion = creacion + timedelta(hours=3)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "programacion",
+                "programacion_fecha_solucion": solucion.strftime("%Y-%m-%dT%H:%M"),
+                "programacion_enlace": "Cesar Augusto Zavala",
+                "programacion_institucion": "Institución Uno",
+                "programacion_edificio": "TORRE 2",
+                "programacion_nivel": "Nivel 8",
+                "programacion_ubicacion_adicional": "Oficina 21",
+                "programacion_motivo": "Requiere cierre de servicio",
+                "programacion_sin_provisional": "No hay alternativa temporal",
+            },
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        t.refresh_from_db()
+        self.assertEqual(cierre.proceso, TicketCierre.PROCESO_PROGRAMACION)
+        self.assertEqual(cierre.programacion_enlace, "Cesar Augusto Zavala")
+        self.assertEqual(cierre.programacion_motivo, "Requiere cierre de servicio")
+        self.assertEqual(cierre.programacion_ubicacion_adicional, "Oficina 21")
+        self.assertEqual(t.estatus, Ticket.ESTATUS_CERRADO)
+        self.assertTrue(t.esta_cerrado)
+        self.assertEqual(
+            timezone.localtime(t.fecha_cierre).strftime("%Y-%m-%d %H:%M"),
+            solucion.strftime("%Y-%m-%d %H:%M"),
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn('name="proceso" id="idProceso" value="programacion"', html)
+        self.assertIn('id="cardProgramacion"', html)
+
+    def test_programacion_fecha_anterior_a_apertura_se_rechaza(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        anterior = creacion - timedelta(hours=1)
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "programacion",
+                "programacion_fecha_solucion": anterior.strftime("%Y-%m-%dT%H:%M"),
+                "programacion_enlace": "Cesar Augusto Zavala",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(TicketCierre.objects.filter(ticket=t).exists())
+
+    def test_programacion_firma_nombre_guarda_respaldo(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        solucion = creacion + timedelta(hours=3)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "programacion",
+                "programacion_fecha_solucion": solucion.strftime("%Y-%m-%dT%H:%M"),
+                "programacion_enlace": "Cesar Augusto Zavala",
+                "programacion_institucion": "Institución Uno",
+                "programacion_firma_nombre": "Cesar Zavala",
+                "programacion_firma": "data:image/png;base64,xx",
+            },
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        self.assertEqual(cierre.programacion_firma_nombre, "Cesar Zavala")
+        self.assertEqual(cierre.programacion_firma_usuario, "prueba_vinculos")
+        self.assertIsNotNone(cierre.programacion_firma_fecha)
+
+    def test_programacion_sin_firma_limpia_respaldo(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        solucion = creacion + timedelta(hours=3)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "programacion",
+                "programacion_fecha_solucion": solucion.strftime("%Y-%m-%dT%H:%M"),
+                "programacion_enlace": "Cesar Augusto Zavala",
+                "programacion_firma_nombre": "Cesar Zavala",
+                "programacion_firma": "data:image/png;base64,xx",
+            },
+        )
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "programacion",
+                "programacion_fecha_solucion": solucion.strftime("%Y-%m-%dT%H:%M"),
+                "programacion_enlace": "Cesar Augusto Zavala",
+            },
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        self.assertEqual(cierre.programacion_firma_nombre, "")
+        self.assertEqual(cierre.programacion_firma_usuario, "")
+        self.assertIsNone(cierre.programacion_firma_fecha)
+
+    def test_cierre_precarga_enlace_e_institucion_del_ticket(self):
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn('name="programacion_enlace"', html)
+        self.assertIn('name="programacion_institucion"', html)
+        self.assertIn('value="Cesar Augusto Zavala"', html)
+        self.assertIn('value="Institución Uno (IUNO)"', html)
+        self.assertIn('type="datetime-local"', html)
+
+    def test_tiempo_acordado_mantiene_abierto(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        solucion = creacion + timedelta(days=2, hours=1)
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "tiempo_acordado",
+                "tiempo_fecha_solucion": solucion.strftime("%Y-%m-%dT%H:%M"),
+                "tiempo_motivo": "El usuario propuso un horario fuera del turno",
+                "tiempo_solucion_provisional": "Configuración manual mientras tanto",
+            },
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        t.refresh_from_db()
+        self.assertEqual(cierre.proceso, TicketCierre.PROCESO_TIEMPO_ACORDADO)
+        self.assertEqual(
+            timezone.localtime(cierre.tiempo_fecha_solucion),
+            solucion,
+        )
+        self.assertEqual(
+            cierre.tiempo_motivo,
+            "El usuario propuso un horario fuera del turno",
+        )
+        self.assertTrue(TicketCierre.objects.filter(ticket=t).exists())
+        self.assertEqual(t.estatus, Ticket.ESTATUS_ABIERTO)
+        self.assertFalse(t.esta_cerrado)
+
+    def test_tiempo_acordado_fecha_anterior_a_apertura_se_rechaza(self):
+        t = Ticket.objects.get(ticket_id="1")
+        creacion = timezone.localtime(t.fecha)
+        anterior = creacion - timedelta(hours=1)
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {
+                "proceso": "tiempo_acordado",
+                "tiempo_fecha_solucion": anterior.strftime("%Y-%m-%dT%H:%M"),
+                "tiempo_motivo": "Acuerdo de tiempo",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(TicketCierre.objects.filter(ticket=t).exists())
+
+    def test_proceso_default_atencion(self):
+        t = Ticket.objects.get(ticket_id="1")
+        self.client.post(
+            reverse("enlaces_ccg:ticket_cierre_guardar", args=[t.pk]),
+            {"diagnostico": "Dx"},
+        )
+        cierre = TicketCierre.objects.get(ticket=t)
+        self.assertEqual(cierre.proceso, TicketCierre.PROCESO_ATENCION)
+        t.refresh_from_db()
+        self.assertEqual(t.estatus, Ticket.ESTATUS_ABIERTO)
+
     def test_detalle_seguimiento_muestra_pendiente_sig(self):
         t = Ticket.objects.get(ticket_id="1")
         self.client.post(
@@ -1662,7 +1825,7 @@ class VinculacionVistasTests(TestCase):
         self.assertIn('name="fecha_cierre_hora"', html)
         self.assertIn('type="time"', html)
         self.assertIn('name="incluir_fechas"', html)
-        self.assertIn("Atención del Ticket", html)
+        self.assertIn("Ticket SS26-0710", html)
 
     def test_ficha_enlace_muestra_pestanas_y_tickets(self):
         html = self.client.get(
@@ -2585,3 +2748,104 @@ class PlantillaRespuestaTests(TestCase):
         self.assertFalse(
             PlantillaRespuesta.objects.filter(pk=p.pk).exists()
         )
+class FirmaGuardadaTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "prueba_firma", "pf@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+        ruta = _excel_tmp([_fila_v(1, "SS26-0901")])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+
+    def test_guardar_firma_crea_y_actualiza_una_sola(self):
+        from .models import FirmaUsuario
+
+        url = reverse("enlaces_ccg:firma_guardar")
+        respuesta = self.client.post(url, {
+            "firma_imagen": "data:image/png;base64,a",
+            "firma_nombre": "Cesar Zavala",
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        data = json.loads(respuesta.content)
+        self.assertTrue(data["ok"])
+        firma = FirmaUsuario.objects.get(usuario=self.usuario)
+        self.assertEqual(firma.nombre, "Cesar Zavala")
+        self.assertEqual(firma.imagen, "data:image/png;base64,a")
+
+        respuesta2 = self.client.post(url, {
+            "firma_imagen": "data:image/png;base64,b",
+            "firma_nombre": "Cesar Augusto Zavala",
+        })
+        self.assertTrue(json.loads(respuesta2.content)["ok"])
+        firma.refresh_from_db()
+        self.assertEqual(firma.nombre, "Cesar Augusto Zavala")
+        self.assertEqual(firma.imagen, "data:image/png;base64,b")
+        self.assertEqual(FirmaUsuario.objects.filter(usuario=self.usuario).count(), 1)
+
+    def test_guardar_firma_vacia_elimina(self):
+        from .models import FirmaUsuario
+
+        FirmaUsuario.objects.create(
+            usuario=self.usuario, imagen="data:image/png;base64,a", nombre="Cesar"
+        )
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:firma_guardar"),
+            {"firma_imagen": "", "firma_nombre": ""},
+        )
+        data = json.loads(respuesta.content)
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["eliminada"])
+        self.assertFalse(
+            FirmaUsuario.objects.filter(usuario=self.usuario).exists()
+        )
+
+    def test_cierre_muestra_firma_guardada_y_boton_usar(self):
+        from .models import FirmaUsuario, Ticket
+
+        FirmaUsuario.objects.create(
+            usuario=self.usuario, imagen="data:image/png;base64,a",
+            nombre="Cesar Zavala",
+        )
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Usar mi firma", html)
+        self.assertIn("Firma guardada el", html)
+        self.assertIn('id="btnGuardarFirma"', html)
+        self.assertIn('id="btnUsarFirma"', html)
+
+    def test_cierre_sin_firma_guardada_oculta_boton_usar(self):
+        from .models import Ticket
+
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Aún no tienes una firma guardada", html)
+        self.assertIn('id="btnUsarFirma" style="display:none"', html)
+
+    def test_cierre_con_firma_solo_nombre_muestra_boton_usar(self):
+        from .models import FirmaUsuario, Ticket
+
+        FirmaUsuario.objects.create(
+            usuario=self.usuario, imagen="", nombre="Solo nombre"
+        )
+        t = Ticket.objects.get(ticket_id="1")
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn('id="btnUsarFirma"', html)
+        self.assertNotIn('id="btnUsarFirma" style="display:none"', html)
+
+    def test_guardar_firma_sin_sesion_rechaza(self):
+        self.client.logout()
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:firma_guardar"),
+            {"firma_imagen": "data:image/png;base64,a"},
+        )
+        self.assertEqual(respuesta.status_code, 302)

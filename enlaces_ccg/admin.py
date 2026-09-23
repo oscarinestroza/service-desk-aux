@@ -18,6 +18,7 @@ from .models import (
     Edificio,
     EnlaceAutorizado,
     Falla,
+    FirmaUsuario,
     Institucion,
     InstitucionEdificio,
     Nivel,
@@ -668,13 +669,71 @@ class TicketRegistroAdmin(admin.ModelAdmin):
 class TicketCierreAdmin(admin.ModelAdmin):
     list_display = (
         "ticket",
+        "proceso",
         "fecha_inicio",
         "fecha_cierre",
         "actualizado_por",
         "actualizado_en",
     )
-    list_filter = ("actualizado_en",)
+    list_filter = ("proceso", "actualizado_en")
     search_fields = ("ticket__numero_display", "ticket__numero", "ticket__ticket_id")
+    fieldsets = (
+        (
+            "Datos generales",
+            {
+                "fields": (
+                    "ticket",
+                    "proceso",
+                    "fecha_inicio",
+                    "fecha_cierre",
+                )
+            },
+        ),
+        (
+            "Informe de atención",
+            {
+                "fields": (
+                    "diagnostico",
+                    "actividades",
+                    "observaciones",
+                    "observaciones_usuario",
+                )
+            },
+        ),
+        (
+            "Datos de la programación",
+            {
+                "fields": (
+                    "programacion_fecha_solucion",
+                    "programacion_enlace",
+                    "programacion_institucion",
+                    "programacion_edificio",
+                    "programacion_nivel",
+                    "programacion_ubicacion_adicional",
+                    "programacion_motivo",
+                    "programacion_sin_provisional",
+                    "programacion_firma",
+                    "programacion_firma_nombre",
+                    "programacion_firma_usuario",
+                    "programacion_firma_fecha",
+                )
+            },
+        ),
+        (
+            "Tiempo acordado",
+            {
+                "fields": (
+                    "tiempo_fecha_solucion",
+                    "tiempo_motivo",
+                    "tiempo_solucion_provisional",
+                )
+            },
+        ),
+        (
+            "Auditoría",
+            {"fields": ("creado_por", "actualizado_por", "creado_en", "actualizado_en")},
+        ),
+    )
     readonly_fields = ("creado_en", "actualizado_en", "creado_por", "actualizado_por")
 
 
@@ -683,6 +742,17 @@ class TicketAdjuntoAdmin(admin.ModelAdmin):
     list_display = ("ticket", "nombre", "subido_en", "subido_por")
     search_fields = ("ticket__numero_display", "ticket__numero", "nombre")
     readonly_fields = ("subido_en", "subido_por")
+
+
+@admin.register(FirmaUsuario)
+class FirmaUsuarioAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "tiene_firma", "actualizado_en")
+    search_fields = ("usuario__username", "usuario__first_name", "usuario__last_name")
+    readonly_fields = ("actualizado_en",)
+
+    @admin.display(description="Tiene firma", boolean=True)
+    def tiene_firma(self, obj):
+        return bool(obj.imagen)
 
 
 # ---------------------------------------------------------------------------

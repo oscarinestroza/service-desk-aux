@@ -224,6 +224,11 @@ path(
         name="plantilla_eliminar",
     ),
     path(
+        "tickets/mi-firma/guardar/",
+        views.guardar_firma_usuario,
+        name="firma_guardar",
+    ),
+    path(
         "tickets/cerrar/<int:pk>/registrar/",
         views.registrar_seguimiento,
         name="ticket_registrar",

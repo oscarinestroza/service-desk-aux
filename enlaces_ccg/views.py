@@ -34,6 +34,7 @@ from .models import (
     Edificio,
     EnlaceAutorizado,
     Falla, extraer_kpi_falla,
+    FirmaUsuario,
     Institucion, InstitucionEdificio, Nivel, PlantillaRespuesta, ResponsableAtencion, Seccion,
     Servicio, Ticket,
     TicketAdjunto, TicketCierre,
@@ -895,11 +896,27 @@ def _combinar_fecha_hora(fecha, hora):
         return None
 
 
+def _parse_datetime_local(valor):
+    """Parsea un campo datetime-local (YYYY-MM-DDTHH:MM) → datetime aware o None."""
+    valor = (valor or "").strip()
+    if not valor:
+        return None
+    try:
+        return timezone.make_aware(
+            datetime.strptime(valor[:16], "%Y-%m-%dT%H:%M")
+        )
+    except ValueError:
+        return None
+
+
 @requiere(CAP_ATENDER)
 @require_POST
 def guardar_cierre_ticket(request, pk):
     """Guarda (o actualiza) el cierre de un ticket."""
     ticket = get_object_or_404(Ticket, pk=pk)
+    proceso = request.POST.get("proceso") or TicketCierre.PROCESO_ATENCION
+    if proceso not in dict(TicketCierre.PROCESO_CHOICES):
+        proceso = TicketCierre.PROCESO_ATENCION
     incluir_fechas = request.POST.get("incluir_fechas") == "1"
     diagnostico = request.POST.get("diagnostico", "").strip()
     actividades = request.POST.get("actividades", "").strip()
@@ -908,19 +925,92 @@ def guardar_cierre_ticket(request, pk):
         "observaciones_usuario", ""
     ).strip()
 
-    tiene_informe = any(
-        (diagnostico, actividades, observaciones, observaciones_usuario)
+    programacion_fecha_solucion = (
+        _parse_datetime_local(
+            request.POST.get("programacion_fecha_solucion")
+        )
+        if proceso == TicketCierre.PROCESO_PROGRAMACION
+        else None
     )
     if (
-        not tiene_informe
-        and not incluir_fechas
-        and not ticket.cierre_adjuntos.exists()
+        proceso == TicketCierre.PROCESO_PROGRAMACION
+        and programacion_fecha_solucion
+        and ticket.fecha
+        and programacion_fecha_solucion < ticket.fecha
     ):
         messages.error(
             request,
-            "Debes completar el Informe de Atención, adjuntar un archivo "
-            "o incluir las fechas de atención.",
+            "La fecha y hora de la solución final no puede ser anterior a la "
+            "fecha de apertura del ticket.",
         )
+        return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
+    tiempo_fecha_solucion = None
+    if proceso == TicketCierre.PROCESO_TIEMPO_ACORDADO:
+        tiempo_fecha_solucion = _parse_datetime_local(
+            request.POST.get("tiempo_fecha_solucion")
+        )
+        if (
+            tiempo_fecha_solucion
+            and ticket.fecha
+            and tiempo_fecha_solucion < ticket.fecha
+        ):
+            messages.error(
+                request,
+                "La fecha y hora de la solución final no puede ser anterior a "
+                "la fecha de apertura del ticket.",
+            )
+            return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
+
+    tiene_informe = any(
+        (diagnostico, actividades, observaciones, observaciones_usuario)
+    )
+    tiene_programacion = any(
+        (
+            programacion_fecha_solucion,
+            request.POST.get("programacion_enlace", "").strip(),
+            request.POST.get("programacion_institucion", "").strip(),
+            request.POST.get("programacion_edificio", "").strip(),
+            request.POST.get("programacion_nivel", "").strip(),
+            request.POST.get("programacion_ubicacion_adicional", "").strip(),
+            request.POST.get("programacion_motivo", "").strip(),
+            request.POST.get("programacion_sin_provisional", "").strip(),
+            request.POST.get("programacion_firma", "").strip(),
+            request.POST.get("programacion_firma_nombre", "").strip(),
+        )
+    )
+    tiene_tiempo = any(
+        (
+            tiempo_fecha_solucion,
+            request.POST.get("tiempo_motivo", "").strip(),
+            request.POST.get("tiempo_solucion_provisional", "").strip(),
+        )
+    )
+
+    contenido_requerido = {
+        TicketCierre.PROCESO_ATENCION: tiene_informe,
+        TicketCierre.PROCESO_PROGRAMACION: tiene_programacion,
+        TicketCierre.PROCESO_TIEMPO_ACORDADO: tiene_tiempo,
+    }[proceso]
+    if (
+        not contenido_requerido
+        and not incluir_fechas
+        and not ticket.cierre_adjuntos.exists()
+    ):
+        mensaje = {
+            TicketCierre.PROCESO_ATENCION: (
+                "Debes completar el Informe de Atención, adjuntar un archivo "
+                "o incluir las fechas de atención."
+            ),
+            TicketCierre.PROCESO_PROGRAMACION: (
+                "Debes completar los datos de la programación, adjuntar un "
+                "archivo o incluir las fechas de atención."
+            ),
+            TicketCierre.PROCESO_TIEMPO_ACORDADO: (
+                "Debes completar los datos del tiempo acordado o adjuntar "
+                "un archivo."
+            ),
+        }[proceso]
+        messages.error(request, mensaje)
         return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
 
     fecha_inicio = None
@@ -941,7 +1031,15 @@ def guardar_cierre_ticket(request, pk):
                 "de la solicitud.",
             )
             return redirect("enlaces_ccg:ticket_cerrar", pk=pk)
-    es_cierre = incluir_fechas and fecha_cierre is not None
+
+    es_programacion = proceso == TicketCierre.PROCESO_PROGRAMACION
+    es_cierre = es_programacion or (
+        incluir_fechas and fecha_cierre is not None
+    )
+    if es_programacion and not fecha_cierre:
+        fecha_cierre = (
+            programacion_fecha_solucion or timezone.localtime(timezone.now())
+        )
     cierre, creado = TicketCierre.objects.get_or_create(ticket=ticket)
     if es_cierre:
         cierre.fecha_inicio = fecha_inicio or cierre.fecha_inicio
@@ -950,6 +1048,51 @@ def guardar_cierre_ticket(request, pk):
     cierre.actividades = actividades
     cierre.observaciones = observaciones
     cierre.observaciones_usuario = observaciones_usuario
+    cierre.proceso = proceso
+    if es_programacion:
+        cierre.programacion_fecha_solucion = programacion_fecha_solucion
+        cierre.programacion_enlace = request.POST.get(
+            "programacion_enlace", ""
+        ).strip()
+        cierre.programacion_institucion = request.POST.get(
+            "programacion_institucion", ""
+        ).strip()
+        cierre.programacion_edificio = request.POST.get(
+            "programacion_edificio", ""
+        ).strip()
+        cierre.programacion_nivel = request.POST.get(
+            "programacion_nivel", ""
+        ).strip()
+        cierre.programacion_ubicacion_adicional = request.POST.get(
+            "programacion_ubicacion_adicional", ""
+        ).strip()
+        cierre.programacion_motivo = request.POST.get(
+            "programacion_motivo", ""
+        ).strip()
+        cierre.programacion_sin_provisional = request.POST.get(
+            "programacion_sin_provisional", ""
+        ).strip()
+        cierre.programacion_firma = request.POST.get(
+            "programacion_firma", ""
+        ).strip()
+        cierre.programacion_firma_nombre = request.POST.get(
+            "programacion_firma_nombre", ""
+        ).strip()
+        if cierre.programacion_firma or cierre.programacion_firma_nombre:
+            cierre.programacion_firma_usuario = (
+                request.user.get_full_name().strip()
+                or request.user.get_username()
+            )
+            cierre.programacion_firma_fecha = timezone.now()
+        else:
+            cierre.programacion_firma_usuario = ""
+            cierre.programacion_firma_fecha = None
+    if proceso == TicketCierre.PROCESO_TIEMPO_ACORDADO:
+        cierre.tiempo_fecha_solucion = tiempo_fecha_solucion
+        cierre.tiempo_motivo = request.POST.get("tiempo_motivo", "").strip()
+        cierre.tiempo_solucion_provisional = request.POST.get(
+            "tiempo_solucion_provisional", ""
+        ).strip()
     cierre.actualizado_por = request.user
     if creado:
         cierre.creado_por = request.user
@@ -1019,11 +1162,86 @@ def cerrar_ticket(request, pk):
                 if ticket.fecha
                 else ""
             ),
+            "cierre_min_datetime": (
+                timezone.localtime(ticket.fecha).strftime("%Y-%m-%dT%H:%M")
+                if ticket.fecha
+                else ""
+            ),
             "diagnostico": _texto("diagnostico", "Diagnostico"),
             "actividades": _texto("actividades", "Actividades"),
             "observaciones": _texto("observaciones", "Observaciones"),
             "observaciones_usuario": _texto(
                 "observaciones_usuario", "ObservacionesUsuario"
+            ),
+            "proceso": (
+                cierre.proceso
+                if cierre and cierre.proceso
+                else TicketCierre.PROCESO_ATENCION
+            ),
+            "programacion_fecha_solucion": (
+                timezone.localtime(cierre.programacion_fecha_solucion).strftime(
+                    "%Y-%m-%dT%H:%M"
+                )
+                if cierre and cierre.programacion_fecha_solucion
+                else ""
+            ),
+            "programacion_enlace": (
+                (cierre.programacion_enlace if cierre else "")
+                or (
+                    ticket.solicitante.nombre_sig
+                    if ticket.solicitante_id
+                    else ""
+                )
+                or (
+                    ticket.solicitante.nombre_completo
+                    if ticket.solicitante_id
+                    else ""
+                )
+                or ticket.solicitante_nombre
+            ),
+            "programacion_institucion": (
+                (cierre.programacion_institucion if cierre else "")
+                or (ticket.institucion.nombre_completo if ticket.institucion_id else "")
+            ),
+            "programacion_edificio": (
+                (cierre.programacion_edificio if cierre else "")
+                or (ticket.torre.nombre if ticket.torre_id else "")
+            ),
+            "programacion_nivel": (
+                (cierre.programacion_nivel if cierre else "")
+                or (ticket.nivel.nombre if ticket.nivel_id else "")
+            ),
+            "programacion_ubicacion_adicional": (
+                cierre.programacion_ubicacion_adicional if cierre else ""
+            ),
+            "programacion_motivo": cierre.programacion_motivo if cierre else "",
+            "programacion_sin_provisional": (
+                cierre.programacion_sin_provisional if cierre else ""
+            ),
+            "programacion_firma": cierre.programacion_firma if cierre else "",
+            "programacion_firma_nombre": (
+                cierre.programacion_firma_nombre if cierre else ""
+            ),
+            "programacion_firma_usuario": (
+                cierre.programacion_firma_usuario if cierre else ""
+            ),
+            "programacion_firma_fecha": (
+                timezone.localtime(cierre.programacion_firma_fecha).strftime(
+                    "%d/%m/%Y %H:%M"
+                )
+                if cierre and cierre.programacion_firma_fecha
+                else ""
+            ),
+            "tiempo_fecha_solucion": (
+                timezone.localtime(cierre.tiempo_fecha_solucion).strftime(
+                    "%Y-%m-%dT%H:%M"
+                )
+                if cierre and cierre.tiempo_fecha_solucion
+                else ""
+            ),
+            "tiempo_motivo": cierre.tiempo_motivo if cierre else "",
+            "tiempo_solucion_provisional": (
+                cierre.tiempo_solucion_provisional if cierre else ""
             ),
             "plantillas": [
                 {
@@ -1038,7 +1256,56 @@ def cerrar_ticket(request, pk):
                     usuario=request.user
                 ).order_by("nombre")
             ],
+            "firma_guardada": _firma_guardada_json(request.user),
         },
+    )
+
+
+def _firma_guardada_json(usuario):
+    """Datos de la firma guardada del usuario, o None si no tiene."""
+    firma = getattr(usuario, "firma_guardada", None)
+    if not firma:
+        return None
+    return {
+        "imagen": firma.imagen,
+        "nombre": firma.nombre,
+        "actualizada": timezone.localtime(firma.actualizado_en).strftime(
+            "%d/%m/%Y %H:%M"
+        ),
+    }
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def guardar_firma_usuario(request):
+    """Guarda (o actualiza) la firma personal del usuario.
+
+    Cada usuario solo puede tener una firma guardada; si vuelve a guardar,
+    la reemplaza. Guardar sin datos elimina la firma guardada.
+    """
+    imagen = request.POST.get("firma_imagen", "").strip()
+    nombre = request.POST.get("firma_nombre", "").strip()
+    firma = FirmaUsuario.objects.filter(usuario=request.user).first()
+    if not imagen and not nombre:
+        if firma:
+            firma.delete()
+            return JsonResponse({"ok": True, "eliminada": True})
+        return JsonResponse({"ok": True, "eliminada": True})
+    if firma:
+        firma.imagen = imagen
+        firma.nombre = nombre
+        firma.save()
+    else:
+        firma = FirmaUsuario.objects.create(
+            usuario=request.user, imagen=imagen, nombre=nombre
+        )
+    return JsonResponse(
+        {
+            "ok": True,
+            "actualizada": timezone.localtime(firma.actualizado_en).strftime(
+                "%d/%m/%Y %H:%M"
+            ),
+        }
     )
 
 
