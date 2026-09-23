@@ -1133,6 +1133,9 @@ class Falla(models.Model):
         verbose_name="Última actualización desde tickets",
         help_text="Fecha de la solicitud más reciente que definió los datos de la falla.",
     )
+    seguimiento = models.BooleanField(
+        default=False, verbose_name="Seguimiento"
+    )
     activo = models.BooleanField(default=True, verbose_name="Activo")
     creado_en = models.DateTimeField(auto_now_add=True)
 

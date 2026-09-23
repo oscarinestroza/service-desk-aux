@@ -1845,6 +1845,7 @@ def catalogo_fallas(request):
             clasificacion = request.POST.get("clasificacion", "").strip()
             categoria = request.POST.get("categoria", "").strip()
             activo = request.POST.get("activo") == "1"
+            seguimiento = request.POST.get("seguimiento") == "1"
             servicio = Servicio.objects.filter(
                 pk=request.POST.get("servicio")
             ).first()
@@ -1868,11 +1869,12 @@ def catalogo_fallas(request):
                     falla.clasificacion = clasificacion
                     falla.categoria = categoria
                     falla.servicio = servicio
+                    falla.seguimiento = seguimiento
                     falla.activo = activo
                     falla.save(
                         update_fields=[
                             "descripcion", "kpi", "clasificacion", "categoria",
-                            "servicio", "activo",
+                            "servicio", "seguimiento", "activo",
                         ]
                     )
                     messages.success(request, f"Falla «{descripcion}» actualizada.")
@@ -1888,6 +1890,7 @@ def catalogo_fallas(request):
                         clasificacion=clasificacion,
                         categoria=categoria,
                         servicio=servicio,
+                        seguimiento=seguimiento,
                         activo=activo,
                     )
                     messages.success(request, f"Falla «{descripcion}» creada.")
@@ -1901,6 +1904,16 @@ def catalogo_fallas(request):
                     f"Falla «{falla.descripcion}» "
                     f"{'activada' if falla.activo else 'desactivada'}.",
                 )
+        elif accion == "toggle_seguimiento":
+            falla = Falla.objects.filter(pk=request.POST.get("pk")).first()
+            if falla:
+                falla.seguimiento = not falla.seguimiento
+                falla.save(update_fields=["seguimiento"])
+                messages.success(
+                    request,
+                    f"Falla «{falla.descripcion}» "
+                    f"{'marcada con seguimiento' if falla.seguimiento else 'sin seguimiento'}.",
+                )
         elif accion == "actualizar_fallas":
             from .sig_sync.tickets import sincronizar_datos_fallas
 
@@ -1909,7 +1922,11 @@ def catalogo_fallas(request):
                 request,
                 f"Datos de fallas actualizados desde tickets ({n} cambiaron).",
             )
-        return redirect("enlaces_ccg:catalogo_fallas")
+        destino = reverse("enlaces_ccg:catalogo_fallas")
+        query = request.POST.get("query", "").strip()
+        if query:
+            destino += "?" + query
+        return redirect(destino)
 
     falla_editar = None
     if request.GET.get("editar_falla"):
@@ -1962,6 +1979,10 @@ def catalogo_fallas(request):
     if filtro_servicio.isdigit():
         partes.append("servicio=" + filtro_servicio)
     qs_columnas = "&".join(partes)
+    partes_qs = list(partes)
+    partes_qs.append("vista=" + vista)
+    partes_qs.append("page=" + str(pagina))
+    qs_actual = "&".join(partes_qs)
 
     return render(
         request,
@@ -1979,6 +2000,7 @@ def catalogo_fallas(request):
             "filtro_servicio": filtro_servicio,
             "vista": vista,
             "qs_columnas": qs_columnas,
+            "qs_actual": qs_actual,
             "n_activas": Falla.objects.filter(activo=True).count(),
             "n_inactivas": Falla.objects.filter(activo=False).count(),
             "n_todas": Falla.objects.count(),

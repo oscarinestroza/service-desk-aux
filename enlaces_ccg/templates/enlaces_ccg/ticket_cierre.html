@@ -19,6 +19,15 @@
         background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: .5rem;
         padding: .5rem .75rem; margin-bottom: .5rem;
     }
+    .ccg-dropzone {
+        border: 2px dashed #dee2e6; border-radius: .75rem;
+        padding: 2.5rem 1rem; text-align: center;
+        background: #f8f9fa; cursor: pointer;
+        transition: background-color .15s, border-color .15s;
+    }
+    .ccg-dropzone:hover, .ccg-dropzone.ccg-dropzone-over {
+        background: #e7f1ff; border-color: #0d6efd;
+    }
 </style>
 
 <div class="mx-auto" style="max-width: 760px;">
@@ -181,11 +190,18 @@
                     <p class="text-muted small mb-0">Cargando adjuntos…</p>
                 </div>
                 <div id="formSubirAdjuntoCierre" class="mt-3">
-                    <div class="input-group">
-                        <input type="file" class="form-control" name="archivo" id="archivoCierre">
-                        <button type="button" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
-                            <i class="fas fa-upload me-1"></i>Subir
-                        </button>
+                    <div class="ccg-dropzone" id="dropZoneAdjuntos">
+                        <i class="fas fa-cloud-upload-alt fa-2x mb-2 d-block text-primary"></i>
+                        <span class="fw-semibold">Arrastra los archivos aquí</span>
+                        <span class="text-muted d-block mb-2">o haz clic para seleccionarlos. Puedes soltar varios a la vez.</span>
+                        <input type="file" class="form-control mx-auto" name="archivo" id="archivoCierre"
+                               style="max-width: 460px;" multiple>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
+                                <i class="fas fa-upload me-1"></i>Subir
+                            </button>
+                            <span class="text-muted small ms-2" id="estadoSubida"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -245,36 +261,72 @@
             });
     }
 
-    document.getElementById('btnSubirAdjuntoCierre').addEventListener('click', function() {
-        const archivo = document.getElementById('archivoCierre');
-        if (!archivo.files.length) return;
+    var inpArchivo = document.getElementById('archivoCierre');
+    var btnSubir = document.getElementById('btnSubirAdjuntoCierre');
+    var estadoSubida = document.getElementById('estadoSubida');
+    var dropZone = document.getElementById('dropZoneAdjuntos');
+
+    function subirArchivo(file) {
+        if (!file) return Promise.resolve();
         const formData = new FormData();
-        formData.append('archivo', archivo.files[0]);
-        const btn = document.getElementById('btnSubirAdjuntoCierre');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        fetch(`/tickets/cerrar/${pk}/adjuntos/subir/`, {
+        formData.append('archivo', file);
+        if (estadoSubida) estadoSubida.textContent = 'Subiendo ' + file.name + '…';
+        return fetch(`/tickets/cerrar/${pk}/adjuntos/subir/`, {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
         })
         .then(r => r.json())
         .then(d => {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir';
-            if (d.ok) {
-                archivo.value = '';
-                cargarAdjuntos();
-            } else {
-                alert(d.error || 'Error al subir');
-            }
+            if (!d.ok && d.error) alert(d.error);
+            return d.ok;
         })
-        .catch(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-upload me-1"></i>Subir';
-            alert('Error de conexión');
-        });
+        .catch(() => alert('Error de conexión'));
+    }
+
+    function subirSeleccion(files) {
+        if (!files || !files.length) return;
+        btnSubir.disabled = true;
+        var original = btnSubir.innerHTML;
+        btnSubir.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        var lista = Array.from(files);
+        Promise.all(lista.map(subirArchivo))
+            .then(function () {
+                btnSubir.disabled = false;
+                btnSubir.innerHTML = original;
+                if (estadoSubida) estadoSubida.textContent = '';
+                inpArchivo.value = '';
+                cargarAdjuntos();
+            });
+    }
+
+    btnSubir.addEventListener('click', function() {
+        subirSeleccion(inpArchivo.files);
     });
+
+    if (dropZone) {
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            dropZone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('ccg-dropzone-over');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            dropZone.addEventListener(ev, function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('ccg-dropzone-over');
+            });
+        });
+        dropZone.addEventListener('drop', function (e) {
+            subirSeleccion(e.dataTransfer.files);
+        });
+        dropZone.addEventListener('click', function (e) {
+            if (e.target === inpArchivo || btnSubir.contains(e.target)) return;
+            inpArchivo.click();
+        });
+    }
 
     // ── Fechas de atención + texto del botón ──
     var chkFechas = document.getElementById('chkIncluirFechas');

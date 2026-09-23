@@ -17,6 +17,7 @@
         <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
             {% csrf_token %}
             <input type="hidden" name="accion" value="actualizar_fallas">
+            <input type="hidden" name="query" value="{{ qs_actual }}">
             <button type="submit" class="btn btn-outline-secondary">
                 <i class="fas fa-file-excel me-1"></i>Actualizar desde tickets
             </button>
@@ -154,13 +155,26 @@
                                     data-clasificacion="{{ f.clasificacion }}"
                                     data-categoria="{{ f.categoria }}"
                                     data-servicio="{{ f.servicio_id|default:'' }}"
+                                    data-seguimiento="{% if f.seguimiento %}1{% else %}0{% endif %}"
                                     data-activo="{% if f.activo %}1{% else %}0{% endif %}">
                                 <i class="fas fa-pen"></i>
                             </button>
+<form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="toggle_seguimiento">
+                                <input type="hidden" name="pk" value="{{ f.pk }}">
+                                <input type="hidden" name="query" value="{{ qs_actual }}">
+                                <button type="submit"
+                                        class="btn btn-outline-{% if f.seguimiento %}info{% else %}secondary{% endif %} btn-sm"
+                                        title="{% if f.seguimiento %}Quitar seguimiento{% else %}Marcar con seguimiento{% endif %}">
+                                    <i class="fas fa-{% if f.seguimiento %}eye{% else %}eye-slash{% endif %}"></i>
+                                </button>
+                            </form>
                             <form method="post" action="{% url 'enlaces_ccg:catalogo_fallas' %}" class="d-inline">
                                 {% csrf_token %}
                                 <input type="hidden" name="accion" value="toggle_falla">
                                 <input type="hidden" name="pk" value="{{ f.pk }}">
+                                <input type="hidden" name="query" value="{{ qs_actual }}">
                                 <button type="submit"
                                         class="btn btn-outline-{% if f.activo %}success{% else %}danger{% endif %} btn-sm"
                                         title="{% if f.activo %}Desactivar{% else %}Activar{% endif %}">
@@ -255,14 +269,15 @@
                 {% csrf_token %}
                 <input type="hidden" name="accion" id="fallaAccion" value="crear_falla">
                 <input type="hidden" name="pk" id="fallaPk" value="">
+                <input type="hidden" name="query" value="{{ qs_actual }}">
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-12">
+                        <div class="col-md-8">
                             <label for="fallaDescripcion" class="form-label">Descripción de la falla</label>
                             <textarea class="form-control" id="fallaDescripcion" name="descripcion" rows="2"
                                       required placeholder="Describe la falla"></textarea>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label for="fallaKPI" class="form-label">KPI</label>
                             <input type="text" class="form-control" id="fallaKPI" disabled
                                    placeholder="Automático (IE-##)">
@@ -295,14 +310,16 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-12">
-                            <div class="form-check form-switch">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" name="seguimiento" value="1" id="fallaSeguimiento">
+                                <label class="form-check-label" for="fallaSeguimiento">Seguimiento</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-4">
                                 <input class="form-check-input" type="checkbox" name="activo" value="1" id="fallaActivo">
                                 <label class="form-check-label" for="fallaActivo">Activa</label>
-                            </div>
-                            <div class="form-text">
-                                Clasificación, categoría y servicio pueden actualizarse desde el Excel de
-                                tickets (botón «Actualizar desde tickets»); se toma la fila más reciente por fecha.
                             </div>
                         </div>
                     </div>
@@ -337,7 +354,7 @@
         inpDescripcion.addEventListener('input', calcularKPI);
     }
 
-    function abrirEditar(pk, descripcion, clasificacion, categoria, servicio, activo) {
+    function abrirEditar(pk, descripcion, clasificacion, categoria, servicio, seguimiento, activo) {
         if (!editarModal) return;
         var m = new bootstrap.Modal(editarModal);
         document.getElementById('fallaAccion').value = pk ? 'editar_falla' : 'crear_falla';
@@ -346,6 +363,7 @@
         document.getElementById('fallaClasificacion').value = clasificacion || '';
         document.getElementById('fallaCategoria').value = categoria || '';
         document.getElementById('fallaServicio').value = servicio || '';
+        document.getElementById('fallaSeguimiento').checked = seguimiento === '1';
         document.getElementById('fallaActivo').checked = activo !== '0';
         document.getElementById('modalFallaTituloTexto').textContent = pk ? 'Editar falla' : 'Nueva falla';
         calcularKPI();
@@ -356,7 +374,8 @@
     document.querySelectorAll('.btn-editar-falla').forEach(function (b) {
         b.addEventListener('click', function () {
             abrirEditar(b.dataset.pk, b.dataset.descripcion, b.dataset.clasificacion,
-                        b.dataset.categoria, b.dataset.servicio, b.dataset.activo);
+                        b.dataset.categoria, b.dataset.servicio, b.dataset.seguimiento,
+                        b.dataset.activo);
         });
     });
     var btnNueva = document.getElementById('btnNuevaFalla');
@@ -368,6 +387,7 @@
     abrirEditar({{ falla_editar.pk }}, '{{ falla_editar.descripcion|escapejs }}',
                 '{{ falla_editar.clasificacion|escapejs }}', '{{ falla_editar.categoria|escapejs }}',
                 {{ falla_editar.servicio_id|default:"''" }},
+                {{ falla_editar.seguimiento|yesno:"1,0" }},
                 {{ falla_editar.activo|yesno:"1,0" }});
     {% endif %}
 })();
