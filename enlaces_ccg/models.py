@@ -1884,6 +1884,50 @@ class TicketAdjunto(models.Model):
         return "fas fa-file"
 
 
+class PlantillaRespuesta(models.Model):
+    """Plantilla de respuesta personal para el cierre de tickets.
+
+    Permite que cada usuario guarde el diagnóstico, actividades y
+    observaciones típicos para reutilizarlos en tickets similares.
+    """
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="plantillas_respuesta",
+        verbose_name="Usuario",
+    )
+    nombre = models.CharField(max_length=100, verbose_name="Nombre")
+    diagnostico = models.TextField(
+        blank=True, default="", verbose_name="Diagnóstico"
+    )
+    actividades = models.TextField(
+        blank=True, default="", verbose_name="Actividades realizadas"
+    )
+    observaciones = models.TextField(
+        blank=True, default="", verbose_name="Observaciones"
+    )
+    observaciones_internas = models.TextField(
+        blank=True, default="", verbose_name="Observaciones internas"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "nombre"],
+                name="plantilla_usuario_nombre_unico",
+            )
+        ]
+        verbose_name = "Plantilla de respuesta"
+        verbose_name_plural = "Plantillas de respuesta"
+
+    def __str__(self):
+        return f"{self.nombre} ({self.usuario})"
+
+
 class RevisionTicket(models.Model):
     """Revisión de la creación de un ticket (módulo Revisión de Tickets).
 

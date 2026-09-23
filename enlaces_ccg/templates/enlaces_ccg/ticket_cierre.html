@@ -35,11 +35,36 @@
         <h1 class="h3 mb-0">
             <i class="fas fa-check-double me-2 text-success"></i>Atención del Ticket {{ ticket.numero_display }}
         </h1>
-        {% if ticket.esta_cerrado %}
-        <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
-        {% else %}
-        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                        id="dropdownPlantillas" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-paste me-1"></i>Plantillas
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow" id="menuPlantillas" aria-labelledby="dropdownPlantillas">
+                    {% if plantillas %}
+                    {% for p in plantillas %}
+                    <li class="d-flex align-items-center">
+                        <button type="button" class="dropdown-item btn-aplicar-plantilla flex-grow-1" data-id="{{ p.id }}">
+                            {{ p.nombre }}
+                        </button>
+                        <button type="button" class="btn btn-sm text-danger btn-eliminar-plantilla me-1"
+                                data-id="{{ p.id }}" title="Eliminar plantilla">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </li>
+                    {% endfor %}
+                    {% else %}
+                    <li><span class="dropdown-item-text text-muted">Sin plantillas guardadas</span></li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% if ticket.esta_cerrado %}
+            <span class="badge bg-success-subtle text-success border border-success-subtle fs-6">Cerrado</span>
+            {% else %}
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">Abierto</span>
+            {% endif %}
+        </div>
     </div>
 
     {% if cierre and not ticket.cierre_sincronizado %}
@@ -104,8 +129,11 @@
         {% csrf_token %}
 
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white py-2">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong><i class="fas fa-clipboard-list me-1"></i>Informe de Atención</strong>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btnGuardarPlantilla">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
             </div>
             <div class="card-body">
                 <div class="mb-3">
@@ -121,12 +149,12 @@
                 <div class="mb-3">
                     <label class="form-label" for="idObservaciones">Observaciones</label>
                     <textarea class="form-control" id="idObservaciones" name="observaciones" rows="3"
-                              placeholder="Observaciones">{{ observaciones }}</textarea>
+                              placeholder="Observaciones que se comparten con el usuario">{{ observaciones }}</textarea>
                 </div>
                 <div class="mb-0">
-                    <label class="form-label" for="idObservacionesUsuario">Observaciones del usuario</label>
+                    <label class="form-label" for="idObservacionesUsuario">Observaciones Internas</label>
                     <textarea class="form-control" id="idObservacionesUsuario" name="observaciones_usuario" rows="3"
-                              placeholder="Observaciones del usuario">{{ observaciones_usuario }}</textarea>
+                              placeholder="Observaciones internas que no se comparten con el usuario">{{ observaciones_usuario }}</textarea>
                 </div>
             </div>
         </div>
@@ -200,8 +228,16 @@
                             <button type="button" class="btn btn-outline-primary" id="btnSubirAdjuntoCierre">
                                 <i class="fas fa-upload me-1"></i>Subir
                             </button>
+                            <button type="button" class="btn btn-outline-secondary" id="btnCamaraCierre">
+                                <i class="fas fa-camera me-1"></i>Usar cámara
+                            </button>
                             <span class="text-muted small ms-2" id="estadoSubida"></span>
                         </div>
+                        <div class="mt-2">
+                            <small class="text-muted">En celular abre la cámara trasera; en computadora abre el selector de fotos.</small>
+                        </div>
+                        <input type="file" id="archivoCamaraCierre" accept="image/*" capture="environment"
+                               class="d-none">
                     </div>
                 </div>
             </div>
@@ -218,6 +254,31 @@
     </form>
 </div>
 
+<!-- Modal: guardar plantilla de respuesta -->
+<div class="modal fade" id="modalNuevaPlantilla" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-save me-1"></i>Guardar plantilla</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label" for="idPlantillaNombre">Nombre de la plantilla</label>
+                <input type="text" class="form-control" id="idPlantillaNombre" maxlength="100"
+                       placeholder="Ej. Acceso de personal">
+                <div class="form-text">Se guardará el diagnóstico, las actividades, las observaciones y las observaciones internas.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnConfirmarGuardarPlantilla">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ plantillas|json_script:"plantillasData" }}
 <script>
 (function() {
     const pk = {{ ticket.pk }};
@@ -328,6 +389,18 @@
         });
     }
 
+    var btnCamara = document.getElementById('btnCamaraCierre');
+    var inpCamara = document.getElementById('archivoCamaraCierre');
+    if (btnCamara && inpCamara) {
+        btnCamara.addEventListener('click', function () {
+            inpCamara.click();
+        });
+        inpCamara.addEventListener('change', function () {
+            subirSeleccion(inpCamara.files);
+            inpCamara.value = '';
+        });
+    }
+
     // ── Fechas de atención + texto del botón ──
     var chkFechas = document.getElementById('chkIncluirFechas');
     var camposFechas = document.getElementById('fechasAtencionCampos');
@@ -364,6 +437,152 @@
                 e.preventDefault();
                 alert('Debes completar el Informe de Atención, adjuntar un archivo o incluir las fechas de atención.');
             }
+        });
+    }
+
+    // ── Plantillas de respuesta ──
+    var PLANTILLAS_LISTA = JSON.parse(document.getElementById('plantillasData').textContent);
+    var PLANTILLAS = {};
+    PLANTILLAS_LISTA.forEach(function (p) { PLANTILLAS[p.id] = p; });
+    var menuPlantillas = document.getElementById('menuPlantillas');
+    var modalPlantilla = document.getElementById('modalNuevaPlantilla');
+
+    function aplicarPlantilla(id) {
+        var p = PLANTILLAS[id];
+        if (!p) return;
+        document.getElementById('idDiagnostico').value = p.diagnostico || '';
+        document.getElementById('idActividades').value = p.actividades || '';
+        document.getElementById('idObservaciones').value = p.observaciones || '';
+        document.getElementById('idObservacionesUsuario').value = p.observaciones_internas || '';
+        var ddl = document.getElementById('dropdownPlantillas');
+        if (ddl && window.bootstrap && window.bootstrap.Dropdown) {
+            bootstrap.Dropdown.getOrCreateInstance(ddl).hide();
+        }
+    }
+
+    function quitarVacio() {
+        var vacio = menuPlantillas.querySelector('.dropdown-item-text');
+        if (vacio && vacio.parentElement) vacio.parentElement.remove();
+    }
+
+    function ponerVacioSiAplica() {
+        if (menuPlantillas.querySelector('.btn-aplicar-plantilla')) return;
+        quitarVacio();
+        var li = document.createElement('li');
+        li.innerHTML = '<span class="dropdown-item-text text-muted">Sin plantillas guardadas</span>';
+        menuPlantillas.appendChild(li);
+    }
+
+    function refrescarOpcionPlantilla(p) {
+        if (!menuPlantillas) return;
+        var b = menuPlantillas.querySelector('.btn-aplicar-plantilla[data-id="' + p.id + '"]');
+        if (b) {
+            while (b.firstChild) b.removeChild(b.firstChild);
+            b.appendChild(document.createTextNode(p.nombre));
+            return;
+        }
+        quitarVacio();
+        var li = document.createElement('li');
+        li.className = 'd-flex align-items-center';
+        b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'dropdown-item btn-aplicar-plantilla flex-grow-1';
+        b.dataset.id = p.id;
+        b.appendChild(document.createTextNode(p.nombre));
+        li.appendChild(b);
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-sm text-danger btn-eliminar-plantilla me-1';
+        del.dataset.id = p.id;
+        del.title = 'Eliminar plantilla';
+        del.innerHTML = '<i class="fas fa-trash"></i>';
+        li.appendChild(del);
+        menuPlantillas.appendChild(li);
+    }
+
+    function eliminarPlantilla(id) {
+        var p = PLANTILLAS[id];
+        if (!p) return;
+        if (!confirm('¿Eliminar la plantilla «' + p.nombre + '»?')) return;
+        var fd = new FormData();
+        fd.append('id', id);
+        fetch("{% url 'enlaces_ccg:plantilla_eliminar' %}", {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) {
+                alert(d.error || 'Error al eliminar la plantilla.');
+                return;
+            }
+            delete PLANTILLAS[id];
+            var b = menuPlantillas.querySelector('.btn-aplicar-plantilla[data-id="' + id + '"]');
+            if (b && b.parentElement) b.parentElement.remove();
+            ponerVacioSiAplica();
+        })
+        .catch(function () { alert('Error de conexión.'); });
+    }
+
+    if (menuPlantillas) {
+        menuPlantillas.addEventListener('click', function (e) {
+            var del = e.target.closest('.btn-eliminar-plantilla');
+            if (del) {
+                e.stopPropagation();
+                eliminarPlantilla(del.dataset.id);
+                return;
+            }
+            var btn = e.target.closest('.btn-aplicar-plantilla');
+            if (btn) aplicarPlantilla(btn.dataset.id);
+        });
+    }
+
+    if (document.getElementById('btnGuardarPlantilla') && modalPlantilla) {
+        document.getElementById('btnGuardarPlantilla').addEventListener('click', function () {
+            document.getElementById('idPlantillaNombre').value = '';
+            document.getElementById('idPlantillaNombre').focus();
+            new bootstrap.Modal(modalPlantilla).show();
+        });
+        document.getElementById('btnConfirmarGuardarPlantilla').addEventListener('click', function () {
+            var nombre = document.getElementById('idPlantillaNombre').value.trim();
+            if (!nombre) {
+                alert('Escribe un nombre para la plantilla.');
+                return;
+            }
+            var btn = document.getElementById('btnConfirmarGuardarPlantilla');
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            var fd = new FormData();
+            fd.append('nombre', nombre);
+            fd.append('diagnostico', document.getElementById('idDiagnostico').value);
+            fd.append('actividades', document.getElementById('idActividades').value);
+            fd.append('observaciones', document.getElementById('idObservaciones').value);
+            fd.append('observaciones_internas', document.getElementById('idObservacionesUsuario').value);
+            fetch("{% url 'enlaces_ccg:plantilla_guardar' %}", {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                if (!d.ok) {
+                    alert(d.error || 'Error al guardar la plantilla.');
+                    return;
+                }
+                PLANTILLAS[d.plantilla.id] = d.plantilla;
+                refrescarOpcionPlantilla(d.plantilla);
+                if (window.bootstrap) bootstrap.Modal.getInstance(modalPlantilla).hide();
+                alert('Plantilla «' + d.plantilla.nombre + '» guardada.');
+            })
+            .catch(function () {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                alert('Error de conexión.');
+            });
         });
     }
 

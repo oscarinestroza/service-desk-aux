@@ -34,7 +34,7 @@ from .models import (
     Edificio,
     EnlaceAutorizado,
     Falla, extraer_kpi_falla,
-    Institucion, InstitucionEdificio, Nivel, ResponsableAtencion, Seccion,
+    Institucion, InstitucionEdificio, Nivel, PlantillaRespuesta, ResponsableAtencion, Seccion,
     Servicio, Ticket,
     TicketAdjunto, TicketCierre,
     TicketRegistro,
@@ -1025,8 +1025,77 @@ def cerrar_ticket(request, pk):
             "observaciones_usuario": _texto(
                 "observaciones_usuario", "ObservacionesUsuario"
             ),
+            "plantillas": [
+                {
+                    "id": p.pk,
+                    "nombre": p.nombre,
+                    "diagnostico": p.diagnostico,
+                    "actividades": p.actividades,
+                    "observaciones": p.observaciones,
+                    "observaciones_internas": p.observaciones_internas,
+                }
+                for p in PlantillaRespuesta.objects.filter(
+                    usuario=request.user
+                ).order_by("nombre")
+            ],
         },
     )
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def guardar_plantilla_respuesta(request):
+    """Guarda (o actualiza) una plantilla de respuesta del usuario."""
+    nombre = request.POST.get("nombre", "").strip()[:100]
+    if not nombre:
+        return JsonResponse({"ok": False, "error": "El nombre es obligatorio."})
+    datos = {
+        "diagnostico": request.POST.get("diagnostico", "").strip(),
+        "actividades": request.POST.get("actividades", "").strip(),
+        "observaciones": request.POST.get("observaciones", "").strip(),
+        "observaciones_internas": request.POST.get(
+            "observaciones_internas", ""
+        ).strip(),
+    }
+    plantilla = PlantillaRespuesta.objects.filter(
+        usuario=request.user, nombre__iexact=nombre
+    ).first()
+    if plantilla:
+        for campo, valor in datos.items():
+            setattr(plantilla, campo, valor)
+        plantilla.save()
+    else:
+        plantilla = PlantillaRespuesta.objects.create(
+            usuario=request.user, nombre=nombre, **datos
+        )
+    return JsonResponse(
+        {
+            "ok": True,
+            "plantilla": {
+                "id": plantilla.pk,
+                "nombre": plantilla.nombre,
+                "diagnostico": plantilla.diagnostico,
+                "actividades": plantilla.actividades,
+                "observaciones": plantilla.observaciones,
+                "observaciones_internas": plantilla.observaciones_internas,
+            },
+        }
+    )
+
+
+@requiere(CAP_ATENDER)
+@require_POST
+def eliminar_plantilla_respuesta(request):
+    """Elimina una plantilla de respuesta propia del usuario."""
+    plantilla = PlantillaRespuesta.objects.filter(
+        pk=request.POST.get("id"), usuario=request.user
+    ).first()
+    if not plantilla:
+        return JsonResponse(
+            {"ok": False, "error": "La plantilla no existe."}
+        )
+    plantilla.delete()
+    return JsonResponse({"ok": True})
 
 
 @requiere(CAP_ATENDER)

@@ -213,8 +213,18 @@ urlpatterns = [
         views.ticket_json,
         name="ticket_json",
     ),
+path(
+        "tickets/plantillas/guardar/",
+        views.guardar_plantilla_respuesta,
+        name="plantilla_guardar",
+    ),
     path(
-        "tickets/detalle/<int:pk>/registrar/",
+        "tickets/plantillas/eliminar/",
+        views.eliminar_plantilla_respuesta,
+        name="plantilla_eliminar",
+    ),
+    path(
+        "tickets/cerrar/<int:pk>/registrar/",
         views.registrar_seguimiento,
         name="ticket_registrar",
     ),

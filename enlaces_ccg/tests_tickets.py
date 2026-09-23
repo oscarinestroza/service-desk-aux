@@ -2499,3 +2499,89 @@ class AtencionLlamadasTests(TestCase):
         )
         self.assertEqual(len(resp2.context["pendientes"]), 0)
         self.assertEqual(len(resp2.context["asignados"]), 1)
+
+
+class PlantillaRespuestaTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.usuario = get_user_model().objects.create_superuser(
+            "prueba_plantilla", "pp@test.local", "Prueba123!"
+        )
+        self.client.force_login(self.usuario)
+        ruta = _excel_tmp([_fila_v(1, "SS26-0900")])
+        datos, _ = parsear_excel_tickets(ruta)
+        _calcular_numero_display(datos)
+        aplicar_tickets(datos, MODO_SYNC_PARCIAL)
+
+    def test_cierre_muestra_plantillas_en_dropdown(self):
+        from .models import PlantillaRespuesta, Ticket
+
+        t = Ticket.objects.get(ticket_id="1")
+        p = PlantillaRespuesta.objects.create(
+            usuario=self.usuario, nombre="Acceso de personal",
+            diagnostico="Dx", actividades="Act",
+            observaciones="Obs", observaciones_internas="Int",
+        )
+        html = self.client.get(
+            reverse("enlaces_ccg:ticket_cerrar", args=[t.pk])
+        ).content.decode("utf-8", "replace")
+        self.assertIn("Acceso de personal", html)
+        self.assertIn('data-id="%d"' % p.pk, html)
+        self.assertIn('"id": %d' % p.pk, html)
+        self.assertIn('"observaciones_internas": "Int"', html)
+
+    def test_guardar_plantilla_crea_y_actualiza(self):
+        from .models import PlantillaRespuesta
+
+        url = reverse("enlaces_ccg:plantilla_guardar")
+        respuesta = self.client.post(url, {
+            "nombre": "Mi plantilla",
+            "diagnostico": "Dx1",
+            "actividades": "Act1",
+            "observaciones": "Obs1",
+            "observaciones_internas": "Int1",
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        data = json.loads(respuesta.content)
+        self.assertTrue(data["ok"])
+        p = PlantillaRespuesta.objects.get(usuario=self.usuario, nombre="Mi plantilla")
+        self.assertEqual(p.actividades, "Act1")
+
+        respuesta2 = self.client.post(url, {
+            "nombre": "mi plantilla",
+            "diagnostico": "Dx2",
+            "actividades": "Act2",
+            "observaciones": "Obs2",
+            "observaciones_internas": "Int2",
+        })
+        self.assertEqual(respuesta2.status_code, 200)
+        self.assertEqual(
+            PlantillaRespuesta.objects.filter(usuario=self.usuario).count(), 1
+        )
+        p.refresh_from_db()
+        self.assertEqual(p.actividades, "Act2")
+
+    def test_guardar_plantailla_sin_nombre_rechaza(self):
+        respuesta = self.client.post(
+            reverse("enlaces_ccg:plantilla_guardar"), {"nombre": ""}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        data = json.loads(respuesta.content)
+        self.assertFalse(data["ok"])
+
+    def test_eliminar_plantilla(self):
+        from .models import PlantillaRespuesta
+
+        p = PlantillaRespuesta.objects.create(
+            usuario=self.usuario, nombre="Temporal",
+            actividades="Act", observaciones_internas="Int",
+        )
+        url = reverse("enlaces_ccg:plantilla_eliminar")
+        respuesta = self.client.post(url, {"id": str(p.pk)})
+        self.assertEqual(respuesta.status_code, 200)
+        data = json.loads(respuesta.content)
+        self.assertTrue(data["ok"])
+        self.assertFalse(
+            PlantillaRespuesta.objects.filter(pk=p.pk).exists()
+        )
