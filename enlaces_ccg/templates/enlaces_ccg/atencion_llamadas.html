@@ -1,0 +1,137 @@
+{% extends "enlaces_ccg/base.html" %}
+
+{% block titulo %}Atención de Llamadas — Enlaces CCG{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item">Modulo Operativo MAO</li>
+<li class="breadcrumb-item active" aria-current="page">Atención de Llamadas</li>
+{% endblock %}
+
+{% block contenido %}
+<style>
+    .ccg-rev-dif { font-variant-numeric: tabular-nums; font-weight: 600; }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h3 mb-0">
+        <i class="fas fa-phone me-2 text-primary"></i>Atención de Llamadas
+    </h1>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <form method="get" class="d-flex align-items-center gap-2 mb-0">
+            <input type="hidden" name="generado" value="1">
+            <label class="small text-muted mb-0" for="selMes">Período</label>
+            <select name="mes" id="selMes" class="form-select form-select-sm" style="width:auto;"
+                    onchange="this.form.submit()">
+                <option value="actual" {% if mes == 'actual' %}selected{% endif %}>Mes actual</option>
+                <option value="pasado" {% if mes == 'pasado' %}selected{% endif %}>Mes pasado</option>
+            </select>
+        </form>
+        <a href="?mes={{ mes }}&generado=1" class="btn btn-sm btn-primary">
+            <i class="fas fa-play me-1"></i>Generar
+        </a>
+    </div>
+</div>
+
+<p class="text-muted small mb-3">
+    <i class="fas fa-info-circle me-1"></i>
+    Se listan los tickets del período con recepción <strong>Vía telefónica</strong> (incluye los
+    corregidos a ese tipo en Revisión de Tickets). Registra el responsable de creación y la
+    cantidad de timbres antes de contestar la llamada.
+</p>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tabPendientes">
+            Pendientes
+            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1">{{ n_pendientes }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tabAsignados">
+            Asignados
+            <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">{{ n_asignados }}</span>
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="tabPendientes">
+        {% if generado %}
+        {% include "enlaces_ccg/_tabla_atencion_llamadas.html" with filas=pendientes vacio="No hay llamadas pendientes para el período." %}
+        {% else %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center text-muted py-5">
+                <i class="fas fa-play fa-2x mb-2 d-block opacity-50"></i>
+                Pulsa «Generar» para obtener los tickets telefónicos del período.
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="tab-pane fade" id="tabAsignados">
+        {% include "enlaces_ccg/_tabla_atencion_llamadas.html" with filas=asignados vacio="No hay llamadas asignadas para el período." %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Carga el detalle del ticket en el modal (igual que en Revisión de Tickets).
+    function cargarDetalle(modalEl) {
+        var cont = modalEl.querySelector('.ccg-rev-detalle');
+        if (!cont || cont.dataset.cargado === '1') return;
+        var url = cont.dataset.url;
+        cont.innerHTML = '<div class="text-center py-4">' +
+            '<div class="spinner-border text-primary" role="status"></div></div>';
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(function (d) { cont.innerHTML = d.html; cont.dataset.cargado = '1'; })
+            .catch(function () {
+                cont.innerHTML = '<div class="alert alert-danger mb-0">' +
+                    'No se pudo cargar el detalle del ticket.</div>';
+            });
+    }
+
+    function pksDeModal(modalEl) {
+        var pane = modalEl.closest('.tab-pane');
+        if (!pane) return [];
+        return Array.prototype.map.call(
+            pane.querySelectorAll('.btn-revisar'),
+            function (b) { return b.dataset.pk; }
+        );
+    }
+
+    function pintarNav(modalEl) {
+        var pks = pksDeModal(modalEl);
+        var idx = pks.indexOf(modalEl.id.replace('modalLlamada', ''));
+        var prev = modalEl.querySelector('[data-nav="prev"]');
+        var next = modalEl.querySelector('[data-nav="next"]');
+        if (prev) prev.disabled = idx <= 0;
+        if (next) next.disabled = idx < 0 || idx >= pks.length - 1;
+    }
+
+    document.addEventListener('show.bs.modal', function (e) {
+        cargarDetalle(e.target);
+        pintarNav(e.target);
+    });
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-nav]');
+        if (!btn || btn.disabled) return;
+        var modalEl = btn.closest('.modal');
+        if (!modalEl) return;
+        var pks = pksDeModal(modalEl);
+        var idx = pks.indexOf(modalEl.id.replace('modalLlamada', ''));
+        var nextIdx = btn.dataset.nav === 'next' ? idx + 1 : idx - 1;
+        if (nextIdx < 0 || nextIdx >= pks.length) return;
+        var nextEl = document.getElementById('modalLlamada' + pks[nextIdx]);
+        if (!nextEl) return;
+        modalEl.addEventListener('hidden.bs.modal', function handler() {
+            modalEl.removeEventListener('hidden.bs.modal', handler);
+            bootstrap.Modal.getOrCreateInstance(nextEl).show();
+        });
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    });
+})();
+</script>
+{% endblock %}

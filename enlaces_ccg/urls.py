@@ -289,6 +289,36 @@ urlpatterns = [
         name="revision_tickets",
     ),
     path(
+        "revisiones/tickets/<int:pk>/detalle/",
+        views.revision_ticket_detalle,
+        name="revision_ticket_detalle",
+    ),
+    path(
+        "revisiones/tickets/<int:pk>/corregir/",
+        views.revision_ticket_corregir,
+        name="revision_ticket_corregir",
+    ),
+    path(
+        "revisiones/tickets/sincronizar/",
+        views.revision_ticket_sincronizar,
+        name="revision_ticket_sincronizar",
+    ),
+    path(
+        "revisiones/atencion-llamadas/",
+        views.atencion_llamadas,
+        name="atencion_llamadas",
+    ),
+    path(
+        "revisiones/atencion-llamadas/<int:pk>/guardar/",
+        views.atencion_llamada_guardar,
+        name="atencion_llamada_guardar",
+    ),
+    path(
+        "revisiones/atencion-llamadas/<int:pk>/detalle/",
+        views.atencion_llamada_detalle,
+        name="atencion_llamada_detalle",
+    ),
+    path(
         "revisiones/cierre-operador/",
         views.cierre_operador,
         name="cierre_operador",

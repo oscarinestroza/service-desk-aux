@@ -676,6 +676,14 @@
                 </a>
             </li>
             {% endif %}
+            {% if 'atencion_llamadas' in modulos_visibles %}
+            <li>
+                <a href="{% url 'enlaces_ccg:atencion_llamadas' %}"
+                   class="{% if request.resolver_match.url_name == 'atencion_llamadas' %}active{% endif %}">
+                    <i class="fas fa-phone"></i> Atención de Llamadas
+                </a>
+            </li>
+            {% endif %}
             {% if 'cierre_operador' in modulos_visibles %}
             <li>
                 <a href="{% url 'enlaces_ccg:cierre_operador' %}"

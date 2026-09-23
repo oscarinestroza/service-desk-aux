@@ -209,6 +209,8 @@ VISTAS = [
      "seccion": CAP_IMPORTAR, "ver": (CAP_IMPORTAR,)},
     {"clave": "revision_tickets", "etiqueta": "Revisión de Tickets", "icono": "fas fa-clipboard-check",
      "seccion": CAP_REVISIONES, "ver": (CAP_REVISIONES,)},
+    {"clave": "atencion_llamadas", "etiqueta": "Atención de Llamadas", "icono": "fas fa-phone",
+     "seccion": CAP_REVISIONES, "ver": (CAP_REVISIONES,)},
     {"clave": "cierre_operador", "etiqueta": "Cierre de Operador", "icono": "fas fa-lock",
      "seccion": CAP_REVISIONES, "ver": (CAP_REVISIONES,)},
     {"clave": "comentarios_operador", "etiqueta": "Comentarios de Operador", "icono": "fas fa-comments",

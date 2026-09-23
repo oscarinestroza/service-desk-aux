@@ -1180,8 +1180,342 @@ def importar_deductivas(request):
 
 @requiere(CAP_REVISIONES)
 def revision_tickets(request):
-    """Vista de Revisión de Tickets (en construcción)."""
-    return render(request, "enlaces_ccg/revision_tickets.html")
+    """Revisión de la creación de tickets según los criterios de recepción.
+
+    Muestra (por mes) los tickets que incumplen los criterios y permite al
+    operador corregir la recepción localmente o marcar un cambio en el SIG.
+    """
+    from django.contrib.auth.models import Group
+
+    from .models import RevisionTicket, Ticket
+    from .revision_tickets import (
+        diagnosticos_recepcion,
+        formatear_diferencia,
+        puede_editar_revision,
+        rango_mes,
+        reconciliar,
+        tickets_detectados,
+    )
+    from .roles import ROL_OPERADOR
+
+    mes = request.GET.get("mes", "actual")
+    if mes not in ("actual", "pasado"):
+        mes = "actual"
+    generado = request.GET.get("generado") == "1"
+
+    # Los "Validación SIG" que el SIG ya actualizó pasan a "Corregido".
+    reconciliar(mes)
+
+    inicio, fin = rango_mes(mes)
+    revisiones = {
+        rev.ticket_id: rev
+        for rev in RevisionTicket.objects.filter(
+            ticket__fecha__gte=inicio, ticket__fecha__lt=fin
+        ).select_related("ticket", "responsable_creacion")
+    }
+
+    def fila(ticket, revision):
+        return {
+            "ticket": ticket,
+            "revision": revision,
+            "diferencia": formatear_diferencia(
+                ticket.diferencia_recepcion_apertura
+            ),
+            "diagnosticos": diagnosticos_recepcion(ticket),
+            "puede_editar": puede_editar_revision(request.user, revision),
+        }
+
+    en_observacion = []
+    if generado:
+        for t in tickets_detectados(mes):
+            rev = revisiones.get(t.pk)
+            if rev is not None and rev.estado in (
+                RevisionTicket.ESTADO_VALIDACION_SIG,
+                RevisionTicket.ESTADO_CORREGIDO,
+            ):
+                continue
+            en_observacion.append(fila(t, rev))
+
+    def filas_estado(estado):
+        filas = [
+            fila(rev.ticket, rev)
+            for rev in revisiones.values()
+            if rev.estado == estado
+        ]
+        filas.sort(key=lambda f: f["ticket"].fecha or timezone.now(), reverse=True)
+        return filas
+
+    validacion_sig = filas_estado(RevisionTicket.ESTADO_VALIDACION_SIG)
+    corregidos = filas_estado(RevisionTicket.ESTADO_CORREGIDO)
+
+    grupo_operador = Group.objects.filter(name=ROL_OPERADOR).first()
+    responsables = (
+        grupo_operador.user_set.filter(is_active=True).order_by(
+            "first_name", "last_name", "username"
+        )
+        if grupo_operador
+        else []
+    )
+
+    return render(
+        request,
+        "enlaces_ccg/revision_tickets.html",
+        {
+            "mes": mes,
+            "generado": generado,
+            "en_observacion": en_observacion,
+            "validacion_sig": validacion_sig,
+            "corregidos": corregidos,
+            "n_en_observacion": len(en_observacion),
+            "n_validacion_sig": len(validacion_sig),
+            "n_corregidos": len(corregidos),
+            "responsables": responsables,
+            "tipos_recepcion": [
+                Ticket.TIPO_RECEPCION_AUTOMATICA,
+                Ticket.TIPO_RECEPCION_CORREO,
+                Ticket.TIPO_RECEPCION_TELEFONO,
+            ],
+        },
+    )
+
+
+@login_required
+@require_POST
+@requiere(CAP_REVISIONES)
+def revision_ticket_corregir(request, pk):
+    """Guarda la revisión de recepción de un ticket.
+
+    Si se marca «Cambio en SIG» el ticket queda en validación SIG (la apertura
+    se corrige en el SIG, sin override local); si no, se guarda como corrección
+    local del tipo/hora de recepción.
+    """
+    from django.contrib.auth import get_user_model
+
+    from .models import RevisionTicket, parsear_fecha_hora_local
+    from .revision_tickets import puede_editar_revision, recepcion_resuelta_vals
+
+    ticket = get_object_or_404(Ticket, pk=pk)
+    tipo = request.POST.get("tipo_recepcion", "").strip()
+    fecha_txt = request.POST.get("fecha_recepcion", "").strip()
+    responsable_id = request.POST.get("responsable_creacion", "").strip()
+    observaciones = request.POST.get("observaciones_creacion", "").strip()
+    cambio_sig = request.POST.get("cambio_sig") == "1"
+
+    revision = RevisionTicket.objects.filter(ticket=ticket).first()
+    if not puede_editar_revision(request.user, revision):
+        messages.error(
+            request,
+            "Solo el usuario que corrigió el ticket o un administrador puede "
+            "editar una revisión ya corregida.",
+        )
+        mes = request.POST.get("mes", "actual")
+        destino = reverse("enlaces_ccg:revision_tickets")
+        return redirect(f"{destino}?mes={mes}&generado=1")
+    if revision is None:
+        revision = RevisionTicket(ticket=ticket)
+    revision.observaciones_creacion = observaciones
+    revision.responsable_creacion = (
+        get_user_model().objects.filter(pk=responsable_id).first()
+        if responsable_id.isdigit()
+        else None
+    )
+    if cambio_sig:
+        # Sin override local: la apertura se corrige en el SIG.
+        revision.tipo_recepcion_corregido = ""
+        revision.fecha_recepcion_corregida = None
+        # Guarda la apertura actual para detectar cuándo el SIG la cambie.
+        revision.apertura_antes = ticket.fecha
+        revision.estado = RevisionTicket.ESTADO_VALIDACION_SIG
+        revision.cambio_sig_por = request.user
+        revision.cambio_sig_en = timezone.now()
+        aviso = "marcado para cambio en el SIG."
+    else:
+        fecha_corr = parsear_fecha_hora_local(fecha_txt) if fecha_txt else None
+        revision.tipo_recepcion_corregido = tipo
+        revision.fecha_recepcion_corregida = fecha_corr
+        revision.apertura_antes = None
+        if recepcion_resuelta_vals(tipo, ticket.fecha, fecha_corr):
+            # La corrección deja el ticket dentro de los criterios.
+            revision.estado = RevisionTicket.ESTADO_CORREGIDO
+            revision.corregido_por = request.user
+            revision.corregido_en = timezone.now()
+            aviso = "corregido."
+        else:
+            # Aún no cumple los criterios: queda pendiente de revisión.
+            revision.estado = RevisionTicket.ESTADO_EN_OBSERVACION
+            revision.corregido_por = None
+            revision.corregido_en = None
+            aviso = "guardado en observación."
+        aviso = "corregido."
+    revision.save()
+    messages.success(request, f"Ticket {ticket.numero_display} {aviso}")
+
+    mes = request.POST.get("mes", "actual")
+    destino = reverse("enlaces_ccg:revision_tickets")
+    return redirect(f"{destino}?mes={mes}&generado=1")
+
+
+@requiere(CAP_REVISIONES)
+def revision_ticket_detalle(request, pk):
+    """Detalle del ticket (HTML) para el modal de Revisión de Tickets (AJAX)."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    return JsonResponse(
+        {
+            "html": render_to_string(
+                "enlaces_ccg/_modal_ticket.html",
+                {"ticket": ticket, "ocultar_cierre": True, "ocultar_encabezado": True},
+                request=request,
+            )
+        }
+    )
+
+
+@login_required
+@require_POST
+@requiere(CAP_REVISIONES)
+def revision_ticket_sincronizar(request):
+    """Encola una sincronización (rápida) de tickets desde la pantalla de revisión."""
+    from .sig_sync.tickets import MODO_SYNC_PARCIAL, sincronizar_tickets_task
+
+    sincronizar_tickets_task.delay(modo=MODO_SYNC_PARCIAL)
+    messages.success(
+        request,
+        "Sincronización de tickets encolada. Al terminar, los tickets en "
+        "'Validación SIG' que ya se actualizaron pasarán a 'Corregidos'.",
+    )
+    mes = request.POST.get("mes", "actual")
+    destino = reverse("enlaces_ccg:revision_tickets")
+    return redirect(f"{destino}?mes={mes}&generado=1")
+
+
+@requiere(CAP_REVISIONES)
+def atencion_llamadas(request):
+    """Atención de llamadas telefónicas (responsable de creación y timbres)."""
+    from django.contrib.auth.models import Group
+
+    from .atencion_llamadas import tickets_telefonicos
+    from .models import AtencionLlamada
+    from .revision_tickets import formatear_diferencia, rango_mes
+    from .roles import ROL_OPERADOR
+
+    mes = request.GET.get("mes", "actual")
+    if mes not in ("actual", "pasado"):
+        mes = "actual"
+    generado = request.GET.get("generado") == "1"
+
+    inicio, fin = rango_mes(mes)
+    registros = {
+        r.ticket_id: r
+        for r in AtencionLlamada.objects.filter(
+            ticket__fecha__gte=inicio, ticket__fecha__lt=fin
+        ).select_related("ticket", "responsable_creacion")
+    }
+
+    def fila(ticket, registro):
+        return {
+            "ticket": ticket,
+            "registro": registro,
+            "diferencia": formatear_diferencia(
+                ticket.diferencia_recepcion_apertura
+            ),
+        }
+
+    pendientes = []
+    if generado:
+        for t in tickets_telefonicos(mes):
+            reg = registros.get(t.pk)
+            if reg is not None and reg.estado == AtencionLlamada.ESTADO_ASIGNADO:
+                continue
+            pendientes.append(fila(t, reg))
+
+    asignados = [
+        fila(reg.ticket, reg)
+        for reg in registros.values()
+        if reg.estado == AtencionLlamada.ESTADO_ASIGNADO
+    ]
+    asignados.sort(key=lambda f: f["ticket"].fecha or timezone.now(), reverse=True)
+
+    grupo_operador = Group.objects.filter(name=ROL_OPERADOR).first()
+    responsables = (
+        grupo_operador.user_set.filter(is_active=True).order_by(
+            "first_name", "last_name", "username"
+        )
+        if grupo_operador
+        else []
+    )
+
+    return render(
+        request,
+        "enlaces_ccg/atencion_llamadas.html",
+        {
+            "mes": mes,
+            "generado": generado,
+            "pendientes": pendientes,
+            "asignados": asignados,
+            "n_pendientes": len(pendientes),
+            "n_asignados": len(asignados),
+            "responsables": responsables,
+        },
+    )
+
+
+@login_required
+@require_POST
+@requiere(CAP_REVISIONES)
+def atencion_llamada_guardar(request, pk):
+    """Asigna responsable de creación y timbres a un ticket telefónico."""
+    from django.contrib.auth import get_user_model
+
+    from .models import AtencionLlamada
+
+    ticket = get_object_or_404(Ticket, pk=pk)
+    responsable_id = request.POST.get("responsable_creacion", "").strip()
+    timbres_txt = request.POST.get("timbres", "").strip()
+
+    mes = request.POST.get("mes", "actual")
+    destino = reverse("enlaces_ccg:atencion_llamadas")
+    volver = redirect(f"{destino}?mes={mes}&generado=1")
+
+    responsable = (
+        get_user_model().objects.filter(pk=responsable_id).first()
+        if responsable_id.isdigit()
+        else None
+    )
+    if responsable is None:
+        messages.error(
+            request,
+            "Debes seleccionar un responsable de creación (no puede ser N/A).",
+        )
+        return volver
+    timbres = int(timbres_txt) if timbres_txt.isdigit() else None
+    if timbres is None or timbres < 1:
+        messages.error(request, "La cantidad de timbres debe ser al menos 1.")
+        return volver
+
+    registro, _ = AtencionLlamada.objects.get_or_create(ticket=ticket)
+    registro.responsable_creacion = responsable
+    registro.timbres = timbres
+    registro.estado = AtencionLlamada.ESTADO_ASIGNADO
+    registro.asignado_por = request.user
+    registro.asignado_en = timezone.now()
+    registro.save()
+    messages.success(request, f"Ticket {ticket.numero_display} asignado.")
+    return volver
+
+
+@requiere(CAP_REVISIONES)
+def atencion_llamada_detalle(request, pk):
+    """Detalle del ticket (HTML) para el modal de Atención de Llamadas (AJAX)."""
+    ticket = get_object_or_404(Ticket, pk=pk)
+    return JsonResponse(
+        {
+            "html": render_to_string(
+                "enlaces_ccg/_modal_ticket.html",
+                {"ticket": ticket, "ocultar_cierre": True, "ocultar_encabezado": True},
+                request=request,
+            )
+        }
+    )
 
 
 @requiere(CAP_REVISIONES)

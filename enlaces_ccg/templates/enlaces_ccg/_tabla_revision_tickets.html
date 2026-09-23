@@ -1,0 +1,218 @@
+{% if filas %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle mb-0">
+        <thead>
+            <tr>
+                <th class="ps-3">Ticket</th>
+                <th>Tipo recepción</th>
+                <th>Hora recepción</th>
+                <th>Hora apertura</th>
+                <th>Diferencia</th>
+                <th>Responsable creación</th>
+                <th>Estado</th>
+                <th class="text-end pe-3">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in filas %}
+            <tr>
+                <td class="ps-3 cell-name">
+                    <a href="#modalRev{{ f.ticket.pk }}" class="text-decoration-none"
+                       data-bs-toggle="modal" data-bs-target="#modalRev{{ f.ticket.pk }}"
+                       title="Revisar">{{ f.ticket.numero_display }}</a>
+                </td>
+                <td>{{ f.ticket.tipo_recepcion_mostrado|default:"—" }}</td>
+                <td nowrap>
+                    {% with fr=f.ticket.fecha_recepcion_mostrada %}
+                    {% if fr %}{{ fr|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                    {% endwith %}
+                </td>
+                <td nowrap>{% if f.ticket.fecha %}{{ f.ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                <td class="ccg-rev-dif">{{ f.diferencia }}</td>
+                <td>
+                    {% if f.revision.responsable_creacion %}
+                    {{ f.revision.responsable_creacion.get_full_name|default:f.revision.responsable_creacion.username }}
+                    {% else %}<span class="text-muted">N/A</span>{% endif %}
+                </td>
+                <td>
+                    {% if f.revision.estado == 'validacion_sig' %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Validación SIG</span>
+                    {% elif f.revision.estado == 'corregido' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Corregido</span>
+                    {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">En observación</span>
+                    {% endif %}
+                </td>
+                <td class="text-end pe-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-revisar"
+                            data-pk="{{ f.ticket.pk }}"
+                            data-bs-toggle="modal" data-bs-target="#modalRev{{ f.ticket.pk }}">
+                        <i class="fas fa-pen me-1"></i>Revisar
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% for f in filas %}
+<div class="modal fade modal-ccg" id="modalRev{{ f.ticket.pk }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-clipboard-check me-2"></i>Revisión del ticket {{ f.ticket.numero_display }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:revision_ticket_corregir' f.ticket.pk %}"
+                  id="formRev{{ f.ticket.pk }}"
+                  data-apertura="{% if f.ticket.fecha %}{{ f.ticket.fecha|date:'Y-m-d' }}T{{ f.ticket.fecha|date:'H:i:s' }}{% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="mes" value="{{ mes }}">
+                <div class="modal-body" style="padding:16px;">
+                    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;"
+                             class="d-flex justify-content-between align-items-center gap-2">
+                            <h6 class="text-uppercase mb-0" style="color:#5a6268;">
+                                <i class="fas fa-pen-to-square me-1"></i>Edición de recepción
+                            </h6>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" name="cambio_sig" value="1"
+                                       id="cambioSig{{ f.ticket.pk }}"
+                                       {% if f.revision.estado == 'validacion_sig' %}checked{% endif %}
+                                       {% if not f.puede_editar %}disabled{% endif %}>
+                                <label class="form-check-label small fw-semibold" for="cambioSig{{ f.ticket.pk }}">
+                                    Cambio en SIG
+                                </label>
+                            </div>
+                        </div>
+                        <div style="padding:12px 14px;">
+                            {% if not f.puede_editar %}
+                            <div class="alert alert-warning small py-2 mb-2">
+                                <i class="fas fa-lock me-1"></i>Solo lectura: esta revisión fue corregida por otro
+                                usuario. Solo quien la corrigió o un administrador puede editarla.
+                            </div>
+                            {% endif %}
+                            <fieldset {% if not f.puede_editar %}disabled{% endif %}>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Responsable de creación</label>
+                                    <select class="form-select form-select-sm" name="responsable_creacion">
+                                        <option value="">N/A</option>
+                                        {% for r in responsables %}
+                                        <option value="{{ r.pk }}" {% if f.revision.responsable_creacion_id == r.pk %}selected{% endif %}>
+                                            {{ r.get_full_name|default:r.username }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Tipo de recepción</label>
+                                    <select class="form-select form-select-sm" name="tipo_recepcion">
+                                        <option value="">— Sin definir —</option>
+                                        {% for tipo in tipos_recepcion %}
+                                        <option value="{{ tipo }}" {% if f.ticket.tipo_recepcion_mostrado == tipo %}selected{% endif %}>{{ tipo }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Hora de recepción</label>
+                                    {% with fr=f.ticket.fecha_recepcion_mostrada|default:f.ticket.fecha ro=f.ticket.fecha_recepcion_mostrada %}
+                                    <input type="datetime-local" class="form-control form-control-sm" name="fecha_recepcion"
+                                           value="{% if fr %}{{ fr|date:'Y-m-d' }}T{{ fr|date:'H:i' }}{% endif %}"
+                                           data-original="{% if ro %}{{ ro|date:'Y-m-d' }}T{{ ro|date:'H:i' }}{% endif %}"
+                                           data-default="{% if fr %}{{ fr|date:'Y-m-d' }}T{{ fr|date:'H:i' }}{% endif %}">
+                                    {% endwith %}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Observaciones de creación</label>
+                                    <textarea class="form-control form-control-sm" name="observaciones_creacion" rows="3">{{ f.revision.observaciones_creacion|default:"" }}</textarea>
+                                </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light border small mb-0">
+                                        <div class="mb-1"><strong>Apertura:</strong>
+                                            {% if f.ticket.fecha %}{{ f.ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+                                            · <strong>Diferencia:</strong> <span class="ccg-rev-diff">{{ f.diferencia }}</span>
+                                        </div>
+                                        <div class="text-muted">
+                                            <strong>Revisado por:</strong>
+                                            {% if f.revision.corregido_por %}
+                                            {{ f.revision.corregido_por.get_full_name|default:f.revision.corregido_por.username }}
+                                            · {{ f.revision.corregido_en|date:"d/m/Y H:i" }}
+                                            {% elif f.revision.cambio_sig_por %}
+                                            {{ f.revision.cambio_sig_por.get_full_name|default:f.revision.cambio_sig_por.username }}
+                                            · {{ f.revision.cambio_sig_en|date:"d/m/Y H:i" }}
+                                            {% else %}—{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            </fieldset>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+                            <h6 class="text-uppercase mb-0" style="color:#5a6268;">
+                                <i class="fas fa-stethoscope me-1"></i>Posible Diagnóstico
+                            </h6>
+                        </div>
+                        <div style="padding:12px 14px;">
+                            {% if f.diagnosticos %}
+                            <ul class="mb-0 ps-3 small">
+                                {% for d in f.diagnosticos %}
+                                <li class="mb-1">{{ d }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-muted small">Sin observaciones.</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="ccg-rev-detalle"
+                         data-url="{% url 'enlaces_ccg:revision_ticket_detalle' f.ticket.pk %}">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-nav="prev"
+                                title="Registro anterior">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-nav="next"
+                                title="Registro siguiente">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>Cancelar
+                        </button>
+                        <a href="{% url 'enlaces_ccg:ticket_detalle' f.ticket.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-up-right-from-square me-1"></i>Ir al ticket
+                        </a>
+                        {% if f.puede_editar %}
+                        <button type="submit" class="btn btn-sm btn-success">
+                            <i class="fas fa-save me-1"></i>Guardar
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center text-muted py-5">
+        <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>{{ vacio }}
+    </div>
+</div>
+{% endif %}

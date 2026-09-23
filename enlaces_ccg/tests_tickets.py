@@ -14,6 +14,7 @@ from django.utils import timezone
 from unittest import mock
 
 from .models import (
+    AtencionLlamada,
     ConfiguracionTickets,
     Edificio,
     EnlaceAutorizado,
@@ -22,13 +23,14 @@ from .models import (
     Nivel,
     PermisoGrupo,
     ResponsableAtencion,
+    RevisionTicket,
     Servicio,
     Ticket,
     TicketCierre,
     TicketLog,
     VistaGuardada,
 )
-from .roles import CAP_DIRECTORIO, CAP_EDITAR
+from .roles import CAP_DIRECTORIO, CAP_EDITAR, CAP_REVISIONES
 from .sig_sync.tickets import (
     MODO_SYNC_COMPLETO,
     MODO_SYNC_PARCIAL,
@@ -1916,3 +1918,580 @@ class ModulosGrupoVisibilidadTests(TestCase):
         )
         permiso = PermisoGrupo.objects.get(grupo=grupo)
         self.assertEqual(sorted(permiso.modulos), ["edificios", "tickets"])
+
+
+class RevisionTicketsTests(TestCase):
+    """Detección y flujo del módulo Revisión de Tickets."""
+
+    def setUp(self):
+        self._seq = 0
+
+    def _ticket(self, tipo, apertura, recepcion=None):
+        self._seq += 1
+        raw = {
+            "TipoRecepcion": tipo,
+            "Fecha_TipoRecepcion": (
+                timezone.localtime(recepcion).strftime("%Y-%m-%d %H:%M:%S")
+                if recepcion
+                else ""
+            ),
+        }
+        return Ticket.objects.create(
+            ticket_id=f"REV{self._seq}",
+            numero_display=f"SS26-{self._seq:04d}",
+            fecha=apertura,
+            raw_data=raw,
+        )
+
+    def _usuario_revisiones(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+
+        usuario = get_user_model().objects.create_user(
+            "rev.user", "rev@test.local", "Clave123!"
+        )
+        grupo = Group.objects.create(name="G-rev")
+        PermisoGrupo.objects.create(grupo=grupo, capacidades=[CAP_REVISIONES])
+        usuario.groups.add(grupo)
+        return usuario
+
+    def test_automatica_siempre_es_anomalia(self):
+        t = self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, timezone.now())
+        self.assertTrue(t.anomalia_recepcion())
+
+    def test_correo_mas_de_2h(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        self.assertTrue(t.anomalia_recepcion())
+        t2 = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=1)
+        )
+        self.assertFalse(t2.anomalia_recepcion())
+
+    def test_telefono_mas_de_5min(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        self.assertTrue(t.anomalia_recepcion())
+        t2 = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=3)
+        )
+        self.assertFalse(t2.anomalia_recepcion())
+
+    def test_diferencia_negativa_es_anomalia(self):
+        from .revision_tickets import diagnosticos_recepcion, tickets_detectados
+
+        ahora = timezone.now()
+        # Recepción posterior a la apertura.
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora + timedelta(hours=1)
+        )
+        self.assertTrue(t.anomalia_recepcion())
+        self.assertIn(t.pk, {x.pk for x in tickets_detectados("actual")})
+        diag = diagnosticos_recepcion(t)
+        self.assertTrue(
+            any("posterior a la apertura" in d for d in diag), diag
+        )
+
+    def test_diagnosticos_automatica_y_umbral(self):
+        from .revision_tickets import diagnosticos_recepcion
+
+        ahora = timezone.now()
+        auto = self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, ahora, None)
+        diag_auto = diagnosticos_recepcion(auto)
+        self.assertTrue(
+            any("sin indicar el medio" in d for d in diag_auto), diag_auto
+        )
+        correo = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        diag_correo = diagnosticos_recepcion(correo)
+        self.assertTrue(
+            any("superó el rango establecido" in d for d in diag_correo),
+            diag_correo,
+        )
+
+    def test_override_local_protegido(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        self.assertTrue(t.anomalia_recepcion())
+        rev = RevisionTicket.objects.create(
+            ticket=t,
+            tipo_recepcion_corregido=Ticket.TIPO_RECEPCION_TELEFONO,
+            fecha_recepcion_corregida=ahora - timedelta(minutes=2),
+            estado=RevisionTicket.ESTADO_CORREGIDO,
+        )
+        t_fresh = Ticket.objects.select_related("revision").get(pk=t.pk)
+        self.assertEqual(
+            t_fresh.tipo_recepcion_mostrado, Ticket.TIPO_RECEPCION_TELEFONO
+        )
+        self.assertFalse(t_fresh.anomalia_recepcion())
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_CORREGIDO)
+
+    def test_cambio_sig_se_reconcilia(self):
+        from .revision_tickets import reconciliar
+
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        RevisionTicket.objects.create(
+            ticket=t,
+            estado=RevisionTicket.ESTADO_VALIDACION_SIG,
+            apertura_antes=t.fecha,
+        )
+        # Sin cambios en el SIG: permanece en Validación SIG.
+        self.assertEqual(reconciliar("actual"), 0)
+        self.assertEqual(
+            RevisionTicket.objects.get(ticket=t).estado,
+            RevisionTicket.ESTADO_VALIDACION_SIG,
+        )
+        # El SIG corrige la apertura.
+        t.fecha = t.fecha_recepcion_mostrada + timedelta(minutes=30)
+        t.save(update_fields=["fecha"])
+        n = reconciliar("actual")
+        self.assertEqual(n, 1)
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_CORREGIDO)
+
+    def test_validacion_sig_sin_apertura_antes_no_se_cierra(self):
+        from .revision_tickets import reconciliar
+
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        RevisionTicket.objects.create(
+            ticket=t, estado=RevisionTicket.ESTADO_VALIDACION_SIG
+        )
+        # Registros previos sin `apertura_antes` se inicializan y no se cierran.
+        self.assertEqual(reconciliar("actual"), 0)
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_VALIDACION_SIG)
+        self.assertIsNotNone(rev.apertura_antes)
+
+    def test_no_cierra_si_falta_hora_recepcion(self):
+        from .revision_tickets import reconciliar
+
+        ahora = timezone.now()
+        # Correo sin hora de recepción.
+        t = self._ticket(Ticket.TIPO_RECEPCION_CORREO, ahora, None)
+        RevisionTicket.objects.create(
+            ticket=t,
+            estado=RevisionTicket.ESTADO_VALIDACION_SIG,
+            apertura_antes=t.fecha,
+        )
+        t.fecha = t.fecha + timedelta(hours=1)
+        t.save(update_fields=["fecha"])
+        self.assertEqual(reconciliar("actual"), 0)
+        self.assertEqual(
+            RevisionTicket.objects.get(ticket=t).estado,
+            RevisionTicket.ESTADO_VALIDACION_SIG,
+        )
+
+    def test_no_cierra_si_es_automatica(self):
+        from .revision_tickets import reconciliar
+
+        ahora = timezone.now()
+        t = self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, ahora, None)
+        RevisionTicket.objects.create(
+            ticket=t,
+            estado=RevisionTicket.ESTADO_VALIDACION_SIG,
+            apertura_antes=t.fecha,
+        )
+        t.fecha = t.fecha + timedelta(hours=1)
+        t.save(update_fields=["fecha"])
+        self.assertEqual(reconciliar("actual"), 0)
+        self.assertEqual(
+            RevisionTicket.objects.get(ticket=t).estado,
+            RevisionTicket.ESTADO_VALIDACION_SIG,
+        )
+
+    def test_filtro_mes_excluye_mes_pasado(self):
+        from .revision_tickets import tickets_detectados
+
+        # Ticket automático del mes pasado: no debe salir en el mes actual.
+        pasado = timezone.localtime().replace(day=1, hour=10) - timedelta(days=1)
+        self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, pasado)
+        actuales = tickets_detectados("actual")
+        self.assertEqual(len(actuales), 0)
+
+    def test_vista_generar_y_corregir(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+
+        html = self.client.get(
+            reverse("enlaces_ccg:revision_tickets"),
+            {"mes": "actual", "generado": "1"},
+        ).content.decode("utf-8", "replace")
+        self.assertIn(t.numero_display, html)
+
+        resp = self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_TELEFONO,
+                "fecha_recepcion": timezone.localtime(ahora).strftime("%Y-%m-%dT%H:%M"),
+                "responsable_creacion": "",
+                "observaciones_creacion": "Revisado",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_CORREGIDO)
+        self.assertEqual(
+            rev.tipo_recepcion_corregido, Ticket.TIPO_RECEPCION_TELEFONO
+        )
+        self.assertEqual(rev.observaciones_creacion, "Revisado")
+
+    def test_guardar_sin_resolver_queda_en_observacion(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        # Sin "Cambio en SIG" y con la hora de recepción vacía: no resuelve.
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_CORREO,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "Sin recepción",
+            },
+        )
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_EN_OBSERVACION)
+        self.assertIsNone(rev.corregido_por)
+
+    def test_quitar_cambio_sig_sin_resolver_vuelve_a_observacion(self):
+        ahora = timezone.now()
+        t = self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, ahora, None)
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        # 1) Marca cambio en SIG.
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {"mes": "actual", "responsable_creacion": "",
+             "observaciones_creacion": "", "cambio_sig": "1"},
+        )
+        self.assertEqual(
+            RevisionTicket.objects.get(ticket=t).estado,
+            RevisionTicket.ESTADO_VALIDACION_SIG,
+        )
+        # 2) Quita el toggle, deja la recepción vacía y guarda.
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_AUTOMATICA,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "",
+            },
+        )
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_EN_OBSERVACION)
+
+    def test_cambio_sig_checkbox(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        resp = self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_CORREO,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "Cambio en SIG",
+                "cambio_sig": "1",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_VALIDACION_SIG)
+        # Sin override local: la apertura se corrige en el SIG.
+        self.assertEqual(rev.tipo_recepcion_corregido, "")
+        self.assertIsNone(rev.fecha_recepcion_corregida)
+
+    def test_solo_corrector_o_admin_edita_corregido(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+
+        from .revision_tickets import puede_editar_revision
+
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        autor = self._usuario_revisiones()
+        otro = get_user_model().objects.create_user(
+            "rev.otro", "otro@test.local", "Clave123!"
+        )
+        grupo_otro = Group.objects.create(name="G-rev-otro")
+        PermisoGrupo.objects.create(grupo=grupo_otro, capacidades=[CAP_REVISIONES])
+        otro.groups.add(grupo_otro)
+
+        admin = get_user_model().objects.create_user(
+            "rev.admin", "admin@test.local", "Clave123!"
+        )
+        admin.groups.add(Group.objects.get_or_create(name="Administrador")[0])
+
+        # El autor corrige (con hora de recepción válida).
+        self.client.force_login(autor)
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_TELEFONO,
+                "fecha_recepcion": timezone.localtime(ahora).strftime("%Y-%m-%dT%H:%M"),
+                "responsable_creacion": "",
+                "observaciones_creacion": "ok",
+            },
+        )
+        rev = RevisionTicket.objects.get(ticket=t)
+        self.assertEqual(rev.estado, RevisionTicket.ESTADO_CORREGIDO)
+        self.assertEqual(rev.corregido_por, autor)
+        self.assertTrue(puede_editar_revision(autor, rev))
+        self.assertTrue(puede_editar_revision(admin, rev))
+        self.assertFalse(puede_editar_revision(otro, rev))
+
+        # Otro usuario intenta editar: se rechaza y no cambia nada.
+        self.client.force_login(otro)
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_AUTOMATICA,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "intento",
+            },
+        )
+        rev.refresh_from_db()
+        self.assertEqual(
+            rev.tipo_recepcion_corregido, Ticket.TIPO_RECEPCION_TELEFONO
+        )
+        self.assertEqual(rev.observaciones_creacion, "ok")
+
+        # El administrador sí puede.
+        self.client.force_login(admin)
+        self.client.post(
+            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_AUTOMATICA,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "admin",
+            },
+        )
+        rev.refresh_from_db()
+        self.assertEqual(rev.observaciones_creacion, "admin")
+
+    def test_responsable_opciones_grupo_operador(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+
+        from .roles import ROL_OPERADOR
+
+        grupo, _ = Group.objects.get_or_create(name=ROL_OPERADOR)
+        operador = get_user_model().objects.create_user(
+            "operador.test", "op@test.local", "Clave123!"
+        )
+        operador.groups.add(grupo)
+
+        ahora = timezone.now()
+        self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        resp = self.client.get(
+            reverse("enlaces_ccg:revision_tickets"),
+            {"mes": "actual", "generado": "1"},
+        )
+        self.assertIn(operador.pk, [u.pk for u in resp.context["responsables"]])
+
+
+class AtencionLlamadasTests(TestCase):
+    """Módulo Atención de Llamadas (tickets telefónicos)."""
+
+    def setUp(self):
+        self._seq = 0
+        self.servicio = Servicio.objects.create(nombre="Servicio Test", activo=True)
+
+    def _ticket(self, tipo, apertura, recepcion=None, servicio=None):
+        self._seq += 1
+        raw = {
+            "TipoRecepcion": tipo,
+            "Fecha_TipoRecepcion": (
+                timezone.localtime(recepcion).strftime("%Y-%m-%d %H:%M:%S")
+                if recepcion
+                else ""
+            ),
+        }
+        return Ticket.objects.create(
+            ticket_id=f"LLA{self._seq}",
+            numero_display=f"SS26-L{self._seq:04d}",
+            fecha=apertura,
+            servicio=servicio if servicio is not None else self.servicio,
+            raw_data=raw,
+        )
+
+    def _usuario_revisiones(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+
+        usuario = get_user_model().objects.create_user(
+            "lla.user", "lla@test.local", "Clave123!"
+        )
+        grupo = Group.objects.create(name="G-lla")
+        PermisoGrupo.objects.create(grupo=grupo, capacidades=[CAP_REVISIONES])
+        usuario.groups.add(grupo)
+        return usuario
+
+    def test_deteccion_incluye_corregidos_a_telefono(self):
+        from .atencion_llamadas import tickets_telefonicos
+
+        ahora = timezone.now()
+        tel = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        correo = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        # Corregido en Revisión de Tickets a "Vía telefónica".
+        RevisionTicket.objects.create(
+            ticket=correo,
+            estado=RevisionTicket.ESTADO_CORREGIDO,
+            tipo_recepcion_corregido=Ticket.TIPO_RECEPCION_TELEFONO,
+        )
+        otro = self._ticket(
+            Ticket.TIPO_RECEPCION_CORREO, ahora, ahora - timedelta(hours=3)
+        )
+        ids = {t.pk for t in tickets_telefonicos("actual")}
+        self.assertIn(tel.pk, ids)
+        self.assertIn(correo.pk, ids)  # corregido a telefónico
+        self.assertNotIn(otro.pk, ids)
+
+    def test_filtro_servicio_activo_y_no_solicitud_adicional(self):
+        from .atencion_llamadas import tickets_telefonicos
+
+        ahora = timezone.now()
+        inactivo = Servicio.objects.create(nombre="Servicio Inactivo", activo=False)
+        adicional = Servicio.objects.create(
+            nombre="Servicio Adicional",
+            activo=True,
+            descripcion_contractual="solicitud_adicional",
+        )
+        ok = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        inact = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10),
+            servicio=inactivo,
+        )
+        adic = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10),
+            servicio=adicional,
+        )
+        ids = {t.pk for t in tickets_telefonicos("actual")}
+        self.assertIn(ok.pk, ids)
+        self.assertNotIn(inact.pk, ids)
+        self.assertNotIn(adic.pk, ids)
+
+    def test_guardar_asigna_responsable_y_timbres(self):
+        from django.contrib.auth import get_user_model
+
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        responsable = get_user_model().objects.create_user(
+            "lla.resp", "resp@test.local", "Clave123!"
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        resp = self.client.post(
+            reverse("enlaces_ccg:atencion_llamada_guardar", args=[t.pk]),
+            {
+                "mes": "actual",
+                "responsable_creacion": str(responsable.pk),
+                "timbres": "3",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        reg = AtencionLlamada.objects.get(ticket=t)
+        self.assertEqual(reg.estado, AtencionLlamada.ESTADO_ASIGNADO)
+        self.assertEqual(reg.timbres, 3)
+        self.assertEqual(reg.responsable_creacion, responsable)
+        self.assertEqual(reg.asignado_por, usuario)
+
+    def test_no_guarda_sin_responsable_o_con_timbres_cero(self):
+        from django.contrib.auth import get_user_model
+
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        responsable = get_user_model().objects.create_user(
+            "lla.resp2", "resp2@test.local", "Clave123!"
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        url = reverse("enlaces_ccg:atencion_llamada_guardar", args=[t.pk])
+
+        # Sin responsable (N/A).
+        self.client.post(
+            url, {"mes": "actual", "responsable_creacion": "", "timbres": "2"}
+        )
+        self.assertFalse(AtencionLlamada.objects.filter(ticket=t).exists())
+
+        # Timbres en 0.
+        self.client.post(
+            url,
+            {"mes": "actual", "responsable_creacion": str(responsable.pk), "timbres": "0"},
+        )
+        self.assertFalse(AtencionLlamada.objects.filter(ticket=t).exists())
+
+    def test_vista_pestanas(self):
+        ahora = timezone.now()
+        t = self._ticket(
+            Ticket.TIPO_RECEPCION_TELEFONO, ahora, ahora - timedelta(minutes=10)
+        )
+        usuario = self._usuario_revisiones()
+        self.client.force_login(usuario)
+        resp = self.client.get(
+            reverse("enlaces_ccg:atencion_llamadas"),
+            {"mes": "actual", "generado": "1"},
+        )
+        self.assertEqual(len(resp.context["pendientes"]), 1)
+        self.assertEqual(len(resp.context["asignados"]), 0)
+        # Tras asignar, pasa a la pestaña de asignados.
+        AtencionLlamada.objects.create(
+            ticket=t,
+            estado=AtencionLlamada.ESTADO_ASIGNADO,
+            timbres=2,
+        )
+        resp2 = self.client.get(
+            reverse("enlaces_ccg:atencion_llamadas"),
+            {"mes": "actual", "generado": "1"},
+        )
+        self.assertEqual(len(resp2.context["pendientes"]), 0)
+        self.assertEqual(len(resp2.context["asignados"]), 1)

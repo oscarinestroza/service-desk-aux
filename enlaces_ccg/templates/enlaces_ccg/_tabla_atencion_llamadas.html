@@ -1,0 +1,155 @@
+{% if filas %}
+<div class="ccg-table-wrap">
+    <table class="table align-middle mb-0">
+        <thead>
+            <tr>
+                <th class="ps-3">Ticket</th>
+                <th>Tipo recepción</th>
+                <th>Hora recepción</th>
+                <th>Hora apertura</th>
+                <th>Responsable creación</th>
+                <th>Timbres</th>
+                <th>Estado</th>
+                <th class="text-end pe-3">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in filas %}
+            <tr>
+                <td class="ps-3 cell-name">
+                    <a href="#modalLlamada{{ f.ticket.pk }}" class="text-decoration-none"
+                       data-bs-toggle="modal" data-bs-target="#modalLlamada{{ f.ticket.pk }}"
+                       title="Atender">{{ f.ticket.numero_display }}</a>
+                </td>
+                <td>{{ f.ticket.tipo_recepcion_mostrado|default:"—" }}</td>
+                <td nowrap>
+                    {% with fr=f.ticket.fecha_recepcion_mostrada %}
+                    {% if fr %}{{ fr|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                    {% endwith %}
+                </td>
+                <td nowrap>{% if f.ticket.fecha %}{{ f.ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if f.registro.responsable_creacion %}
+                    {{ f.registro.responsable_creacion.get_full_name|default:f.registro.responsable_creacion.username }}
+                    {% else %}<span class="text-muted">N/A</span>{% endif %}
+                </td>
+                <td>
+                    {% if f.registro.timbres is not None %}{{ f.registro.timbres }}
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                    {% if f.registro.estado == 'asignado' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">Asignado</span>
+                    {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Pendiente</span>
+                    {% endif %}
+                </td>
+                <td class="text-end pe-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-revisar"
+                            data-pk="{{ f.ticket.pk }}"
+                            data-bs-toggle="modal" data-bs-target="#modalLlamada{{ f.ticket.pk }}">
+                        <i class="fas fa-pen me-1"></i>Atender
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% for f in filas %}
+<div class="modal fade modal-ccg" id="modalLlamada{{ f.ticket.pk }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background:#f2f3f5;border:1px solid #d5d8dc;">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-phone me-2"></i>Atención del ticket {{ f.ticket.numero_display }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% url 'enlaces_ccg:atencion_llamada_guardar' f.ticket.pk %}"
+                  id="formLlamada{{ f.ticket.pk }}">
+                {% csrf_token %}
+                <input type="hidden" name="mes" value="{{ mes }}">
+                <div class="modal-body" style="padding:16px;">
+                    <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+                        <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
+                            <h6 class="text-uppercase mb-0" style="color:#5a6268;">
+                                <i class="fas fa-phone me-1"></i>Datos de la llamada
+                            </h6>
+                        </div>
+                        <div style="padding:12px 14px;">
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label class="form-label">Responsable de creación</label>
+                                    <select class="form-select form-select-sm" name="responsable_creacion" required>
+                                        <option value="">N/A</option>
+                                        {% for r in responsables %}
+                                        <option value="{{ r.pk }}" {% if f.registro.responsable_creacion_id == r.pk %}selected{% endif %}>
+                                            {{ r.get_full_name|default:r.username }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Timbres antes de contestar</label>
+                                    <input type="number" min="1" required class="form-control form-control-sm" name="timbres"
+                                           value="{% if f.registro.timbres is not None %}{{ f.registro.timbres }}{% else %}1{% endif %}">
+                                </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light border small mb-0">
+                                        <div class="text-muted">
+                                            <strong>Asignado por:</strong>
+                                            {% if f.registro.asignado_por %}
+                                            {{ f.registro.asignado_por.get_full_name|default:f.registro.asignado_por.username }}
+                                            · {{ f.registro.asignado_en|date:"d/m/Y H:i" }}
+                                            {% else %}—{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ccg-rev-detalle"
+                         data-url="{% url 'enlaces_ccg:atencion_llamada_detalle' f.ticket.pk %}">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-nav="prev"
+                                title="Registro anterior">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-nav="next"
+                                title="Registro siguiente">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>Cancelar
+                        </button>
+                        <a href="{% url 'enlaces_ccg:ticket_detalle' f.ticket.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-up-right-from-square me-1"></i>Ir al ticket
+                        </a>
+                        <button type="submit" class="btn btn-sm btn-success">
+                            <i class="fas fa-save me-1"></i>Guardar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center text-muted py-5">
+        <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>{{ vacio }}
+    </div>
+</div>
+{% endif %}

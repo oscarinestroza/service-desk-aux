@@ -133,8 +133,12 @@
                             <dt class="col-5 text-muted">Tipo de recepción</dt>
                             <dd class="col-7">
                                 <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
-                                {{ c.TipoRecepcion|default:"—" }}
+                                {{ ticket.tipo_recepcion_mostrado|default:"—" }}
                                 </span>
+                                {% if ticket.revision.estado == 'corregido' and ticket.revision.tipo_recepcion_corregido %}
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1"
+                                      title="Corregido por el operador">Corregido</span>
+                                {% endif %}
                             </dd>
                         </dl>
                     </div>
@@ -142,9 +146,15 @@
                         <dl class="row mb-0">
                             <dt class="col-5 text-muted">Hora de recepción</dt>
                             <dd class="col-7">
+                                {% with fr=ticket.fecha_recepcion_mostrada %}
                                 <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
-                                {% if c.Fecha_TipoRecepcion %}{{ c.Fecha_TipoRecepcion }}{% else %}—{% endif %}
+                                {% if fr %}{{ fr|date:"d/m/Y H:i" }}{% else %}—{% endif %}
                                 </span>
+                                {% endwith %}
+                                {% if ticket.revision.estado == 'corregido' and ticket.revision.fecha_recepcion_corregida %}
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1"
+                                      title="Corregido por el operador">Corregido</span>
+                                {% endif %}
                             </dd>
                         </dl>
                     </div>

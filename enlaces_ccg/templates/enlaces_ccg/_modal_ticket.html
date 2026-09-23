@@ -1,6 +1,7 @@
 {% with c=ticket.raw_data %}
 <div class="ccg-modal-ticket">
 
+    {% if not ocultar_encabezado %}
     <div class="text-center p-3 mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;">
         <h4 class="mb-2">Ticket {{ ticket.numero_display }}</h4>
         <div class="row g-2 mt-1 text-center d-flex align-items-center justify-content-center" style="margin:0;">
@@ -26,6 +27,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     {% if ticket.cierre and not ticket.cierre_sincronizado %}
     <div class="mb-3 rounded d-flex align-items-center gap-2 px-3 py-2 flex-wrap"
@@ -54,7 +56,7 @@
                 <tr><td class="text-muted" style="width:35%">Responsable de atención</td><td>
                     {% if ticket.responsable_atencion %}{{ ticket.responsable_atencion.nombre }}{% else %}{{ c.Responsable_atencion|default:"—" }}{% endif %}
                 </td></tr>
-                <tr><td class="text-muted">Falla</td><td>{{ ticket.falla.descripcion|default:c.falla_descripcion|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Falla</td><td>{% if ticket.falla %}{{ ticket.falla.descripcion }}{% else %}{{ c.falla_descripcion|default:"—" }}{% endif %}</td></tr>
                 <tr><td class="text-muted">Servicio</td><td>
                     {% if ticket.servicio %}{{ ticket.servicio.nombre }}{% else %}{{ c.servicio|default:"—" }}{% endif %}
                 </td></tr>
@@ -74,10 +76,18 @@
                 <div style="padding:12px 14px;">
                     <table class="table table-sm table-borderless align-middle mb-0">
                         <tr><td class="text-muted" style="width:35%">Tipo de recepción</td><td>
-                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ c.TipoRecepcion|default:"—" }}</span>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ ticket.tipo_recepcion_mostrado|default:"—" }}</span>
+                            {% if ticket.revision.estado == 'corregido' and ticket.revision.tipo_recepcion_corregido %}
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1" title="Corregido por el operador">Corregido</span>
+                            {% endif %}
                         </td></tr>
                         <tr><td class="text-muted">Hora de recepción</td><td>
-                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ c.Fecha_TipoRecepcion|default:"—" }}</span>
+                            {% with fr=ticket.fecha_recepcion_mostrada %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{% if fr %}{{ fr|date:"d/m/Y H:i" }}{% else %}—{% endif %}</span>
+                            {% endwith %}
+                            {% if ticket.revision.estado == 'corregido' and ticket.revision.fecha_recepcion_corregida %}
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1" title="Corregido por el operador">Corregido</span>
+                            {% endif %}
                         </td></tr>
                         <tr><td class="text-muted">Hora de apertura</td><td>{% if ticket.fecha %}{{ ticket.fecha|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td></tr>
                     </table>
@@ -95,7 +105,7 @@
                             {% if ticket.solicitante %}
                             <a href="{% url 'enlaces_ccg:enlace_detalle' ticket.solicitante.pk %}"
                                title="Ver ficha del enlace" class="text-decoration-none">{{ ticket.solicitante.nombre_sig }}</a>
-                            {% else %}{{ ticket.solicitante_nombre|default:c.solicitud_solicitante|default:"—" }}{% endif %}
+                            {% else %}{% if ticket.solicitante_nombre %}{{ ticket.solicitante_nombre }}{% else %}{{ c.solicitud_solicitante|default:"—" }}{% endif %}{% endif %}
                         </td></tr>
                         <tr><td class="text-muted">Institución</td><td>
                             {% if ticket.institucion %}
@@ -135,16 +145,17 @@
         </div>
     </div>
 
+    {% if not ocultar_cierre %}
     <div class="mb-3 rounded" style="background:#fff;border:1px solid #d5d8dc;box-shadow:0 1px 2px rgba(0,0,0,.04);">
         <div style="background:#f4f5f6;border-bottom:1px solid #d5d8dc;padding:8px 14px;border-radius:6px 6px 0 0;">
             <h6 class="text-uppercase mb-0" style="color:#5a6268;"><i class="fas fa-user-cog me-1"></i>Detalle de atención</h6>
         </div>
         <div style="padding:12px 14px;">
             <table class="table table-sm table-borderless align-middle mb-0">
-                <tr><td class="text-muted" style="width:35%">Diagnóstico</td><td>{{ ticket.cierre.diagnostico|default:c.Diagnostico|default:"—" }}</td></tr>
-                <tr><td class="text-muted">Actividades</td><td>{{ ticket.cierre.actividades|default:c.Actividades|default:"—" }}</td></tr>
-                <tr><td class="text-muted">Observaciones</td><td>{{ ticket.cierre.observaciones|default:c.Observaciones|default:"—" }}</td></tr>
-                <tr><td class="text-muted">Observaciones del usuario</td><td>{{ ticket.cierre.observaciones_usuario|default:c.ObservacionesUsuario|default:"—" }}</td></tr>
+                <tr><td class="text-muted" style="width:35%">Diagnóstico</td><td>{% if ticket.cierre.diagnostico %}{{ ticket.cierre.diagnostico }}{% else %}{{ c.Diagnostico|default:"—" }}{% endif %}</td></tr>
+                <tr><td class="text-muted">Actividades</td><td>{% if ticket.cierre.actividades %}{{ ticket.cierre.actividades }}{% else %}{{ c.Actividades|default:"—" }}{% endif %}</td></tr>
+                <tr><td class="text-muted">Observaciones</td><td>{% if ticket.cierre.observaciones %}{{ ticket.cierre.observaciones }}{% else %}{{ c.Observaciones|default:"—" }}{% endif %}</td></tr>
+                <tr><td class="text-muted">Observaciones del usuario</td><td>{% if ticket.cierre.observaciones_usuario %}{{ ticket.cierre.observaciones_usuario }}{% else %}{{ c.ObservacionesUsuario|default:"—" }}{% endif %}</td></tr>
             </table>
         </div>
     </div>
@@ -164,5 +175,6 @@
             </table>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endwith %}

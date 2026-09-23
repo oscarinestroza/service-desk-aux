@@ -1219,6 +1219,63 @@ class VistaGuardada(models.Model):
         return f"{self.nombre} ({self.usuario_id or 'general'})"
 
 
+def parsear_fecha_hora_local(valor):
+    """Convierte una fecha/hora local del SIG (string) a datetime aware.
+
+    El SIG entrega `Fecha_TipoRecepcion` en hora local
+    (ej. "2026-09-22 15:59:11"), sin zona horaria.
+    """
+    if not valor:
+        return None
+    if isinstance(valor, datetime):
+        fecha = valor
+    else:
+        texto = str(valor).strip()
+        fecha = None
+        try:
+            fecha = datetime.fromisoformat(texto)
+        except ValueError:
+            for fmt in (
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d %H:%M",
+                "%d/%m/%Y %H:%M:%S",
+                "%d/%m/%Y %H:%M",
+            ):
+                try:
+                    fecha = datetime.strptime(texto, fmt)
+                    break
+                except ValueError:
+                    continue
+    if fecha is None:
+        return None
+    if timezone.is_naive(fecha):
+        fecha = timezone.make_aware(fecha)
+    return fecha
+
+
+def es_anomalia_recepcion(tipo, apertura, recepcion):
+    """Regla de revisión de recepción.
+
+    - Vía automática: siempre es anomalía.
+    - Recepción posterior a la apertura (diferencia negativa): anomalía.
+    - Vía correo electrónico: apertura − recepción > 2 h.
+    - Vía telefónica: apertura − recepción > 5 min.
+    """
+    if tipo == Ticket.TIPO_RECEPCION_AUTOMATICA:
+        return True
+    if not apertura or not recepcion:
+        return False
+    diferencia = apertura - recepcion
+    if diferencia < timedelta(0):
+        # La recepción es posterior a la apertura.
+        return True
+    if tipo == Ticket.TIPO_RECEPCION_CORREO:
+        return diferencia > timedelta(hours=2)
+    if tipo == Ticket.TIPO_RECEPCION_TELEFONO:
+        return diferencia > timedelta(minutes=5)
+    return False
+
+
 class Ticket(models.Model):
     """Solicitud / ticket de seguimiento del SIG (snapshot sincronizado).
 
@@ -1567,6 +1624,53 @@ class Ticket(models.Model):
                 pass
         return None
 
+    # ---- Recepción (dato del SIG con override de la revisión) ----
+    TIPO_RECEPCION_AUTOMATICA = "Vía automática"
+    TIPO_RECEPCION_CORREO = "Vía correo electrónico"
+    TIPO_RECEPCION_TELEFONO = "Vía telefónica"
+
+    @property
+    def tipo_recepcion_mostrado(self):
+        """Tipo de recepción efectivo (corrección del operador o dato del SIG)."""
+        revision = getattr(self, "revision", None)
+        if revision is not None and revision.tipo_recepcion_corregido:
+            return revision.tipo_recepcion_corregido
+        return (self.raw_data or {}).get("TipoRecepcion", "") or ""
+
+    @property
+    def fecha_recepcion_mostrada(self):
+        """Hora de recepción efectiva (corrección del operador o dato del SIG)."""
+        revision = getattr(self, "revision", None)
+        if revision is not None and revision.fecha_recepcion_corregida:
+            return revision.fecha_recepcion_corregida
+        return parsear_fecha_hora_local(
+            (self.raw_data or {}).get("Fecha_TipoRecepcion")
+        )
+
+    @property
+    def diferencia_recepcion_apertura(self):
+        """timedelta entre la apertura (`fecha`) y la recepción efectiva.
+
+        None si falta la apertura o la hora de recepción.
+        """
+        if not self.fecha:
+            return None
+        recepcion = self.fecha_recepcion_mostrada
+        if not recepcion:
+            return None
+        return self.fecha - recepcion
+
+    def anomalia_recepcion(self):
+        """Devuelve True si el ticket incumple los criterios de recepción.
+
+        - Vía automática: siempre se marca.
+        - Vía correo electrónico: apertura − recepción > 2 h.
+        - Vía telefónica: apertura − recepción > 5 min.
+        """
+        return es_anomalia_recepcion(
+            self.tipo_recepcion_mostrado, self.fecha, self.fecha_recepcion_mostrada
+        )
+
 
 class TicketLog(models.Model):
     """Bitácora de cada corrida de sincronización de tickets."""
@@ -1775,6 +1879,162 @@ class TicketAdjunto(models.Model):
         if nombre.endswith((".mp4", ".avi", ".mov")):
             return "fas fa-file-video"
         return "fas fa-file"
+
+
+class RevisionTicket(models.Model):
+    """Revisión de la creación de un ticket (módulo Revisión de Tickets).
+
+    Valida que el ticket se haya subido según los criterios requeridos
+    (tipo y horas de recepción). No tiene relación con el cierre del ticket.
+
+    Las correcciones de recepción se guardan aquí (no en `Ticket.raw_data`)
+    porque la sincronización con el SIG reescribe `raw_data`; así los valores
+    que captura el operador quedan protegidos.
+    """
+
+    ESTADO_EN_OBSERVACION = "en_observacion"
+    ESTADO_VALIDACION_SIG = "validacion_sig"
+    ESTADO_CORREGIDO = "corregido"
+    ESTADO_CHOICES = (
+        (ESTADO_EN_OBSERVACION, "En observación"),
+        (ESTADO_VALIDACION_SIG, "Validación SIG"),
+        (ESTADO_CORREGIDO, "Corregido"),
+    )
+
+    ticket = models.OneToOneField(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="revision",
+        verbose_name="Ticket",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_EN_OBSERVACION,
+        db_index=True,
+        verbose_name="Estado",
+    )
+    # Override local de la recepción (protegido del sync del SIG).
+    tipo_recepcion_corregido = models.CharField(
+        max_length=100, blank=True, default="", verbose_name="Tipo de recepción corregido"
+    )
+    fecha_recepcion_corregida = models.DateTimeField(
+        null=True, blank=True, verbose_name="Hora de recepción corregida"
+    )
+    # Revisión de la creación (no del ticket ni de su cierre).
+    responsable_creacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="revisiones_creacion",
+        verbose_name="Responsable de creación",
+        help_text="Usuario del grupo Operador MAO, o vacío = N/A.",
+    )
+    observaciones_creacion = models.TextField(
+        blank=True, default="", verbose_name="Observaciones de creación"
+    )
+    apertura_antes = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Apertura al marcar Validación SIG",
+        help_text="Hora de apertura del ticket cuando se marcó «Cambio en SIG»; "
+        "sirve para detectar si el SIG ya la actualizó.",
+    )
+    # Trazabilidad
+    corregido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="revisiones_corregidas",
+        verbose_name="Corregido por",
+    )
+    corregido_en = models.DateTimeField(null=True, blank=True, verbose_name="Corregido en")
+    cambio_sig_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="revisiones_cambio_sig",
+        verbose_name="Cambio en SIG por",
+    )
+    cambio_sig_en = models.DateTimeField(
+        null=True, blank=True, verbose_name="Cambio en SIG en"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Revisión de ticket"
+        verbose_name_plural = "Revisiones de ticket"
+        ordering = ("-actualizado_en",)
+
+    def __str__(self):
+        return f"Revisión {self.ticket_id} [{self.estado}]"
+
+
+class AtencionLlamada(models.Model):
+    """Atención de llamadas telefónicas (módulo Atención de Llamadas).
+
+    Registra el responsable de creación y la cantidad de timbres antes de
+    contestar la llamada de un ticket con recepción «Vía telefónica».
+    """
+
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_ASIGNADO = "asignado"
+    ESTADO_CHOICES = (
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_ASIGNADO, "Asignado"),
+    )
+
+    ticket = models.OneToOneField(
+        Ticket,
+        on_delete=models.CASCADE,
+        related_name="atencion_llamada",
+        verbose_name="Ticket",
+    )
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+        verbose_name="Estado",
+    )
+    responsable_creacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="atenciones_llamada",
+        verbose_name="Responsable de creación",
+        help_text="Usuario del grupo Operador MAO, o vacío = N/A.",
+    )
+    timbres = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Timbres antes de contestar",
+        help_text="Cantidad de timbres antes de contestar la llamada.",
+    )
+    asignado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="atenciones_asignadas",
+        verbose_name="Asignado por",
+    )
+    asignado_en = models.DateTimeField(null=True, blank=True, verbose_name="Asignado en")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Atención de llamada"
+        verbose_name_plural = "Atenciones de llamadas"
+        ordering = ("-actualizado_en",)
+
+    def __str__(self):
+        return f"Atención {self.ticket_id} [{self.estado}]"
 
 
 # ---------------------------------------------------------------------------
