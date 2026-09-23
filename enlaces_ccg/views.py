@@ -1319,6 +1319,10 @@ def revision_ticket_corregir(request, pk):
         if responsable_id.isdigit()
         else None
     )
+    mes = request.POST.get("mes", "actual")
+    destino = reverse("enlaces_ccg:revision_tickets")
+    volver = redirect(f"{destino}?mes={mes}&generado=1")
+
     if cambio_sig:
         # Sin override local: la apertura se corrige en el SIG.
         revision.tipo_recepcion_corregido = ""
@@ -1330,7 +1334,24 @@ def revision_ticket_corregir(request, pk):
         revision.cambio_sig_en = timezone.now()
         aviso = "marcado para cambio en el SIG."
     else:
+        # Sin «Cambio en SIG»: el tipo debe ser correo/telefónico y la hora de
+        # recepción no puede quedar vacía.
+        if tipo not in (
+            Ticket.TIPO_RECEPCION_CORREO,
+            Ticket.TIPO_RECEPCION_TELEFONO,
+        ):
+            messages.error(
+                request,
+                "El tipo de recepción debe ser «Vía correo electrónico» o "
+                "«Vía telefónica».",
+            )
+            return volver
         fecha_corr = parsear_fecha_hora_local(fecha_txt) if fecha_txt else None
+        if fecha_corr is None:
+            messages.error(
+                request, "La hora de recepción no puede estar vacía."
+            )
+            return volver
         revision.tipo_recepcion_corregido = tipo
         revision.fecha_recepcion_corregida = fecha_corr
         revision.apertura_antes = None
@@ -1346,13 +1367,9 @@ def revision_ticket_corregir(request, pk):
             revision.corregido_por = None
             revision.corregido_en = None
             aviso = "guardado en observación."
-        aviso = "corregido."
     revision.save()
     messages.success(request, f"Ticket {ticket.numero_display} {aviso}")
-
-    mes = request.POST.get("mes", "actual")
-    destino = reverse("enlaces_ccg:revision_tickets")
-    return redirect(f"{destino}?mes={mes}&generado=1")
+    return volver
 
 
 @requiere(CAP_REVISIONES)

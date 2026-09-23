@@ -2160,39 +2160,32 @@ class RevisionTicketsTests(TestCase):
         )
         usuario = self._usuario_revisiones()
         self.client.force_login(usuario)
-        # Sin "Cambio en SIG" y con la hora de recepción vacía: no resuelve.
+        # Tipo/hora válidos, pero la diferencia supera el umbral: no resuelve.
         self.client.post(
             reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
             {
                 "mes": "actual",
                 "tipo_recepcion": Ticket.TIPO_RECEPCION_CORREO,
-                "fecha_recepcion": "",
+                "fecha_recepcion": timezone.localtime(
+                    ahora - timedelta(hours=3)
+                ).strftime("%Y-%m-%dT%H:%M"),
                 "responsable_creacion": "",
-                "observaciones_creacion": "Sin recepción",
+                "observaciones_creacion": "Sin resolver",
             },
         )
         rev = RevisionTicket.objects.get(ticket=t)
         self.assertEqual(rev.estado, RevisionTicket.ESTADO_EN_OBSERVACION)
         self.assertIsNone(rev.corregido_por)
 
-    def test_quitar_cambio_sig_sin_resolver_vuelve_a_observacion(self):
+    def test_sin_cambio_sig_valida_tipo_y_hora(self):
         ahora = timezone.now()
         t = self._ticket(Ticket.TIPO_RECEPCION_AUTOMATICA, ahora, None)
         usuario = self._usuario_revisiones()
         self.client.force_login(usuario)
-        # 1) Marca cambio en SIG.
+        url = reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk])
+        # Tipo automática (inválido) y hora vacía: no se guarda.
         self.client.post(
-            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
-            {"mes": "actual", "responsable_creacion": "",
-             "observaciones_creacion": "", "cambio_sig": "1"},
-        )
-        self.assertEqual(
-            RevisionTicket.objects.get(ticket=t).estado,
-            RevisionTicket.ESTADO_VALIDACION_SIG,
-        )
-        # 2) Quita el toggle, deja la recepción vacía y guarda.
-        self.client.post(
-            reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
+            url,
             {
                 "mes": "actual",
                 "tipo_recepcion": Ticket.TIPO_RECEPCION_AUTOMATICA,
@@ -2201,8 +2194,19 @@ class RevisionTicketsTests(TestCase):
                 "observaciones_creacion": "",
             },
         )
-        rev = RevisionTicket.objects.get(ticket=t)
-        self.assertEqual(rev.estado, RevisionTicket.ESTADO_EN_OBSERVACION)
+        self.assertFalse(RevisionTicket.objects.filter(ticket=t).exists())
+        # Tipo válido pero sin hora: tampoco se guarda.
+        self.client.post(
+            url,
+            {
+                "mes": "actual",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_CORREO,
+                "fecha_recepcion": "",
+                "responsable_creacion": "",
+                "observaciones_creacion": "",
+            },
+        )
+        self.assertFalse(RevisionTicket.objects.filter(ticket=t).exists())
 
     def test_cambio_sig_checkbox(self):
         ahora = timezone.now()
@@ -2295,8 +2299,8 @@ class RevisionTicketsTests(TestCase):
             reverse("enlaces_ccg:revision_ticket_corregir", args=[t.pk]),
             {
                 "mes": "actual",
-                "tipo_recepcion": Ticket.TIPO_RECEPCION_AUTOMATICA,
-                "fecha_recepcion": "",
+                "tipo_recepcion": Ticket.TIPO_RECEPCION_TELEFONO,
+                "fecha_recepcion": timezone.localtime(ahora).strftime("%Y-%m-%dT%H:%M"),
                 "responsable_creacion": "",
                 "observaciones_creacion": "admin",
             },

@@ -192,6 +192,9 @@
         if (e.target.matches('input[name="fecha_recepcion"]')) {
             calcularDiferencia(e.target.closest('form'));
         }
+        if (e.target.matches('select[name="tipo_recepcion"], input[name="fecha_recepcion"]')) {
+            e.target.setCustomValidity('');
+        }
     });
 
     document.addEventListener('change', function (e) {
@@ -199,6 +202,35 @@
             var form = e.target.closest('form');
             ajustarRecepcion(form);
             calcularDiferencia(form);
+            var tipo = form.querySelector('select[name="tipo_recepcion"]');
+            var fecha = form.querySelector('input[name="fecha_recepcion"]');
+            if (tipo) tipo.setCustomValidity('');
+            if (fecha) fecha.setCustomValidity('');
+        }
+    });
+
+    // Sin «Cambio en SIG» el tipo debe ser correo/telefónico y la hora de
+    // recepción no puede quedar vacía.
+    var TIPOS_VALIDOS = ['Vía correo electrónico', 'Vía telefónica'];
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form.id || form.id.indexOf('formRev') !== 0) return;
+        var check = form.querySelector('input[name="cambio_sig"]');
+        if (!check || check.checked) return;
+        var tipo = form.querySelector('select[name="tipo_recepcion"]');
+        var fecha = form.querySelector('input[name="fecha_recepcion"]');
+        if (tipo && TIPOS_VALIDOS.indexOf(tipo.value) === -1) {
+            e.preventDefault();
+            tipo.setCustomValidity(
+                'Selecciona «Vía correo electrónico» o «Vía telefónica».'
+            );
+            tipo.reportValidity();
+            return;
+        }
+        if (fecha && !fecha.value) {
+            e.preventDefault();
+            fecha.setCustomValidity('La hora de recepción no puede estar vacía.');
+            fecha.reportValidity();
         }
     });
 })();
